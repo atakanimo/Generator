@@ -1,0 +1,748 @@
+import { readFileSync } from 'fs';
+
+export interface SchemaField {
+  name: string;
+  type: string;
+  required: boolean;
+  isArray: boolean;
+  includeRelation?: boolean;
+  relationEntityName?: string;
+  relationProperty?: string;
+  uiComponent?: string;
+  showInForm?: boolean;
+  showInTable?: boolean;
+  isSearchable?: boolean;
+  label?: string;
+}
+
+export interface SchemaDefinition {
+  entityName: string;
+  fields: SchemaField[];
+  nestedSchemas?: SchemaDefinition[];
+}
+
+export interface ParseResult {
+  success: boolean;
+  schema?: SchemaDefinition;
+  error?: string;
+}
+
+/**
+ * Check if the file contains model-related code (Mongoose or TypeScript model patterns)
+ */
+function isModelFile(content: string, fileName: string): { isValid: boolean; reason?: string } {
+  // Check if filename contains "model" (case insensitive)
+  const lowerFileName = fileName.toLowerCase();
+  if (!lowerFileName.includes('model')) {
+    return {
+      isValid: false,
+      reason: 'File name must contain "model" (e.g., User.model.ts, UserModel.ts)'
+    };
+  }
+
+  // Check for Mongoose Schema pattern: new Schema<...>({...})
+  const mongooseSchemaPattern = /new\s+Schema\s*<[^>]*>\s*\(/i;
+  const hasMongooseSchema = mongooseSchemaPattern.test(content);
+
+  // Check for mongoose.model export: mongoose.model<...>('...', ...Schema)
+  const mongooseModelPattern = /mongoose\.model\s*<[^>]*>\s*\(/i;
+  const hasMongooseModel = mongooseModelPattern.test(content);
+
+  // If both Schema and model are present, it's definitely a model file
+  if (hasMongooseSchema && hasMongooseModel) {
+    return { isValid: true };
+  }
+
+  // Check for alternative patterns
+  const alternativeSchemaPattern = /Schema\s*\(/i;
+  const hasAlternativeSchema = alternativeSchemaPattern.test(content);
+  const hasMongooseImport = /from\s+['"]mongoose['"]/i.test(content);
+
+  if (hasAlternativeSchema && hasMongooseImport) {
+    return { isValid: true };
+  }
+
+  // Check for TypeScript model patterns (interface/class with properties)
+  const tsModelPatterns = [
+    /(interface|class)\s+\w+\s*\{[\s\S]{0,500}?\w+\s*:\s*(string|number|boolean|Date|ObjectId)/i,
+    /export\s+(interface|class)\s+\w+/i
+  ];
+
+  const hasTsModel = tsModelPatterns.some(pattern => pattern.test(content));
+  if (hasTsModel && hasMongooseImport) {
+    return { isValid: true };
+  }
+
+  return {
+    isValid: false,
+    reason: 'File does not contain Mongoose Schema and model export patterns'
+  };
+}
+
+/**
+ * Parse a TypeScript/JavaScript model file and extract schema information
+ * Supports both Mongoose schemas and TypeScript interfaces/classes
+ */
+export function parseModelFile(filePath: string, sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null): ParseResult {
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    const fileName = filePath.split(/[/\\]/).pop() || '';
+
+    // Check if this is actually a model file
+    const modelCheck = isModelFile(content, fileName);
+    if (!modelCheck.isValid) {
+      return {
+        success: false,
+        error: modelCheck.reason || 'File does not appear to be a model file'
+      };
+    }
+
+    // Extract entity name from filename (e.g., "User.model.ts" -> "User")
+    const entityName = fileName
+      .replace(/\.(model|schema|entity)\.(ts|js)$/i, '')
+      .replace(/\.(ts|js)$/i, '')
+      .split(/[-_]/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join('');
+
+    // Find the main schema (the one exported with mongoose.model)
+    // Pattern: mongoose.model<...>('EntityName', SchemaName)
+    const modelExportPattern = new RegExp(`mongoose\\.model\\s*<[^>]*>\\s*\\(\\s*['"]${entityName}['"]\\s*,\\s*(\\w+Schema)`, 'i');
+    const modelExportMatch = modelExportPattern.exec(content);
+
+    let mainSchemaName: string | null = null;
+    if (modelExportMatch && modelExportMatch[1]) {
+      mainSchemaName = modelExportMatch[1];
+    } else {
+      // Fallback: find the last schema definition (usually the main one)
+      const schemaPattern = /const\s+(\w+Schema)\s*=\s*new\s+Schema\s*<[^>]*>\s*\(/gi;
+      const schemaMatches: string[] = [];
+      let schemaMatch: RegExpExecArray | null;
+
+      while ((schemaMatch = schemaPattern.exec(content)) !== null) {
+        schemaMatches.push(schemaMatch[1]);
+      }
+
+      if (schemaMatches.length > 0) {
+        mainSchemaName = schemaMatches[schemaMatches.length - 1];
+      }
+    }
+
+    // Extract only the main schema content and parse options
+    let schemaContent = content;
+    let hasTimestamps = false;
+    let deletedInToJSON: string[] = [];
+
+    if (mainSchemaName) {
+      // Find the main schema definition: const MainSchema = new Schema<...>({...}, {...})
+      const mainSchemaPattern = new RegExp(`const\\s+${mainSchemaName}\\s*=\\s*new\\s+Schema\\s*<[^>]*>\\s*\\(`, 'i');
+      const mainSchemaMatch = mainSchemaPattern.exec(content);
+
+      if (mainSchemaMatch) {
+        const schemaStart = mainSchemaMatch.index + mainSchemaMatch[0].length;
+
+        // Find the matching closing parenthesis for the Schema constructor
+        let parenCount = 1;
+        let inString = false;
+        let stringChar = '';
+        let braceCount = 0;
+        let firstBraceEnd = -1;
+        let firstBraceStart = -1;
+        let secondBraceStart = -1;
+
+        for (let i = schemaStart; i < content.length; i++) {
+          const char = content[i];
+          const prevChar = i > 0 ? content[i - 1] : '';
+
+          // Handle string literals
+          if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
+            if (!inString) {
+              inString = true;
+              stringChar = char;
+            } else if (char === stringChar) {
+              inString = false;
+            }
+            continue;
+          }
+
+          if (!inString) {
+            if (char === '(') parenCount++;
+            if (char === ')') {
+              parenCount--;
+              if (parenCount === 0) {
+                break;
+              }
+            }
+
+            // Track braces for first parameter (fields)
+            if (char === '{' && firstBraceStart === -1) {
+              firstBraceStart = i;
+              braceCount = 1;
+            } else if (char === '{' && firstBraceStart !== -1 && firstBraceEnd === -1) {
+              braceCount++;
+            } else if (char === '}' && firstBraceStart !== -1 && firstBraceEnd === -1) {
+              braceCount--;
+              if (braceCount === 0) {
+                firstBraceEnd = i + 1;
+                // Look for comma and second parameter (options)
+                for (let j = i + 1; j < content.length && j < i + 100; j++) {
+                  if (content[j] === '{') {
+                    secondBraceStart = j;
+                    break;
+                  }
+                  if (content[j] === ')') break; // No second parameter
+                }
+              }
+            }
+          }
+        }
+
+        // Extract schema fields (first parameter)
+        if (firstBraceStart !== -1 && firstBraceEnd !== -1) {
+          schemaContent = content.substring(firstBraceStart, firstBraceEnd);
+        }
+
+        // Extract and parse schema options (second parameter) if exists
+        if (secondBraceStart !== -1) {
+          let optionsBraceCount = 1;
+          let optionsBraceEnd = secondBraceStart + 1;
+          let inStringOptions = false;
+          let stringCharOptions = '';
+
+          for (let i = secondBraceStart + 1; i < content.length; i++) {
+            const char = content[i];
+            const prevChar = i > 0 ? content[i - 1] : '';
+
+            if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
+              if (!inStringOptions) {
+                inStringOptions = true;
+                stringCharOptions = char;
+              } else if (char === stringCharOptions) {
+                inStringOptions = false;
+              }
+              continue;
+            }
+
+            if (!inStringOptions) {
+              if (char === '{') optionsBraceCount++;
+              if (char === '}') {
+                optionsBraceCount--;
+                if (optionsBraceCount === 0) {
+                  optionsBraceEnd = i + 1;
+                  break;
+                }
+              }
+            }
+          }
+
+          const schemaOptions = content.substring(secondBraceStart, optionsBraceEnd);
+
+          // Check for timestamps: true
+          const timestampsPattern = /timestamps\s*:\s*(true|1)/i;
+          hasTimestamps = timestampsPattern.test(schemaOptions);
+
+          // Check toJSON transform for deleted fields - more robust pattern
+          // Match: toJSON: { transform: function (doc, ret) { ... delete obj.fieldName; ... } }
+          const toJSONPattern = /toJSON\s*:\s*\{[^{}]*transform\s*:\s*function\s*\([^)]*\)\s*\{([^}]+(?:\{[^}]*\}[^}]*)*)\}/s;
+          const toJSONMatch = schemaOptions.match(toJSONPattern);
+          if (toJSONMatch && toJSONMatch[1]) {
+            const transformContent = toJSONMatch[1];
+            // Find all delete statements: delete obj.fieldName; (including commented ones)
+            const deletePattern = /(?:^|\s)(?:delete\s+obj\.(\w+);|delete\s+obj\[['"](\w+)['"]\];)/gm;
+            let deleteMatch: RegExpExecArray | null;
+            while ((deleteMatch = deletePattern.exec(transformContent)) !== null) {
+              const fieldName = deleteMatch[1] || deleteMatch[2];
+              if (fieldName) {
+                deletedInToJSON.push(fieldName);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    const fields: SchemaField[] = [];
+
+    // Strategy 1: Parse Mongoose Schema
+    // First, find all field definitions: fieldName: { ... }
+    const fieldPattern = /(\w+)\s*:\s*\{/g;
+    let fieldMatch: RegExpExecArray | null;
+    let hasMongooseSchema = false;
+
+    while ((fieldMatch = fieldPattern.exec(schemaContent)) !== null) {
+      const fieldName = fieldMatch[1];
+      const fieldStart = fieldMatch.index;
+
+      // Find the end of this field definition (matching closing brace)
+      let braceCount = 1;
+      let inString = false;
+      let stringChar = '';
+      let fieldEnd = fieldStart + fieldMatch[0].length;
+
+      for (let i = fieldStart + fieldMatch[0].length; i < schemaContent.length; i++) {
+        const char = schemaContent[i];
+        const prevChar = i > 0 ? schemaContent[i - 1] : '';
+
+        if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
+          if (!inString) {
+            inString = true;
+            stringChar = char;
+          } else if (char === stringChar) {
+            inString = false;
+          }
+          continue;
+        }
+
+        if (!inString) {
+          if (char === '{') braceCount++;
+          if (char === '}') {
+            braceCount--;
+            if (braceCount === 0) {
+              fieldEnd = i + 1;
+              break;
+            }
+          }
+        }
+      }
+
+      const fieldContent = schemaContent.substring(fieldStart, fieldEnd);
+      hasMongooseSchema = true;
+
+      // Check if this is a nested schema array (e.g., items: { type: [PortfolioSnapshotItemSchema], required: true })
+      const nestedSchemaArrayPattern = /type\s*:\s*\[\s*(\w+Schema)\s*\]/;
+      const nestedSchemaArrayMatch = fieldContent.match(nestedSchemaArrayPattern);
+
+      if (nestedSchemaArrayMatch) {
+        // This is an array of nested schema
+        // More robust required check
+        const requiredPattern = /required\s*:\s*(true|1)/i;
+        const requiredMatch = fieldContent.match(requiredPattern);
+        const isRequired = requiredMatch !== null;
+
+        fields.push({
+          name: fieldName,
+          type: 'schema',
+          required: isRequired,
+          isArray: true
+        });
+        continue;
+      }
+
+      // Check if this field references a nested schema (e.g., Schema.Types.ObjectId with ref)
+      if (fieldContent.includes('Schema.Types.ObjectId') && fieldContent.includes('ref:')) {
+        const isArrayField = fieldContent.includes('type: [Schema.Types.ObjectId]') || fieldContent.includes('type:[Schema.Types.ObjectId]');
+        // More robust required check: required: true, required:true, required: true, or just required (without value)
+        const requiredPattern = /required\s*:\s*(true|1)/i;
+        const requiredMatch = fieldContent.match(requiredPattern);
+        const isRequired = requiredMatch !== null;
+
+        // Extract entity name from ref: 'EntityName' or ref: "EntityName"
+        const refPattern = /ref\s*:\s*['"]([^'"]+)['"]/;
+        const refMatch = fieldContent.match(refPattern);
+        let relationEntityName: string | undefined = undefined;
+        if (refMatch && refMatch[1]) {
+          // Convert ref name to PascalCase entity name
+          // e.g., "SymbolTypes" -> "SymbolTypes", "symbol-types" -> "SymbolTypes"
+          const refName = refMatch[1];
+          // If it contains dashes/underscores, split and convert each word
+          if (refName.includes('-') || refName.includes('_') || refName.includes(' ')) {
+            relationEntityName = refName
+              .split(/[-_\s]/)
+              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+              .join('');
+          } else {
+            // Already in PascalCase or camelCase, just capitalize first letter
+            relationEntityName = refName.charAt(0).toUpperCase() + refName.slice(1);
+          }
+        }
+
+        fields.push({
+          name: fieldName,
+          type: 'schema',
+          required: isRequired,
+          isArray: isArrayField,
+          includeRelation: true,
+          relationEntityName
+        });
+        continue;
+      }
+
+      // Parse standard Mongoose types (String, Number, Date, etc.)
+      const mongooseTypePattern = /type\s*:\s*(\w+)(?:\[\])?/;
+      const mongooseTypeMatch = fieldContent.match(mongooseTypePattern);
+
+      if (mongooseTypeMatch) {
+        const mongooseType = mongooseTypeMatch[1];
+        // More robust required check
+        const requiredPattern = /required\s*:\s*(true|1)/i;
+        const requiredMatch = fieldContent.match(requiredPattern);
+        const isRequired = requiredMatch !== null;
+
+        const isArray = fieldContent.includes('type: [') || fieldContent.includes('type:[') || mongooseTypeMatch[0].includes('[]');
+
+        fields.push({
+          name: fieldName,
+          type: mapMongooseTypeToGeneric(mongooseType),
+          required: isRequired,
+          isArray
+        });
+      }
+    }
+
+    // Strategy 2: Parse TypeScript Interface/Class (e.g., name: string; or name?: string;)
+    if (!hasMongooseSchema) {
+      // Match property declarations: "name: string;" or "name?: string;" or "name: string[];"
+      const tsInterfacePattern = /(?:public\s+|private\s+|protected\s+)?(\w+)(\??)\s*:\s*(\w+)(\[\])?(\s*;|\s*=|)/g;
+      let match: RegExpExecArray | null;
+
+      while ((match = tsInterfacePattern.exec(schemaContent)) !== null) {
+        const fieldName = match[1];
+        const optional = match[2] === '?';
+        const tsType = match[3];
+        const isArray = match[4] === '[]';
+
+        // Skip if it's a method or constructor
+        const matchIndex = match.index ?? 0;
+        if (
+          ['constructor', 'function', 'async'].some(keyword => schemaContent.substring(Math.max(0, matchIndex - 20), matchIndex).includes(keyword))
+        ) {
+          continue;
+        }
+
+        fields.push({
+          name: fieldName,
+          type: mapTypeScriptTypeToGeneric(tsType),
+          required: !optional,
+          isArray
+        });
+      }
+
+      // Also try simpler pattern for interface properties
+      if (fields.length === 0) {
+        const simplePattern = /(\w+)(\??)\s*:\s*(\w+)(\[\])?/g;
+        let match: RegExpExecArray | null;
+        while ((match = simplePattern.exec(schemaContent)) !== null) {
+          // Skip if inside a function or method
+          const beforeMatch = schemaContent.substring(Math.max(0, match.index! - 50), match.index!);
+          if (beforeMatch.includes('(') && !beforeMatch.includes(')')) {
+            continue;
+          }
+
+          const fieldName = match[1];
+          const optional = match[2] === '?';
+          const tsType = match[3];
+          const isArray = match[4] === '[]';
+
+          // Avoid duplicates
+          if (!fields.some(f => f.name === fieldName)) {
+            fields.push({
+              name: fieldName,
+              type: mapTypeScriptTypeToGeneric(tsType),
+              required: !optional,
+              isArray
+            });
+          }
+        }
+      }
+    }
+
+    // Add _id field if sourceType is nodejs-mongoose and not already present (at the beginning)
+    if (sourceType === 'nodejs-mongoose' && !fields.some(f => f.name === '_id')) {
+      fields.unshift({
+        name: '_id',
+        type: 'string',
+        required: false,
+        isArray: false,
+        showInTable: true,
+        showInForm: true,
+        isSearchable: true,
+        label: 'ID'
+      });
+    }
+
+    // Add createdAt and updatedAt if timestamps is enabled and not deleted in toJSON
+    if (hasTimestamps) {
+      if (!deletedInToJSON.includes('createdAt') && !fields.some(f => f.name === 'createdAt')) {
+        fields.push({
+          name: 'createdAt',
+          type: 'date',
+          required: false,
+          isArray: false,
+          showInTable: true,
+          showInForm: false,
+          isSearchable: true,
+          label: 'Created At'
+        });
+      }
+      if (!deletedInToJSON.includes('updatedAt') && !fields.some(f => f.name === 'updatedAt')) {
+        fields.push({
+          name: 'updatedAt',
+          type: 'date',
+          required: false,
+          isArray: false,
+          showInTable: true,
+          showInForm: false,
+          isSearchable: true,
+          label: 'Updated At'
+        });
+      }
+    }
+
+    if (fields.length === 0) {
+      return {
+        success: false,
+        error: 'No fields found in the model file'
+      };
+    }
+
+    // Parse nested schemas (schemas that are not the main one)
+    const nestedSchemas: SchemaDefinition[] = [];
+    if (mainSchemaName) {
+      // Find all schema definitions except the main one
+      const allSchemaPattern = /const\s+(\w+Schema)\s*=\s*new\s+Schema\s*<[^>]*>\s*\(/gi;
+      const allSchemaMatches: Array<{ name: string; index: number }> = [];
+      let schemaMatch: RegExpExecArray | null;
+
+      while ((schemaMatch = allSchemaPattern.exec(content)) !== null) {
+        if (schemaMatch[1] !== mainSchemaName) {
+          allSchemaMatches.push({
+            name: schemaMatch[1],
+            index: schemaMatch.index
+          });
+        }
+      }
+
+      // Parse each nested schema
+      for (const nestedSchemaMatch of allSchemaMatches) {
+        const nestedSchemaResult = parseNestedSchema(content, nestedSchemaMatch.name);
+        if (nestedSchemaResult) {
+          nestedSchemas.push(nestedSchemaResult);
+        }
+      }
+    }
+
+    return {
+      success: true,
+      schema: {
+        entityName,
+        fields,
+        nestedSchemas: nestedSchemas.length > 0 ? nestedSchemas : undefined
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
+
+/**
+ * Parse a nested schema definition
+ */
+function parseNestedSchema(content: string, schemaName: string): SchemaDefinition | null {
+  try {
+    // Find the schema definition: const SchemaName = new Schema<...>({...})
+    const schemaPattern = new RegExp(`const\\s+${schemaName}\\s*=\\s*new\\s+Schema\\s*<[^>]*>\\s*\\(\\s*\\{`, 'i');
+    const schemaMatch = schemaPattern.exec(content);
+
+    if (!schemaMatch) {
+      return null;
+    }
+
+    // Extract entity name from schema name (e.g., "PortfolioSnapshotItemSchema" -> "PortfolioSnapshotItem")
+    const entityName = schemaName.replace(/Schema$/, '');
+
+    // Find the opening brace of the schema object
+    const objectStart = schemaMatch.index + schemaMatch[0].length - 1; // -1 to include the {
+
+    // Find the matching closing brace for the schema object (first level)
+    let braceCount = 1;
+    let inString = false;
+    let stringChar = '';
+    let objectEnd = objectStart + 1;
+
+    for (let i = objectStart + 1; i < content.length; i++) {
+      const char = content[i];
+      const prevChar = i > 0 ? content[i - 1] : '';
+
+      // Handle string literals
+      if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
+        if (!inString) {
+          inString = true;
+          stringChar = char;
+        } else if (char === stringChar) {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (!inString) {
+        if (char === '{') braceCount++;
+        if (char === '}') {
+          braceCount--;
+          if (braceCount === 0) {
+            objectEnd = i + 1;
+            break;
+          }
+        }
+      }
+    }
+
+    // Extract the schema object content
+    const schemaContent = content.substring(objectStart, objectEnd);
+
+    const fields: SchemaField[] = [];
+
+    // Parse fields similar to main schema parsing
+    const fieldPattern = /(\w+)\s*:\s*\{/g;
+    let fieldMatch: RegExpExecArray | null;
+
+    while ((fieldMatch = fieldPattern.exec(schemaContent)) !== null) {
+      const fieldName = fieldMatch[1];
+      const fieldStart = fieldMatch.index;
+
+      // Find the end of this field definition
+      let braceCount = 1;
+      let inString = false;
+      let stringChar = '';
+      let fieldEnd = fieldStart + fieldMatch[0].length;
+
+      for (let i = fieldStart + fieldMatch[0].length; i < schemaContent.length; i++) {
+        const char = schemaContent[i];
+        const prevChar = i > 0 ? schemaContent[i - 1] : '';
+
+        if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
+          if (!inString) {
+            inString = true;
+            stringChar = char;
+          } else if (char === stringChar) {
+            inString = false;
+          }
+          continue;
+        }
+
+        if (!inString) {
+          if (char === '{') braceCount++;
+          if (char === '}') {
+            braceCount--;
+            if (braceCount === 0) {
+              fieldEnd = i + 1;
+              break;
+            }
+          }
+        }
+      }
+
+      const fieldContent = schemaContent.substring(fieldStart, fieldEnd);
+
+      // Check if this field references a nested schema (e.g., Schema.Types.ObjectId with ref)
+      if (fieldContent.includes('Schema.Types.ObjectId') && fieldContent.includes('ref:')) {
+        const isArrayField = fieldContent.includes('type: [Schema.Types.ObjectId]') || fieldContent.includes('type:[Schema.Types.ObjectId]');
+        // More robust required check
+        const requiredPattern = /required\s*:\s*(true|1)/i;
+        const requiredMatch = fieldContent.match(requiredPattern);
+        const isRequired = requiredMatch !== null;
+
+        // Extract entity name from ref: 'EntityName' or ref: "EntityName"
+        const refPattern = /ref\s*:\s*['"]([^'"]+)['"]/;
+        const refMatch = fieldContent.match(refPattern);
+        let relationEntityName: string | undefined = undefined;
+        if (refMatch && refMatch[1]) {
+          // Convert ref name to PascalCase entity name
+          // e.g., "SymbolTypes" -> "SymbolTypes", "symbol-types" -> "SymbolTypes"
+          const refName = refMatch[1];
+          // If it contains dashes/underscores, split and convert each word
+          if (refName.includes('-') || refName.includes('_') || refName.includes(' ')) {
+            relationEntityName = refName
+              .split(/[-_\s]/)
+              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+              .join('');
+          } else {
+            // Already in PascalCase or camelCase, just capitalize first letter
+            relationEntityName = refName.charAt(0).toUpperCase() + refName.slice(1);
+          }
+        }
+
+        fields.push({
+          name: fieldName,
+          type: 'schema',
+          required: isRequired,
+          isArray: isArrayField,
+          includeRelation: true,
+          relationEntityName
+        });
+        continue;
+      }
+
+      // Parse standard Mongoose types
+      const mongooseTypePattern = /type\s*:\s*(\w+)(?:\[\])?/;
+      const mongooseTypeMatch = fieldContent.match(mongooseTypePattern);
+
+      if (mongooseTypeMatch) {
+        const mongooseType = mongooseTypeMatch[1];
+        // More robust required check
+        const requiredPattern = /required\s*:\s*(true|1)/i;
+        const requiredMatch = fieldContent.match(requiredPattern);
+        const isRequired = requiredMatch !== null;
+
+        const isArray = fieldContent.includes('type: [') || fieldContent.includes('type:[') || mongooseTypeMatch[0].includes('[]');
+
+        fields.push({
+          name: fieldName,
+          type: mapMongooseTypeToGeneric(mongooseType),
+          required: isRequired,
+          isArray
+        });
+      }
+    }
+
+    if (fields.length === 0) {
+      return null;
+    }
+
+    return {
+      entityName,
+      fields
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * Map Mongoose types to generic types
+ */
+function mapMongooseTypeToGeneric(mongooseType: string): string {
+  const typeMap: Record<string, string> = {
+    String: 'string',
+    Number: 'number',
+    Boolean: 'boolean',
+    Date: 'date',
+    ObjectId: 'string',
+    Object: 'object',
+    Array: 'array',
+    Buffer: 'buffer',
+    Mixed: 'mixed'
+  };
+
+  return typeMap[mongooseType] || mongooseType.toLowerCase();
+}
+
+/**
+ * Map TypeScript types to generic types
+ */
+function mapTypeScriptTypeToGeneric(tsType: string): string {
+  const typeMap: Record<string, string> = {
+    string: 'string',
+    number: 'number',
+    boolean: 'boolean',
+    Date: 'date',
+    ObjectId: 'string',
+    object: 'object',
+    any: 'mixed',
+    unknown: 'mixed'
+  };
+
+  return typeMap[tsType.toLowerCase()] || tsType.toLowerCase();
+}

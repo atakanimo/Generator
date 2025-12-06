@@ -1,0 +1,16 @@
+appId: com.universalcodegenerator.app
+productName: Universal Code Generator
+directories:
+  buildResources: build
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+main: dist-electron/main.js
+win:
+  target: nsis
+mac:
+  target: dmg
+linux:
+  target: AppImage
+
