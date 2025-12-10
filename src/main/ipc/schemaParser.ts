@@ -368,7 +368,8 @@ export function parseModelFile(filePath: string, sourceType?: 'nodejs-mongoose' 
       }
 
       // Parse standard Mongoose types (String, Number, Date, etc.)
-      const mongooseTypePattern = /type\s*:\s*(\w+)(?:\[\])?/;
+      // Support both: type: String and type: [String]
+      const mongooseTypePattern = /type\s*:\s*\[?\s*(\w+(?:\.\w+)*)\s*\]?/;
       const mongooseTypeMatch = fieldContent.match(mongooseTypePattern);
 
       if (mongooseTypeMatch) {
@@ -378,7 +379,8 @@ export function parseModelFile(filePath: string, sourceType?: 'nodejs-mongoose' 
         const requiredMatch = fieldContent.match(requiredPattern);
         const isRequired = requiredMatch !== null;
 
-        const isArray = fieldContent.includes('type: [') || fieldContent.includes('type:[') || mongooseTypeMatch[0].includes('[]');
+        // Check if it's an array: type: [String] or type:[String]
+        const isArray = fieldContent.includes('type: [') || fieldContent.includes('type:[');
 
         fields.push({
           name: fieldName,
@@ -676,7 +678,8 @@ function parseNestedSchema(content: string, schemaName: string): SchemaDefinitio
       }
 
       // Parse standard Mongoose types
-      const mongooseTypePattern = /type\s*:\s*(\w+)(?:\[\])?/;
+      // Support both: type: String and type: [String]
+      const mongooseTypePattern = /type\s*:\s*\[?\s*(\w+(?:\.\w+)*)\s*\]?/;
       const mongooseTypeMatch = fieldContent.match(mongooseTypePattern);
 
       if (mongooseTypeMatch) {
@@ -686,7 +689,8 @@ function parseNestedSchema(content: string, schemaName: string): SchemaDefinitio
         const requiredMatch = fieldContent.match(requiredPattern);
         const isRequired = requiredMatch !== null;
 
-        const isArray = fieldContent.includes('type: [') || fieldContent.includes('type:[') || mongooseTypeMatch[0].includes('[]');
+        // Check if it's an array: type: [String] or type:[String]
+        const isArray = fieldContent.includes('type: [') || fieldContent.includes('type:[');
 
         fields.push({
           name: fieldName,

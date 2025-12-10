@@ -15,18 +15,35 @@ import {
   ListItem,
   ListItemText,
   ListItemButton,
-  Divider
+  Divider,
+  Snackbar
 } from '@mui/material';
-import { FolderOpen } from '@mui/icons-material';
+import { FolderOpen, Add as AddIcon } from '@mui/icons-material';
 import { useAppSelector, useAppDispatch } from '../store/hooks';
-import { setProjectPath, setSourceType, scanProjectFiles, parseModelFile, SourceType } from '../features/project/projectSlice';
+import { setProjectPath, setSourceType, scanProjectFiles, parseModelFile, createModel, SourceType } from '../features/project/projectSlice';
 import SchemaDesignPage from './SchemaDesignPage';
+import AddModelModal, { ModelData } from '../components/AddModelModal';
+import { useState, useEffect } from 'react';
 
 const ProjectSelectPage = () => {
   const dispatch = useAppDispatch();
-  const { projectPath, sourceType, status, error, modelsFound, selectedModelSchema, parsingStatus, parsingError } = useAppSelector(
-    state => state.project
-  );
+  const {
+    projectPath,
+    sourceType,
+    status,
+    error,
+    modelsFound,
+    selectedModelSchema,
+    parsingStatus,
+    parsingError,
+    creatingModelStatus,
+    creatingModelError,
+    lastCreatedModelPath
+  } = useAppSelector(state => state.project);
+  const [addModelModalOpen, setAddModelModalOpen] = useState(false);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
 
   const handleBrowseFolder = async () => {
     try {
@@ -68,6 +85,36 @@ const ProjectSelectPage = () => {
   ];
 
   const isScanDisabled = !projectPath || !sourceType || status === 'scanning';
+  const isAddModelDisabled = status !== 'ready' || !projectPath || !sourceType;
+
+  // Show snackbar when model creation status changes
+  useEffect(() => {
+    if (creatingModelStatus === 'success') {
+      const message = lastCreatedModelPath ? `Model created successfully: ${lastCreatedModelPath}` : 'Model created successfully!';
+      setSnackbarMessage(message);
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+      setAddModelModalOpen(false);
+      // Refresh the models list by scanning again
+      if (projectPath && sourceType) {
+        dispatch(scanProjectFiles({ path: projectPath, type: sourceType }));
+      }
+    } else if (creatingModelStatus === 'error') {
+      setSnackbarMessage(creatingModelError || 'Failed to create model');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    }
+  }, [creatingModelStatus, creatingModelError, lastCreatedModelPath, projectPath, sourceType, dispatch]);
+
+  const handleAddModel = async (modelData: ModelData) => {
+    if (projectPath && sourceType) {
+      await dispatch(createModel({ projectPath, sourceType, modelData }));
+    }
+  };
+
+  const handleCloseSnackbar = () => {
+    setSnackbarOpen(false);
+  };
 
   return (
     <Container maxWidth='md' sx={{ py: 4 }}>
@@ -142,6 +189,16 @@ const ProjectSelectPage = () => {
         {/* Action Area */}
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
           <Button
+            variant='outlined'
+            size='large'
+            onClick={() => setAddModelModalOpen(true)}
+            disabled={isAddModelDisabled}
+            startIcon={<AddIcon />}
+            sx={{ minWidth: 150 }}
+          >
+            Model Ekle
+          </Button>
+          <Button
             variant='contained'
             size='large'
             onClick={handleScanProject}
@@ -193,6 +250,22 @@ const ProjectSelectPage = () => {
           <SchemaDesignPage />
         </Box>
       )}
+
+      {/* Add Model Modal */}
+      <AddModelModal
+        open={addModelModalOpen}
+        onClose={() => setAddModelModalOpen(false)}
+        onSave={handleAddModel}
+        projectPath={projectPath}
+        sourceType={sourceType}
+      />
+
+      {/* Snackbar for notifications */}
+      <Snackbar open={snackbarOpen} autoHideDuration={4000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+        <Alert onClose={handleCloseSnackbar} severity={snackbarSeverity} sx={{ width: '100%' }}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };

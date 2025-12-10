@@ -57,6 +57,9 @@ const SchemaDesignPage = () => {
     slice: true,
     page: true
   });
+  const [selectedBackendFiles, setSelectedBackendFiles] = useState({
+    route: true
+  });
   const [features, setFeatures] = useState({
     deletable: true,
     updatable: true
@@ -66,6 +69,9 @@ const SchemaDesignPage = () => {
   const [isProtectedRoute, setIsProtectedRoute] = useState(false);
   const [generationMode, setGenerationMode] = useState<'frontend' | 'backend' | 'fullstack'>('frontend');
   const [baseUrl, setBaseUrl] = useState<string>('');
+  const [updateExistingFrontendFiles, setUpdateExistingFrontendFiles] = useState(false);
+  const [updateExistingBackendFiles, setUpdateExistingBackendFiles] = useState(false);
+  const [isSuperUser, setIsSuperUser] = useState(false);
 
   // Show snackbar when save status changes
   useEffect(() => {
@@ -242,7 +248,9 @@ const SchemaDesignPage = () => {
             features,
             baseUrl: baseUrl || undefined,
             sourceType,
-            isProtectedRoute: generationMode === 'frontend' || generationMode === 'fullstack' ? isProtectedRoute : undefined
+            isProtectedRoute: generationMode === 'frontend' || generationMode === 'fullstack' ? isProtectedRoute : undefined,
+            updateExistingFiles: updateExistingFrontendFiles,
+            isSuperUser
           })
         );
       }
@@ -254,7 +262,11 @@ const SchemaDesignPage = () => {
             schema: selectedModelSchema,
             projectPath,
             isProtectedRoute,
-            sourceType
+            sourceType,
+            shouldAddRoute: selectedBackendFiles.route,
+            baseUrl: baseUrl || undefined,
+            updateExistingFiles: updateExistingBackendFiles,
+            isSuperUser
           })
         );
       }
@@ -377,8 +389,46 @@ const SchemaDesignPage = () => {
             </Box>
           </Box>
         )}
+        {(generationMode === 'backend' || generationMode === 'fullstack') && (
+          <Box sx={{ mt: 3 }}>
+            <FormControlLabel
+              control={<Checkbox checked={updateExistingBackendFiles} onChange={e => setUpdateExistingBackendFiles(e.target.checked)} />}
+              label='Varolan dosyaları güncelle'
+              sx={{ mb: 2 }}
+            />
+            <FormControlLabel
+              control={<Checkbox checked={isSuperUser} onChange={e => setIsSuperUser(e.target.checked)} />}
+              label='isSuperUser'
+              sx={{ mb: 2, ml: 2 }}
+            />
+            <Typography variant='body2' gutterBottom sx={{ mb: 1 }}>
+              Select Files to Generate:
+            </Typography>
+            <FormGroup row>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={selectedBackendFiles.route}
+                    onChange={e => setSelectedBackendFiles({ ...selectedBackendFiles, route: e.target.checked })}
+                  />
+                }
+                label='Route'
+              />
+            </FormGroup>
+          </Box>
+        )}
         {(generationMode === 'frontend' || generationMode === 'fullstack') && (
           <Box sx={{ mt: 3 }}>
+            <FormControlLabel
+              control={<Checkbox checked={updateExistingFrontendFiles} onChange={e => setUpdateExistingFrontendFiles(e.target.checked)} />}
+              label='Varolan dosyaları güncelle'
+              sx={{ mb: 2 }}
+            />
+            <FormControlLabel
+              control={<Checkbox checked={isSuperUser} onChange={e => setIsSuperUser(e.target.checked)} />}
+              label='isSuperUser'
+              sx={{ mb: 2, ml: 2 }}
+            />
             <Typography variant='body2' gutterBottom sx={{ mb: 1 }}>
               Select Files to Generate:
             </Typography>
@@ -547,7 +597,7 @@ const SchemaDesignPage = () => {
                               onClick={() => {
                                 // TODO: Open modal to select relation property from related entity fields
                                 setSnackbarMessage('Relation property selection modal - coming soon');
-                                setSnackbarSeverity('info');
+                                setSnackbarSeverity('success');
                                 setSnackbarOpen(true);
                               }}
                             >

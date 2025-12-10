@@ -33,6 +33,9 @@ interface ProjectState {
   generatingFrontendStatus: 'idle' | 'generating' | 'success' | 'error';
   generatingFrontendError: string | null;
   lastGeneratedFrontendFiles: GenerateFrontendResult['files'] | null;
+  creatingModelStatus: 'idle' | 'creating' | 'success' | 'error';
+  creatingModelError: string | null;
+  lastCreatedModelPath: string | null;
 }
 
 const initialState: ProjectState = {
@@ -56,7 +59,10 @@ const initialState: ProjectState = {
   lastGeneratedBackendFiles: null,
   generatingFrontendStatus: 'idle',
   generatingFrontendError: null,
-  lastGeneratedFrontendFiles: null
+  lastGeneratedFrontendFiles: null,
+  creatingModelStatus: 'idle',
+  creatingModelError: null,
+  lastCreatedModelPath: null
 };
 
 // Async thunk for scanning project files
@@ -172,18 +178,35 @@ export const generateBackend = createAsyncThunk(
       schema,
       projectPath,
       isProtectedRoute,
-      sourceType
+      sourceType,
+      shouldAddRoute,
+      baseUrl,
+      updateExistingFiles,
+      isSuperUser
     }: {
       schema: SchemaDefinition;
       projectPath: string;
       isProtectedRoute: boolean;
       sourceType?: SourceType;
+      shouldAddRoute?: boolean;
+      baseUrl?: string;
+      updateExistingFiles?: boolean;
+      isSuperUser?: boolean;
     },
     { rejectWithValue }
   ) => {
     try {
       if (window.electronAPI?.project?.generateBackend) {
-        const result = await window.electronAPI.project.generateBackend(schema, projectPath, isProtectedRoute, sourceType);
+        const result = await window.electronAPI.project.generateBackend(
+          schema,
+          projectPath,
+          isProtectedRoute,
+          sourceType,
+          shouldAddRoute,
+          baseUrl,
+          updateExistingFiles,
+          isSuperUser
+        );
         if (result.success) {
           return { success: true, files: result.files || null };
         } else {
@@ -191,6 +214,49 @@ export const generateBackend = createAsyncThunk(
         }
       } else {
         return rejectWithValue('Generate backend API not available');
+      }
+    } catch (error) {
+      return rejectWithValue(error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+);
+
+// Async thunk for creating a new model
+export const createModel = createAsyncThunk(
+  'project/createModel',
+  async (
+    {
+      projectPath,
+      sourceType,
+      modelData
+    }: {
+      projectPath: string;
+      sourceType: SourceType;
+      modelData: {
+        modelName: string;
+        fields: Array<{
+          name: string;
+          type: string;
+          required: boolean;
+          unique: boolean;
+          trim: boolean;
+        }>;
+        hasInitializeFunction: boolean;
+        initializeData?: Array<{ value: string }>;
+      };
+    },
+    { rejectWithValue }
+  ) => {
+    try {
+      if (window.electronAPI?.project?.createModel) {
+        const result = await window.electronAPI.project.createModel(projectPath, sourceType, modelData);
+        if (result.success) {
+          return { success: true, filePath: result.filePath || null };
+        } else {
+          return rejectWithValue(result.error || 'Model creation failed');
+        }
+      } else {
+        return rejectWithValue('Create model API not available');
       }
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Unknown error');
@@ -210,7 +276,9 @@ export const generateFrontend = createAsyncThunk(
       features,
       baseUrl,
       sourceType,
-      isProtectedRoute
+      isProtectedRoute,
+      updateExistingFiles,
+      isSuperUser
     }: {
       schema: SchemaDefinition;
       projectPath: string;
@@ -220,6 +288,8 @@ export const generateFrontend = createAsyncThunk(
       baseUrl?: string;
       sourceType?: SourceType;
       isProtectedRoute?: boolean;
+      updateExistingFiles?: boolean;
+      isSuperUser?: boolean;
     },
     { rejectWithValue, getState }
   ) => {
@@ -238,7 +308,9 @@ export const generateFrontend = createAsyncThunk(
           features,
           baseUrl,
           frontendSourceType,
-          isProtectedRoute
+          isProtectedRoute,
+          updateExistingFiles,
+          isSuperUser
         );
         if (result.success) {
           return { success: true, files: result.files || null };
@@ -387,6 +459,19 @@ const projectSlice = createSlice({
       .addCase(generateFrontend.rejected, (state, action) => {
         state.generatingFrontendStatus = 'error';
         state.generatingFrontendError = action.payload as string;
+      })
+      .addCase(createModel.pending, state => {
+        state.creatingModelStatus = 'creating';
+        state.creatingModelError = null;
+      })
+      .addCase(createModel.fulfilled, (state, action) => {
+        state.creatingModelStatus = 'success';
+        state.creatingModelError = null;
+        state.lastCreatedModelPath = action.payload.filePath || null;
+      })
+      .addCase(createModel.rejected, (state, action) => {
+        state.creatingModelStatus = 'error';
+        state.creatingModelError = action.payload as string;
       });
   }
 });

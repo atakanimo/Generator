@@ -1,122 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { app } from 'electron';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
+import { join } from 'path';
 import Handlebars from 'handlebars';
 import { SchemaDefinition } from './schemaParser';
+import { getTemplatesDir, registerHandlebarsHelpers, toCamelCase, getProjectRootPath } from '../utils/templateHelpers.js';
 import { injectRoute, injectReducer } from '../utils/injector.js';
 import { logGenerate, log } from '../utils/logger.js';
-
-/**
- * Get the Generator project root directory
- */
-function getGeneratorRoot(): string {
-  const isDev = process.env.NODE_ENV === 'development' || !app?.isPackaged;
-
-  if (isDev) {
-    const __filename = fileURLToPath(import.meta.url);
-    let currentDir = dirname(__filename);
-
-    while (currentDir !== dirname(currentDir)) {
-      const packageJsonPath = join(currentDir, 'package.json');
-      if (existsSync(packageJsonPath)) {
-        return currentDir;
-      }
-      currentDir = dirname(currentDir);
-    }
-
-    return join(dirname(__filename), '..', '..');
-  } else {
-    return app.getAppPath();
-  }
-}
-
-/**
- * Get the frontend templates directory path
- */
-function getFrontendTemplatesDir(): string {
-  const generatorRoot = getGeneratorRoot();
-  const isDev = process.env.NODE_ENV === 'development' || !app?.isPackaged;
-
-  if (isDev) {
-    return join(generatorRoot, 'src', 'main', 'templates', 'frontend');
-  } else {
-    return join(generatorRoot, 'dist-electron', 'main', 'templates', 'frontend');
-  }
-}
-
-/**
- * Convert entity name to camelCase
- */
-function toCamelCase(str: string): string {
-  return str.charAt(0).toLowerCase() + str.slice(1);
-}
-
-/**
- * Register Handlebars helpers
- */
-function registerHandlebarsHelpers(): void {
-  // Register toCamelCase helper
-  Handlebars.registerHelper('toCamelCase', (str: string) => {
-    return toCamelCase(str);
-  });
-  Handlebars.registerHelper('currentDate', () => {
-    return new Date().toLocaleString('tr-TR');
-  });
-
-  // Register eq helper for equality comparison
-  Handlebars.registerHelper('eq', (a, b) => {
-    return a === b;
-  });
-
-  // Register hasSearchableFields helper to check if any field is searchable
-  Handlebars.registerHelper('hasSearchableFields', (fields: Array<{ isSearchable?: boolean }>) => {
-    if (!fields || !Array.isArray(fields)) {
-      return false;
-    }
-    return fields.some((field: { isSearchable?: boolean }) => field.isSearchable === true);
-  });
-
-  // Register hasField helper to check if a field with specific name exists
-  Handlebars.registerHelper('hasField', (fields: Array<{ name: string }>, fieldName: string) => {
-    if (!fields || !Array.isArray(fields)) {
-      return false;
-    }
-    return fields.some((field: { name: string }) => field.name === fieldName);
-  });
-}
-
-/**
- * Get the frontend project root path by detecting if 'src' exists in the path
- * Handles cases like:
- * - /path/to/frontend/src -> /path/to/frontend
- * - /path/to/frontend/src/services -> /path/to/frontend
- * - /path/to/frontend/src/store -> /path/to/frontend
- * - /path/to/frontend -> /path/to/frontend (no src, assume root)
- */
-function getProjectRootPath(projectPath: string): string {
-  // Normalize path separators
-  const normalizedPath = projectPath.replace(/\\/g, '/').replace(/\/$/, ''); // Remove trailing slash
-
-  // Check if path contains '/src/' (not at the end)
-  const srcIndex = normalizedPath.indexOf('/src/');
-  if (srcIndex !== -1) {
-    // Path contains '/src/', return everything before it
-    // This handles: /path/to/frontend/src/services, /path/to/frontend/src/store, etc.
-    return normalizedPath.substring(0, srcIndex);
-  }
-
-  // Check if path ends with '/src'
-  if (normalizedPath.endsWith('/src')) {
-    // Path ends with '/src', return parent directory
-    // This handles: /path/to/frontend/src
-    return dirname(projectPath);
-  }
-
-  // No 'src' found, return path as is
-  // This handles: /path/to/frontend (user selected project root)
-  return projectPath;
-}
 
 export interface GenerateFrontendResult {
   success: boolean;
@@ -231,7 +119,9 @@ export function generateFrontend(
   features?: { deletable?: boolean; updatable?: boolean },
   baseUrl?: string,
   sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
-  isProtectedRoute?: boolean
+  isProtectedRoute?: boolean,
+  updateExistingFiles?: boolean,
+  isSuperUser?: boolean
 ): GenerateFrontendResult {
   log(`[STEP 0] Frontend generation started for entity: ${schema.entityName}`);
   log(`[STEP 0] Project path: ${projectPath}`);
@@ -240,7 +130,8 @@ export function generateFrontend(
   log(`[STEP 0] Features: ${JSON.stringify(features)}`);
   log(`[STEP 0] Base URL: ${baseUrl || 'not provided'}`);
   log(`[STEP 0] Source type: ${sourceType || 'not provided'}`);
-  log(`[STEP 0] Is protected route: ${isProtectedRoute || false}`);
+  log(`[STEP 0] Is protected route: ${isProtectedRoute === true}`);
+  log(`[STEP 0] Is super user: ${isSuperUser === true}`);
 
   const warnings: string[] = [];
   const errors: string[] = [];
@@ -249,7 +140,7 @@ export function generateFrontend(
   try {
     registerHandlebarsHelpers();
 
-    const templatesDir = getFrontendTemplatesDir();
+    const templatesDir = getTemplatesDir('frontend');
 
     const entityName = schema.entityName;
     const camelEntityName = toCamelCase(entityName);
@@ -308,24 +199,11 @@ export function generateFrontend(
       log(`[STEP 7] No baseUrl provided and no backend path, using default: ${finalBaseUrl}`);
     }
 
-    log(`[STEP 7] Removing /api prefix if present...`);
-    // Remove /api prefix from baseUrl since API helper already adds it
-    // If baseUrl is /api/assety, we want just /assety
-    // If baseUrl is /api, we want empty string or just /
-    if (finalBaseUrl && finalBaseUrl.startsWith('/api')) {
-      log(`[STEP 7] BaseUrl starts with /api, removing prefix...`);
-      finalBaseUrl = finalBaseUrl.replace(/^\/api/, '');
-      log(`[STEP 7] After removing /api: ${finalBaseUrl}`);
-      // If it becomes empty after removing /api, set to empty string
-      if (finalBaseUrl === '') {
-        finalBaseUrl = '';
-        log(`[STEP 7] BaseUrl is now empty after removing /api`);
-      } else if (!finalBaseUrl.startsWith('/')) {
-        // Ensure it starts with / if not empty
-        finalBaseUrl = '/' + finalBaseUrl;
-        log(`[STEP 7] Added leading slash: ${finalBaseUrl}`);
-      }
-    }
+    // Keep the full baseUrl as provided by user
+    // Don't remove /api prefix - use it as-is
+    // If user provides /api/assety, use /api/assety
+    // If user provides /assety, use /assety
+    log(`[STEP 7] Using baseUrl as provided: ${finalBaseUrl}`);
 
     // Ensure finalBaseUrl is always defined and valid
     if (finalBaseUrl === undefined || finalBaseUrl === null) {
@@ -348,7 +226,8 @@ export function generateFrontend(
       deletable,
       updatable,
       sourceType: sourceType || null,
-      isProtectedRoute: isProtectedRoute || false,
+      isProtectedRoute: isProtectedRoute === true,
+      isSuperUser: isSuperUser === true,
       currentDate: new Date().toLocaleString('en-US', {
         year: 'numeric',
         month: '2-digit',
@@ -369,10 +248,14 @@ export function generateFrontend(
     if (selectedFiles?.service === false) {
       log(`[STEP 9] Service file generation skipped (not selected)`);
       // Skip if not selected
-    } else if (existsSync(serviceFilePath)) {
+    } else if (existsSync(serviceFilePath) && !updateExistingFiles) {
       warnings.push(`Service file already exists, skipped: ${serviceFilePath}`);
       log(`[STEP 9] Service file already exists, skipped for entity: ${entityName}`);
     } else {
+      if (updateExistingFiles && existsSync(serviceFilePath)) {
+        unlinkSync(serviceFilePath);
+        log(`[STEP 9] Deleted existing service file: ${serviceFilePath}`);
+      }
       const serviceTemplatePath = join(templatesDir, 'service.hbs');
       if (existsSync(serviceTemplatePath)) {
         const serviceTemplateContent = readFileSync(serviceTemplatePath, 'utf-8');
@@ -398,10 +281,14 @@ export function generateFrontend(
     if (selectedFiles?.thunk === false) {
       log(`[STEP 10] Thunk file generation skipped (not selected)`);
       // Skip if not selected
-    } else if (existsSync(thunkFilePath)) {
+    } else if (existsSync(thunkFilePath) && !updateExistingFiles) {
       warnings.push(`Thunk file already exists, skipped: ${thunkFilePath}`);
       log(`[STEP 10] Thunk file already exists, skipped for entity: ${entityName}`);
     } else {
+      if (updateExistingFiles && existsSync(thunkFilePath)) {
+        unlinkSync(thunkFilePath);
+        log(`[STEP 10] Deleted existing thunk file: ${thunkFilePath}`);
+      }
       const thunkTemplatePath = join(templatesDir, 'thunk.hbs');
       if (existsSync(thunkTemplatePath)) {
         const thunkTemplateContent = readFileSync(thunkTemplatePath, 'utf-8');
@@ -425,10 +312,14 @@ export function generateFrontend(
     if (selectedFiles?.slice === false) {
       log(`[STEP 11] Slice file generation skipped (not selected)`);
       // Skip if not selected
-    } else if (sliceExists) {
+    } else if (sliceExists && !updateExistingFiles) {
       warnings.push(`Slice file already exists, skipped: ${slicePath}`);
       log(`[STEP 11] Slice file already exists, skipped for entity: ${entityName}`);
     } else {
+      if (updateExistingFiles && sliceExists) {
+        unlinkSync(slicePath);
+        log(`[STEP 11] Deleted existing slice file: ${slicePath}`);
+      }
       const sliceTemplatePath = join(templatesDir, 'slice.hbs');
       log(`[STEP 11] Slice template path: ${sliceTemplatePath}`);
       if (existsSync(sliceTemplatePath)) {
@@ -455,10 +346,14 @@ export function generateFrontend(
       // Skip table generation if page is not selected
     } else {
       const tableFilePath = join(componentsDir, `${entityName}Table.tsx`);
-      if (existsSync(tableFilePath)) {
+      if (existsSync(tableFilePath) && !updateExistingFiles) {
         warnings.push(`Table component file already exists, skipped: ${tableFilePath}`);
         log(`[STEP 12] Table file already exists, skipped for entity: ${entityName}`);
       } else {
+        if (updateExistingFiles && existsSync(tableFilePath)) {
+          unlinkSync(tableFilePath);
+          log(`[STEP 12] Deleted existing table file: ${tableFilePath}`);
+        }
         const tableTemplatePath = join(templatesDir, 'table.hbs');
         log(`[STEP 12] Table template path: ${tableTemplatePath}`);
         if (existsSync(tableTemplatePath)) {
@@ -536,10 +431,14 @@ export function generateFrontend(
     } else {
       const modalFilePath = join(componentsDir, `${entityName}Modal.tsx`);
       log(`[STEP 14] Modal file path: ${modalFilePath}`);
-      if (existsSync(modalFilePath)) {
+      if (existsSync(modalFilePath) && !updateExistingFiles) {
         warnings.push(`Modal component file already exists, skipped: ${modalFilePath}`);
         log(`[STEP 14] Modal file already exists, skipped for entity: ${entityName}`);
       } else {
+        if (updateExistingFiles && existsSync(modalFilePath)) {
+          unlinkSync(modalFilePath);
+          log(`[STEP 14] Deleted existing modal file: ${modalFilePath}`);
+        }
         const modalTemplatePath = join(templatesDir, 'modal.hbs');
         log(`[STEP 14] Modal template path: ${modalTemplatePath}`);
         if (existsSync(modalTemplatePath)) {
@@ -607,10 +506,14 @@ export function generateFrontend(
     if (selectedFiles?.page === false) {
       log(`[STEP 15] Page file generation skipped (not selected)`);
       // Skip if not selected
-    } else if (existsSync(pageFilePath)) {
+    } else if (existsSync(pageFilePath) && !updateExistingFiles) {
       warnings.push(`Page file already exists, skipped: ${pageFilePath}`);
       log(`[STEP 15] Page file already exists, skipped for entity: ${entityName}`);
     } else {
+      if (updateExistingFiles && existsSync(pageFilePath)) {
+        unlinkSync(pageFilePath);
+        log(`[STEP 15] Deleted existing page file: ${pageFilePath}`);
+      }
       const pageTemplatePath = join(templatesDir, 'page.hbs');
       if (existsSync(pageTemplatePath)) {
         log(`[STEP 15] Reading page template...`);

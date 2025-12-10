@@ -7,6 +7,7 @@ import { loadSchemaConfig, saveSchemaConfig } from './ipc/configManager.js';
 import { generateCode } from './ipc/codeGenerator.js';
 import { generateBackend } from './ipc/backendGenerator.js';
 import { generateFrontend, parseBaseUrlFromBackend } from './ipc/frontendGenerator.js';
+import { createModel } from './ipc/modelCreator.js';
 import { log } from './utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -118,9 +119,9 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('project:generateBackend', async (_, { schema, projectPath, isProtectedRoute, sourceType }) => {
+  ipcMain.handle('project:generateBackend', async (_, { schema, projectPath, isProtectedRoute, sourceType, shouldAddRoute, baseUrl, updateExistingFiles, isSuperUser }) => {
     try {
-      const result = generateBackend(schema, projectPath, isProtectedRoute, sourceType);
+      const result = generateBackend(schema, projectPath, isProtectedRoute, sourceType, shouldAddRoute, baseUrl, updateExistingFiles, isSuperUser);
       return result;
     } catch (error) {
       log(`Error generating backend code: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
@@ -146,9 +147,9 @@ app.whenReady().then(() => {
 
   ipcMain.handle(
     'project:generateFrontend',
-    async (_, { schema, projectPath, selectedFiles, backendPath, features, baseUrl, sourceType, isProtectedRoute }) => {
+    async (_, { schema, projectPath, selectedFiles, backendPath, features, baseUrl, sourceType, isProtectedRoute, updateExistingFiles, isSuperUser }) => {
       try {
-        const result = generateFrontend(schema, projectPath, selectedFiles, backendPath, features, baseUrl, sourceType, isProtectedRoute);
+        const result = generateFrontend(schema, projectPath, selectedFiles, backendPath, features, baseUrl, sourceType, isProtectedRoute, updateExistingFiles, isSuperUser);
         return result;
       } catch (error) {
         log(`Error generating frontend code: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
@@ -159,6 +160,19 @@ app.whenReady().then(() => {
       }
     }
   );
+
+  ipcMain.handle('project:createModel', async (_, { projectPath, sourceType, modelData }) => {
+    try {
+      const result = await createModel(projectPath, sourceType, modelData);
+      return result;
+    } catch (error) {
+      log(`Error creating model: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  });
 
   createWindow();
 

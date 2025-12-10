@@ -73,6 +73,29 @@ export interface ParseBaseUrlResult {
   error?: string;
 }
 
+export interface ModelField {
+  name: string;
+  type: 'String' | 'Number' | 'Boolean' | 'Date' | 'ObjectId' | 'Array';
+  required: boolean;
+  unique: boolean;
+  trim: boolean;
+  displayText?: string;
+  ref?: string; // Mongoose ref (e.g., "User", "Symbol") - used in schema definition
+}
+
+export interface ModelData {
+  modelName: string;
+  fields: ModelField[];
+  hasInitializeFunction: boolean;
+  initializeData?: Array<{ value: string }>;
+}
+
+export interface CreateModelResult {
+  success: boolean;
+  filePath?: string;
+  error?: string;
+}
+
 export interface ElectronAPI {
   // Dialog commands
   dialog: {
@@ -88,7 +111,11 @@ export interface ElectronAPI {
       schema: SchemaDefinition,
       projectPath: string,
       isProtectedRoute: boolean,
-      sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null
+      sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
+      shouldAddRoute?: boolean,
+      baseUrl?: string,
+      updateExistingFiles?: boolean,
+      isSuperUser?: boolean
     ) => Promise<GenerateBackendResult>;
     generateFrontend: (
       schema: SchemaDefinition,
@@ -96,9 +123,18 @@ export interface ElectronAPI {
       selectedFiles?: { service?: boolean; thunk?: boolean; slice?: boolean; page?: boolean },
       backendPath?: string,
       features?: { deletable?: boolean; updatable?: boolean },
-      baseUrl?: string
+      baseUrl?: string,
+      sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
+      isProtectedRoute?: boolean,
+      updateExistingFiles?: boolean,
+      isSuperUser?: boolean
     ) => Promise<GenerateFrontendResult>;
     parseBaseUrl: (backendPath: string) => Promise<ParseBaseUrlResult>;
+    createModel: (
+      projectPath: string,
+      sourceType: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
+      modelData: ModelData
+    ) => Promise<CreateModelResult>;
   };
   // Database connection commands (for future use)
   database: {
@@ -132,13 +168,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
       schema: SchemaDefinition,
       projectPath: string,
       isProtectedRoute: boolean,
-      sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null
+      sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
+      shouldAddRoute?: boolean,
+      baseUrl?: string,
+      updateExistingFiles?: boolean,
+      isSuperUser?: boolean
     ) =>
       ipcRenderer.invoke('project:generateBackend', {
         schema,
         projectPath,
         isProtectedRoute,
-        sourceType
+        sourceType,
+        shouldAddRoute,
+        baseUrl,
+        updateExistingFiles,
+        isSuperUser
       }),
     generateFrontend: (
       schema: SchemaDefinition,
@@ -148,7 +192,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       features?: { deletable?: boolean; updatable?: boolean },
       baseUrl?: string,
       sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
-      isProtectedRoute?: boolean
+      isProtectedRoute?: boolean,
+      updateExistingFiles?: boolean,
+      isSuperUser?: boolean
     ) =>
       ipcRenderer.invoke('project:generateFrontend', {
         schema,
@@ -158,9 +204,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
         features,
         baseUrl,
         sourceType,
-        isProtectedRoute
+        isProtectedRoute,
+        updateExistingFiles,
+        isSuperUser
       }),
-    parseBaseUrl: (backendPath: string) => ipcRenderer.invoke('project:parseBaseUrl', { backendPath })
+    parseBaseUrl: (backendPath: string) => ipcRenderer.invoke('project:parseBaseUrl', { backendPath }),
+    createModel: (
+      projectPath: string,
+      sourceType: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
+      modelData: ModelData
+    ) => ipcRenderer.invoke('project:createModel', { projectPath, sourceType, modelData })
   },
   database: {
     connect: (config: unknown) => ipcRenderer.invoke('database:connect', config),

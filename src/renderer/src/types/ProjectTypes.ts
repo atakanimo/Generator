@@ -24,6 +24,7 @@ export interface FieldConfig {
   includeRelation?: boolean;
   relationProperty?: string; // e.g., "name", "email" - property to display from related entity
   relationEntityName?: string; // e.g., "User", "Symbol" - name of the related entity
+  ref?: string; // Mongoose ref (e.g., "User", "Symbol") - used in schema definition
 }
 
 export interface SchemaDefinition {

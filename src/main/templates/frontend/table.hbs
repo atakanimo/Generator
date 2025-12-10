@@ -13,6 +13,7 @@ import {
   Box,
   Grid,
   Button,
+  Chip,
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Search as SearchIcon, Clear as ClearIcon } from '@mui/icons-material';
 import { I{{entityName}}, {{#if (hasSearchableFields fields)}}Get{{entityName}}Query{{/if}} } from '@/services/{{camelEntityName}}.service';
@@ -49,32 +50,32 @@ const {{entityName}}Table: React.FC<{{entityName}}TableProps> = ({ items, onEdit
       {/* Search Filters */}
       <Box sx=\{{ mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
-{{#each fields}}
-{{#if isSearchable}}
-          <Grid item xs={12} sm={6} md={4}>
-            <TextField
-              label="{{label}}"
-              value={filters?.{{name}} || ''}
-              onChange={(e) => handleFilterChange('{{name}}', e.target.value)}
-              fullWidth
-              size="small"
-              {{#if (eq type "number")}}
-              type="number"
-              {{else if (eq type "date")}}
-              type="date"
-              InputLabelProps=\{{
-                shrink: true,
-              }}
-              {{/if}}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter' && onSearch) {
-                  onSearch();
-                }
-              }}
-            />
-          </Grid>
-{{/if}}
-{{/each}}
+          {{#each fields}}
+            {{#if isSearchable}}
+            <Grid item xs={12} sm={6} md={4}>
+              <TextField
+                label="{{label}}"
+                value={filters?.{{name}} || ''}
+                onChange={(e) => handleFilterChange('{{name}}', e.target.value)}
+                fullWidth
+                size="small"
+                {{#if (eq type "number")}}
+                type="number"
+                {{else if (eq type "date")}}
+                type="date"
+                InputLabelProps=\{{
+                  shrink: true,
+                }}
+                {{/if}}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && onSearch) {
+                    onSearch();
+                  }
+                }}
+              />
+            </Grid>
+            {{/if}}
+          {{/each}}
           <Grid item xs={12} sm={6} md={3}>
             <Button
               variant="contained"
@@ -106,73 +107,79 @@ const {{entityName}}Table: React.FC<{{entityName}}TableProps> = ({ items, onEdit
         <Table>
           <TableHead>
             <TableRow>
-{{#each fields}}
-{{#if showInTable}}
-              <TableCell><strong>{{label}}</strong></TableCell>
-{{/if}}
-{{/each}}
+              {{#each fields}}
+                {{#if showInTable}}
+                <TableCell><strong>{{label}}</strong></TableCell>
+                {{/if}}
+              {{/each}}
               <TableCell align="right"><strong>Actions</strong></TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {items?.length > 0 &&
               items.map(item => (
-              <TableRow key={__ITEM_ID_KEY__} hover>
-{{#each fields}}
-{{#if showInTable}}
-{{#if includeRelation}}
-{{#if relationProperty}}
-{{#if isArray}}
-                <TableCell>
-                  {Array.isArray(item['{{name}}']) 
-                    ? item['{{name}}'].map((rel: any) => rel?.['{{relationProperty}}']).filter(Boolean).join(', ')
-                    : item['{{name}}']?.['{{relationProperty}}']}
-                </TableCell>
-{{else}}
-                <TableCell>
-                  {item['{{name}}']?.['{{relationProperty}}']}
-                </TableCell>
-{{/if}}
-{{else}}
-                <TableCell>
-                  {item['{{name}}']}
-                </TableCell>
-{{/if}}
-{{else}}
-{{#if isArray}}
-                <TableCell>
-                  {item['{{name}}']?.join(', ')}
-                </TableCell>
-{{else}}
-                <TableCell>
-                  {item['{{name}}']}
-                </TableCell>
-{{/if}}
-{{/if}}
-{{/if}}
-{{/each}}
-                <TableCell align="right">
-                  {onEdit && (
-                    <IconButton
-                      size="small"
-                      onClick={() => onEdit(item)}
-                      color="primary"
-                    >
-                      <EditIcon />
-                    </IconButton>
-                  )}
-                  {onDelete && (
-                    <IconButton
-                      size="small"
-                      onClick={() => onDelete(item)}
-                      color="error"
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
+                <TableRow key={__ITEM_ID_KEY__} hover>
+                  {{#each fields}}
+                    {{#if showInTable}}
+                      {{#if isArray}}
+                      <TableCell>
+                        {item['{{name}}']?.join(', ')}
+                      </TableCell>
+                      {{else}}
+                        {{#if includeRelation}}
+                          {{#if relationEntityName}}
+                          <TableCell>
+                            {item['{{name}}'] && typeof item['{{name}}'] === 'object'
+                              ? (item['{{name}}'] as any)?.['{{#if relationProperty}}{{relationProperty}}{{else}}name{{/if}}'] || item['{{name}}']
+                              : item['{{name}}']}
+                          </TableCell>
+                          {{else}}
+                          <TableCell>
+                            {item['{{name}}']}
+                          </TableCell>
+                          {{/if}}
+                        {{else}}
+                          {{#if (eq type "boolean")}}
+                          <TableCell>
+                            {typeof item['{{name}}'] === 'boolean' ? (
+                              <Chip 
+                                label={item['{{name}}'] ? 'Yes' : 'No'} 
+                                color={item['{{name}}'] ? 'success' : 'default'} 
+                                size="small" 
+                              />
+                            ) : item['{{name}}']}
+                          </TableCell>
+                          {{else}}
+                          <TableCell>
+                            {item['{{name}}']}
+                          </TableCell>
+                          {{/if}}
+                        {{/if}}
+                      {{/if}}
+                    {{/if}}
+                  {{/each}}
+                  <TableCell align="right">
+                    {onEdit && (
+                      <IconButton
+                        size="small"
+                        onClick={() => onEdit(item)}
+                        color="primary"
+                      >
+                        <EditIcon />
+                      </IconButton>
+                    )}
+                    {onDelete && (
+                      <IconButton
+                        size="small"
+                        onClick={() => onDelete(item)}
+                        color="error"
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
           </TableBody>
         </Table>
       </TableContainer>
@@ -181,4 +188,3 @@ const {{entityName}}Table: React.FC<{{entityName}}TableProps> = ({ items, onEdit
 };
 
 export default {{entityName}}Table;
-

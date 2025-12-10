@@ -1,137 +1,14 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { app } from 'electron';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
+import { join } from 'path';
 import Handlebars from 'handlebars';
 import { SchemaDefinition } from './schemaParser';
+import { getTemplatesDir, registerHandlebarsHelpers, getProjectRootPath } from '../utils/templateHelpers.js';
 import { logGenerate, log } from '../utils/logger.js';
-
-/**
- * Get the Generator project root directory
- */
-function getGeneratorRoot(): string {
-  const isDev = process.env.NODE_ENV === 'development' || !app?.isPackaged;
-
-  if (isDev) {
-    // Start from the current file location (dist-electron/main/ipc/backendGenerator.js)
-    const __filename = fileURLToPath(import.meta.url);
-    let currentDir = dirname(__filename);
-
-    // Go up until we find package.json (Generator root)
-    while (currentDir !== dirname(currentDir)) {
-      const packageJsonPath = join(currentDir, 'package.json');
-      if (existsSync(packageJsonPath)) {
-        return currentDir;
-      }
-      currentDir = dirname(currentDir);
-    }
-
-    // Fallback: if package.json not found, go up two levels from dist-electron
-    return join(dirname(__filename), '..', '..');
-  } else {
-    // In production, use app path
-    return app.getAppPath();
-  }
-}
-
-/**
- * Get the backend templates directory path
- */
-function getBackendTemplatesDir(): string {
-  const generatorRoot = getGeneratorRoot();
-  const isDev = process.env.NODE_ENV === 'development' || !app?.isPackaged;
-
-  if (isDev) {
-    // In development, use src/main/templates/backend
-    return join(generatorRoot, 'src', 'main', 'templates', 'backend');
-  } else {
-    // In production, use dist-electron/main/templates/backend
-    return join(generatorRoot, 'dist-electron', 'main', 'templates', 'backend');
-  }
-}
-
-/**
- * Register Handlebars helpers
- */
-function registerHandlebarsHelpers(): void {
-  // Register currentDate helper for Turkish locale
-  Handlebars.registerHelper('currentDate', () => {
-    return new Date().toLocaleString('tr-TR');
-  });
-  
-  // Register eq helper for equality comparison
-  Handlebars.registerHelper('eq', (a, b) => {
-    return a === b;
-  });
-  
-  // Register getType helper to return mongoose.Types.ObjectId for schema type and Date for date type
-  Handlebars.registerHelper('getType', (type: string) => {
-    if (type === 'schema') {
-      return 'mongoose.Types.ObjectId';
-    }
-    if (type === 'date') {
-      return 'Date';
-    }
-    return type;
-  });
-  
-  // Register hasSchemaType helper to check if any field has schema type
-  Handlebars.registerHelper('hasSchemaType', (fields: Array<{ type: string }>) => {
-    if (!fields || !Array.isArray(fields)) {
-      return false;
-    }
-    return fields.some((field: { type: string }) => field.type === 'schema');
-  });
-
-  // Register hasSearchableFields helper to check if any field is searchable
-  Handlebars.registerHelper('hasSearchableFields', (fields: Array<{ isSearchable?: boolean }>) => {
-    if (!fields || !Array.isArray(fields)) {
-      return false;
-    }
-    return fields.some((field: { isSearchable?: boolean }) => field.isSearchable === true);
-  });
-
-  // Register hasField helper to check if a field with specific name exists
-  Handlebars.registerHelper('hasField', (fields: Array<{ name: string }>, fieldName: string) => {
-    if (!fields || !Array.isArray(fields)) {
-      return false;
-    }
-    return fields.some((field: { name: string }) => field.name === fieldName);
-  });
-}
-
-/**
- * Get the project root path by detecting if 'src' exists in the path
- * If path contains 'src', return the path up to 'src', otherwise return the path as is
- */
-function getProjectRootPath(projectPath: string): string {
-  // Normalize path separators
-  const normalizedPath = projectPath.replace(/\\/g, '/').replace(/\/$/, ''); // Remove trailing slash
-
-  // Check if path contains '/src/' (not at the end)
-  const srcIndex = normalizedPath.indexOf('/src/');
-  if (srcIndex !== -1) {
-    // Path contains '/src/', return everything before it
-    return normalizedPath.substring(0, srcIndex);
-  }
-
-  // Check if path ends with '/src'
-  if (normalizedPath.endsWith('/src')) {
-    // Path ends with '/src', return parent directory
-    return dirname(projectPath);
-  }
-
-  // No 'src' found, return path as is
-  return projectPath;
-}
+import { parseBaseUrlFromBackend } from './frontendGenerator.js';
 
 export interface GenerateBackendResult {
   success: boolean;
-  files?: {
-    route?: string;
-    service?: string;
-    types?: string;
-  };
+  files?: { route?: string; service?: string; types?: string };
   error?: string;
 }
 
@@ -142,13 +19,17 @@ export function generateBackend(
   schema: SchemaDefinition,
   projectPath: string,
   isProtectedRoute: boolean,
-  sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null
+  sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
+  shouldAddRoute?: boolean,
+  baseUrl?: string,
+  updateExistingFiles?: boolean,
+  isSuperUser?: boolean
 ): GenerateBackendResult {
   try {
     // Register helpers
     registerHandlebarsHelpers();
 
-    const templatesDir = getBackendTemplatesDir();
+    const templatesDir = getTemplatesDir('backend');
     const entityName = schema.entityName;
     const entityNameLower = entityName.charAt(0).toLowerCase() + entityName.slice(1);
     const camelEntityName = entityNameLower;
@@ -156,6 +37,10 @@ export function generateBackend(
     // Get the actual project root (handle cases where path includes 'src')
     const projectRoot = getProjectRootPath(projectPath);
     log(`Backend generation started for entity: ${entityName}`);
+
+    // Use provided baseUrl or parse from backend index.ts
+    const finalBaseUrl = baseUrl || parseBaseUrlFromBackend(projectPath);
+    log(`Using base URL: ${finalBaseUrl}`);
 
     // Ensure required directories exist in the project
     const routesDir = join(projectRoot, 'src', 'routes');
@@ -190,7 +75,7 @@ export function generateBackend(
 
     // If Node.js is selected, create Response.model.ts file if it doesn't exist
     if (sourceType === 'nodejs-mongoose' || sourceType === 'nodejs-typeorm') {
-      const responseFilePath = join(modelsDir, 'Response.model.ts');
+      const responseFilePath = join(modelsDir, 'responses.model.ts');
       if (!existsSync(responseFilePath)) {
         // Read response template
         const responseTemplatePath = join(templatesDir, 'response.hbs');
@@ -210,6 +95,7 @@ export function generateBackend(
     const templateData = {
       ...schema,
       isProtectedRoute,
+      isSuperUser: isSuperUser || false,
       entityNameLower,
       camelEntityName,
       sourceType
@@ -218,37 +104,92 @@ export function generateBackend(
     // Generate route file
     const routeTemplatePath = join(templatesDir, 'route.hbs');
     if (existsSync(routeTemplatePath)) {
-      const routeTemplateContent = readFileSync(routeTemplatePath, 'utf-8');
-      const routeTemplate = Handlebars.compile(routeTemplateContent);
-      const routeCode = routeTemplate(templateData);
       const routeFilePath = join(routesDir, `${entityNameLower}.routes.ts`);
-      writeFileSync(routeFilePath, routeCode, 'utf-8');
-      generatedFiles.route = routeFilePath;
-      logGenerate(`${entityNameLower}.routes.ts`, routeFilePath);
+      if (updateExistingFiles && existsSync(routeFilePath)) {
+        // Delete existing file if updateExistingFiles is true
+        unlinkSync(routeFilePath);
+        log(`Deleted existing route file: ${routeFilePath}`);
+      }
+      if (!existsSync(routeFilePath) || updateExistingFiles) {
+        const routeTemplateContent = readFileSync(routeTemplatePath, 'utf-8');
+        const routeTemplate = Handlebars.compile(routeTemplateContent);
+        const routeCode = routeTemplate(templateData);
+        writeFileSync(routeFilePath, routeCode, 'utf-8');
+        generatedFiles.route = routeFilePath;
+        logGenerate(`${entityNameLower}.routes.ts`, routeFilePath);
+      }
     }
 
     // Generate service file
     const serviceTemplatePath = join(templatesDir, 'service.hbs');
     if (existsSync(serviceTemplatePath)) {
-      const serviceTemplateContent = readFileSync(serviceTemplatePath, 'utf-8');
-      const serviceTemplate = Handlebars.compile(serviceTemplateContent);
-      const serviceCode = serviceTemplate(templateData);
       const serviceFilePath = join(servicesDir, `${entityNameLower}.service.ts`);
-      writeFileSync(serviceFilePath, serviceCode, 'utf-8');
-      generatedFiles.service = serviceFilePath;
-      logGenerate(`${entityNameLower}.service.ts`, serviceFilePath);
+      if (updateExistingFiles && existsSync(serviceFilePath)) {
+        // Delete existing file if updateExistingFiles is true
+        unlinkSync(serviceFilePath);
+        log(`Deleted existing service file: ${serviceFilePath}`);
+      }
+      if (!existsSync(serviceFilePath) || updateExistingFiles) {
+        const serviceTemplateContent = readFileSync(serviceTemplatePath, 'utf-8');
+        const serviceTemplate = Handlebars.compile(serviceTemplateContent);
+        const serviceCode = serviceTemplate(templateData);
+        writeFileSync(serviceFilePath, serviceCode, 'utf-8');
+        generatedFiles.service = serviceFilePath;
+        logGenerate(`${entityNameLower}.service.ts`, serviceFilePath);
+      }
     }
 
     // Generate types file
     const typesTemplatePath = join(templatesDir, 'types.hbs');
     if (existsSync(typesTemplatePath)) {
-      const typesTemplateContent = readFileSync(typesTemplatePath, 'utf-8');
-      const typesTemplate = Handlebars.compile(typesTemplateContent);
-      const typesCode = typesTemplate(templateData);
       const typesFilePath = join(typesDir, `${entityNameLower}.types.ts`);
-      writeFileSync(typesFilePath, typesCode, 'utf-8');
-      generatedFiles.types = typesFilePath;
-      logGenerate(`${entityNameLower}.types.ts`, typesFilePath);
+      if (updateExistingFiles && existsSync(typesFilePath)) {
+        // Delete existing file if updateExistingFiles is true
+        unlinkSync(typesFilePath);
+        log(`Deleted existing types file: ${typesFilePath}`);
+      }
+      if (!existsSync(typesFilePath) || updateExistingFiles) {
+        const typesTemplateContent = readFileSync(typesTemplatePath, 'utf-8');
+        const typesTemplate = Handlebars.compile(typesTemplateContent);
+        const typesCode = typesTemplate(templateData);
+        writeFileSync(typesFilePath, typesCode, 'utf-8');
+        generatedFiles.types = typesFilePath;
+        logGenerate(`${entityNameLower}.types.ts`, typesFilePath);
+      }
+    }
+
+    // Add route to src/index.ts if shouldAddRoute is true
+    if (shouldAddRoute && (sourceType === 'nodejs-mongoose' || sourceType === 'nodejs-typeorm')) {
+      const indexPath = join(projectRoot, 'src', 'index.ts');
+      if (existsSync(indexPath)) {
+        try {
+          addRouteToIndex(indexPath, entityNameLower, finalBaseUrl);
+          log(`Route added to src/index.ts for ${entityName}`);
+        } catch (error) {
+          log(`Failed to add route to src/index.ts: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+        }
+      } else {
+        // Try alternative paths
+        const altPaths = [
+          join(projectRoot, 'src', 'app.ts'),
+          join(projectRoot, 'src', 'server.ts'),
+          join(projectRoot, 'index.ts'),
+          join(projectRoot, 'app.ts'),
+          join(projectRoot, 'server.ts')
+        ];
+
+        for (const altPath of altPaths) {
+          if (existsSync(altPath)) {
+            try {
+              addRouteToIndex(altPath, entityNameLower, finalBaseUrl);
+              log(`Route added to ${altPath} for ${entityName}`);
+              break;
+            } catch (error) {
+              log(`Failed to add route to ${altPath}: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+            }
+          }
+        }
+      }
     }
 
     log(`Backend generation completed for: ${entityName} | Files: ${Object.keys(generatedFiles).length}`);
@@ -268,4 +209,81 @@ export function generateBackend(
       error: errorMessage
     };
   }
+}
+
+/**
+ * Adds a route to the src/index.ts file
+ * Finds the last app.use line and adds the new route below it
+ */
+function addRouteToIndex(indexPath: string, entityNameLower: string, baseUrl: string): void {
+  const content = readFileSync(indexPath, 'utf-8');
+  const lines = content.split('\n');
+
+  // Find the last app.use line
+  let lastAppUseIndex = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].includes('app.use(') && lines[i].includes('Route')) {
+      lastAppUseIndex = i;
+      break;
+    }
+  }
+
+  if (lastAppUseIndex === -1) {
+    // If no app.use found, try to find where routes are typically added
+    // Look for patterns like "// Routes" or similar
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].includes('app.use') && lines[i].includes('/api')) {
+        lastAppUseIndex = i;
+      }
+    }
+  }
+
+  if (lastAppUseIndex === -1) {
+    throw new Error('Could not find a suitable location to add the route in index.ts');
+  }
+
+  // Generate route variable name (e.g., symbolTypes -> symbolTypesRoute)
+  // Following the pattern: symbolTypesRoute, notificationsRoutes
+  const routeVariableName = `${entityNameLower}Route`;
+
+  // Check if import already exists (look for any import with the route file)
+  const importPattern = new RegExp(`import.*from.*['"]\\./routes/${entityNameLower}\\.routes['"]`);
+  const hasImport = lines.some(line => importPattern.test(line));
+
+  // Check if route is already added
+  const routePattern = new RegExp(`app\\.use\\(['"]${baseUrl}/${entityNameLower}['"]`);
+  const hasRoute = lines.some(line => routePattern.test(line));
+
+  if (hasRoute) {
+    log(`Route for ${entityNameLower} already exists in index.ts`, 'info');
+    return;
+  }
+
+  // Generate the route line (e.g., app.use('/api/assety/notifications', notificationsRoutes);)
+  const routeLine = `app.use('${baseUrl}/${entityNameLower}', ${routeVariableName});`;
+
+  // Add import if it doesn't exist
+  if (!hasImport) {
+    // Find the last import statement
+    let lastImportIndex = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].trim().startsWith('import ')) {
+        lastImportIndex = i;
+      }
+    }
+
+    if (lastImportIndex !== -1) {
+      // Add import after the last import (default export, so we can name it anything)
+      const importLine = `import ${routeVariableName} from './routes/${entityNameLower}.routes';`;
+      lines.splice(lastImportIndex + 1, 0, importLine);
+      lastAppUseIndex++; // Adjust index since we added a line
+    }
+  }
+
+  // Add route after the last app.use
+  lines.splice(lastAppUseIndex + 1, 0, routeLine);
+
+  // Write back to file
+  writeFileSync(indexPath, lines.join('\n'), 'utf-8');
+  log(`Route added to ${indexPath}: ${routeLine}`, 'info');
 }

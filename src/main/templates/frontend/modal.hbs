@@ -30,55 +30,14 @@ const {{entityName}}Modal: React.FC<{{entityName}}ModalProps> = ({ open, onClose
   const [formData, setFormData] = useState<I{{entityName}}Input>({} as I{{entityName}}Input);
   const [loading, setLoading] = useState(false);
 
-  {{#each fields}}
-  {{#if includeRelation}}
-  {{#if relationEntityName}}
-  const [{{name}}RelationModalOpen, set{{name}}RelationModalOpen] = useState(false);
-  const [{{name}}RelationData, set{{name}}RelationData] = useState<any>(null);
-  {{/if}}
-  {{/if}}
-  {{/each}}
-
   useEffect(() => {
     if (mode === 'edit' && item) {
       // Populate form with item data
-      const initialData: any = {};
-      {{#each fields}}
-      {{#if showInForm}}
-        {{#if (eq ../sourceType "nodejs-mongoose")}}
-            initialData['{{name}}'] = item['{{name}}'];
-            {{#if includeRelation}}
-            {{#if relationEntityName}}
-            // Set relation data if it's populated
-            if (item['{{name}}'] && typeof item['{{name}}'] === 'object' && !Array.isArray(item['{{name}}'])) {
-              set{{name}}RelationData(item['{{name}}']);
-            }
-            {{/if}}
-            {{/if}}
-        {{else}}
-            initialData['{{name}}'] = item['{{name}}'];
-            {{#if includeRelation}}
-            {{#if relationEntityName}}
-            // Set relation data if it's populated
-            if (item['{{name}}'] && typeof item['{{name}}'] === 'object' && !Array.isArray(item['{{name}}'])) {
-              set{{name}}RelationData(item['{{name}}']);
-            }
-            {{/if}}
-            {{/if}}
-        {{/if}}
-      {{/if}}
-      {{/each}}
+      const initialData: any = { ...item };
       setFormData(initialData as I{{entityName}}Input);
     } else {
       // Reset form for create mode
       setFormData({} as I{{entityName}}Input);
-      {{#each fields}}
-      {{#if includeRelation}}
-      {{#if relationEntityName}}
-      set{{name}}RelationData(null);
-      {{/if}}
-      {{/if}}
-      {{/each}}
     }
   }, [item, mode, open]);
 
@@ -92,12 +51,38 @@ const {{entityName}}Modal: React.FC<{{entityName}}ModalProps> = ({ open, onClose
   const handleSubmit = async () => {
     try {
       setLoading(true);
-      // Remove ID field from formData before saving
-      {{#if (eq sourceType "nodejs-mongoose")}}
-      const { _id, ...dataToSave } = formData;
-      {{else}}
-      const { id, ...dataToSave } = formData;
+      // Data hazırlığı
+      let dataToSave: any = { ...formData };
+
+      // Boolean field'ları kontrol et: eğer undefined ise false olarak set et
+      {{#each fields}}
+      {{#if (eq type "boolean")}}
+      if (dataToSave['{{name}}'] === undefined) {
+        dataToSave['{{name}}'] = false;
+      }
       {{/if}}
+      {{/each}}
+
+      // Relation alanları obje olarak kaldıysa (kullanıcı dokunmadıysa) içinden ID'yi al
+      Object.keys(dataToSave).forEach(key => {
+        const val = dataToSave[key];
+        if (val && typeof val === 'object' && !Array.isArray(val)) {
+            // Backend'in beklediği formata göre _id veya id
+             {{#if (eq sourceType "nodejs-mongoose")}}
+             dataToSave[key] = val._id || val.id;
+             {{else}}
+             dataToSave[key] = val.id;
+             {{/if}}
+        }
+      });
+
+      // Remove main ID field from payload
+      {{#if (eq sourceType "nodejs-mongoose")}}
+      delete dataToSave._id;
+      {{else}}
+      delete dataToSave.id;
+      {{/if}}
+
       await onSave(dataToSave);
       onClose();
     } catch (error) {
@@ -124,7 +109,7 @@ const {{entityName}}Modal: React.FC<{{entityName}}ModalProps> = ({ open, onClose
             fullWidth
             required={field.required}
             margin="normal"
-            disabled={isReadOnly} // ID alanı ise disable et
+            disabled={isReadOnly}
           />
         );
       case 'TextArea':
@@ -162,7 +147,7 @@ const {{entityName}}Modal: React.FC<{{entityName}}ModalProps> = ({ open, onClose
             key={fieldName}
             control={
               <Switch
-                checked={!!value}
+                checked={value === true}
                 onChange={(e) => handleChange(fieldName, e.target.checked)}
                 disabled={isReadOnly}
               />
@@ -235,7 +220,6 @@ const {{entityName}}Modal: React.FC<{{entityName}}ModalProps> = ({ open, onClose
   };
 
   return (
-    <>
       <CoreModal
         open={open}
         onClose={onClose}
@@ -246,28 +230,28 @@ const {{entityName}}Modal: React.FC<{{entityName}}ModalProps> = ({ open, onClose
       >
         {{#each fields}}
         {{#if showInForm}}
-          {{#if (eq ../sourceType "nodejs-mongoose")}}
-              {{#if includeRelation}}
-                {{#if relationEntityName}}
-                  <Box sx=\{{ mb: 2 }}>
-                    <TextField
-                      label="{{label}}"
-                      value={formData['{{name}}'] && typeof formData['{{name}}'] === 'object' ? formData['{{name}}']?.['{{relationProperty}}'] || '' : ''}
-                      fullWidth
-                      margin="normal"
-                      InputProps=\{{
-                        readOnly: true,
-                      }}
-                    />
-                    <Button
-                      variant="outlined"
-                      onClick={() => set{{name}}RelationModalOpen(true)}
-                      sx=\{{ mt: 1 }}
-                    >
-                      Edit {{relationEntityName}}
-                    </Button>
-                  </Box>
-                {{else}}
+            {{#if includeRelation}}
+              {{#if relationEntityName}}
+                  {/* Relation Field Logic: Shows Name if object, allows typing ID */}
+                  <TextField
+                    key="{{name}}"
+                    label="{{label}}"
+                    value={
+                      formData['{{name}}'] && typeof formData['{{name}}'] === 'object'
+                        ? (formData['{{name}}'] as any)?.['{{relationProperty}}'] || ''
+                        : formData['{{name}}'] || ''
+                    }
+                    onChange={(e) => handleChange('{{name}}', e.target.value)}
+                    fullWidth
+                    required={ {{required}} }
+                    margin="normal"
+                    helperText={
+                       formData['{{name}}'] && typeof formData['{{name}}'] === 'object'
+                       ? "Currently showing related name. Edit to enter a new ID."
+                       : "Enter {{relationEntityName}} ID"
+                    }
+                  />
+              {{else}}
                   {renderField({
                     name: '{{name}}',
                     label: '{{label}}',
@@ -276,99 +260,20 @@ const {{entityName}}Modal: React.FC<{{entityName}}ModalProps> = ({ open, onClose
                     isArray: {{isArray}},
                     uiComponent: '{{uiComponent}}',
                   })}
-                {{/if}}
-              {{else}}
-                {renderField({
-                  name: '{{name}}',
-                  label: '{{label}}',
-                  type: '{{type}}',
-                  required: {{required}},
-                  isArray: {{isArray}},
-                  uiComponent: '{{uiComponent}}',
-                })}
               {{/if}}
-          {{else}}
-              {{#if includeRelation}}
-                {{#if relationEntityName}}
-                  <Box sx=\{{ mb: 2 }}>
-                    <TextField
-                      label="{{label}}"
-                      value={formData['{{name}}'] && typeof formData['{{name}}'] === 'object' ? formData['{{name}}']?.['{{relationProperty}}'] || '' : ''}
-                      fullWidth
-                      margin="normal"
-                      InputProps=\{{
-                        readOnly: true,
-                      }}
-                    />
-                    <Button
-                      variant="outlined"
-                      onClick={() => set{{name}}RelationModalOpen(true)}
-                      sx=\{{ mt: 1 }}
-                    >
-                      Edit {{relationEntityName}}
-                    </Button>
-                  </Box>
-                {{else}}
-                  {renderField({
-                    name: '{{name}}',
-                    label: '{{label}}',
-                    type: '{{type}}',
-                    required: {{required}},
-                    isArray: {{isArray}},
-                    uiComponent: '{{uiComponent}}',
-                  })}
-                {{/if}}
-              {{else}}
-                {renderField({
-                  name: '{{name}}',
-                  label: '{{label}}',
-                  type: '{{type}}',
-                  required: {{required}},
-                  isArray: {{isArray}},
-                  uiComponent: '{{uiComponent}}',
-                })}
-              {{/if}}
-          {{/if}}
+            {{else}}
+              {renderField({
+                name: '{{name}}',
+                label: '{{label}}',
+                type: '{{type}}',
+                required: {{required}},
+                isArray: {{isArray}},
+                uiComponent: '{{uiComponent}}',
+              })}
+            {{/if}}
         {{/if}}
         {{/each}}
       </CoreModal>
-
-      {{#each fields}}
-      {{#if includeRelation}}
-      {{#if relationEntityName}}
-      {/* Relation Modal for {{name}} */}
-      <CoreModal
-        open={ {{name}}RelationModalOpen }
-        onClose={() => set{{name}}RelationModalOpen(false)}
-        title={`Edit {{relationEntityName}} Data`}
-        saveLabel="Save"
-        onSave={() => {
-          // Save relation data changes
-          if ({{name}}RelationData) {
-            {{#if (eq ../sourceType "nodejs-mongoose")}}
-            handleChange('{{name}}', {{name}}RelationData._id);
-            {{else}}
-            handleChange('{{name}}', {{name}}RelationData.id);
-            {{/if}}
-          }
-          set{{name}}RelationModalOpen(false);
-        }}
-      >
-        <TextField
-          label="Selected ID"
-          value={ {{name}}RelationData ? ({{name}}RelationData.id || {{name}}RelationData._id) : '' }
-          fullWidth
-          margin="normal"
-          disabled
-        />
-        <Typography variant="body2" color="text.secondary" sx=\{{ mt: 2 }}>
-          Relation data editing logic goes here.
-        </Typography>
-      </CoreModal>
-      {{/if}}
-      {{/if}}
-      {{/each}}
-    </>
   );
 };
 
