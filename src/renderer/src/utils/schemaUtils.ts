@@ -1,7 +1,7 @@
 import { FieldConfig, SchemaDefinition } from '../types/ProjectTypes';
 import { formatLabel } from './stringUtils';
 
-export type UIComponent = 'TextField' | 'TextArea' | 'NumberField' | 'Switch' | 'Select' | 'DatePicker' | 'MultiSelect';
+export type UIComponent = 'TextField' | 'TextArea' | 'NumberField' | 'Switch' | 'Select' | 'DatePicker' | 'MultiSelect' | 'ImageField';
 
 /**
  * Determines the appropriate UI component based on field type and name
@@ -67,7 +67,15 @@ export function shouldShowInTable(fieldName: string): boolean {
 /**
  * Converts a parsed SchemaField to FieldConfig with UI defaults
  */
-export function enrichFieldWithUIConfig(field: { name: string; type: string; required: boolean; isArray: boolean; includeRelation?: boolean; relationEntityName?: string; relationProperty?: string }): FieldConfig {
+export function enrichFieldWithUIConfig(field: {
+  name: string;
+  type: string;
+  required: boolean;
+  isArray: boolean;
+  includeRelation?: boolean;
+  relationEntityName?: string;
+  relationProperty?: string;
+}): FieldConfig {
   return {
     ...field,
     label: formatLabel(field.name),
@@ -91,7 +99,15 @@ export function enrichFieldWithUIConfig(field: { name: string; type: string; req
 export function mergeSchema(
   codeSchema: {
     entityName: string;
-    fields: Array<{ name: string; type: string; required: boolean; isArray: boolean; includeRelation?: boolean; relationEntityName?: string; relationProperty?: string }>;
+    fields: Array<{
+      name: string;
+      type: string;
+      required: boolean;
+      isArray: boolean;
+      includeRelation?: boolean;
+      relationEntityName?: string;
+      relationProperty?: string;
+    }>;
     nestedSchemas?: Array<{
       entityName: string;
       fields: Array<{ name: string; type: string; required: boolean; isArray: boolean }>;

@@ -14,6 +14,7 @@ import {
   Grid,
   Button,
   Chip,
+  Avatar,
 } from '@mui/material';
 import { Edit as EditIcon, Delete as DeleteIcon, Search as SearchIcon, Clear as ClearIcon } from '@mui/icons-material';
 import { I{{entityName}}, {{#if (hasSearchableFields fields)}}Get{{entityName}}Query{{/if}} } from '@/services/{{camelEntityName}}.service';
@@ -150,9 +151,33 @@ const {{entityName}}Table: React.FC<{{entityName}}TableProps> = ({ items, onEdit
                             ) : item['{{name}}']}
                           </TableCell>
                           {{else}}
-                          <TableCell>
-                            {item['{{name}}']}
-                          </TableCell>
+                            {{#if (eq uiComponent "ImageField")}}
+                            <TableCell>
+                              {item['{{name}}'] ? (() => {
+                                const imageValue = item['{{name}}'];
+                                const isBase64 = typeof imageValue === 'string' && 
+                                  (imageValue.startsWith('/9j/') || 
+                                   imageValue.startsWith('iVBORw0KGgo') || 
+                                   imageValue.startsWith('UklGR') ||
+                                   (imageValue.length > 100 && !imageValue.startsWith('http')));
+                                const imageSrc = isBase64 && !imageValue.startsWith('data:image/')
+                                  ? `data:image/jpeg;base64,${imageValue}`
+                                  : imageValue;
+                                return (
+                                  <Avatar
+                                    src={imageSrc}
+                                    alt="{{label}}"
+                                    sx=\{{ width: 40, height: 40 }}
+                                    variant="rounded"
+                                  />
+                                );
+                              })() : '-'}
+                            </TableCell>
+                            {{else}}
+                            <TableCell>
+                              {item['{{name}}']}
+                            </TableCell>
+                            {{/if}}
                           {{/if}}
                         {{/if}}
                       {{/if}}

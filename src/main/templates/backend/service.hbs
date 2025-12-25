@@ -11,11 +11,16 @@ import mongoose from 'mongoose';
 const CreateFilters = (filters: Get{{entityName}}Query): any => {
   const query: any = {};
 
+  // Handle _id and id fields (always convert to ObjectId)
+  if (filters._id) {
+    query._id = new mongoose.Types.ObjectId(filters._id);
+  }
+
   {{#each fields}}
     {{#if isSearchable}}
-      {{#if (eq name "userId")}}
-      {{! Skip userId here because we handle it manually below }}
-      {{else}}
+      {{#unless (eq name "userId")}}
+        {{#unless (eq name "_id")}}
+          {{#unless (eq name "id")}}
   if (filters.{{name}}) {
     {{#if (eq type "schema")}}
     query.{{name}} = new mongoose.Types.ObjectId(filters.{{name}});
@@ -27,7 +32,9 @@ const CreateFilters = (filters: Get{{entityName}}Query): any => {
     query.{{name}} = filters.{{name}};
     {{/if}}
   }
-      {{/if}}
+          {{/unless}}
+        {{/unless}}
+      {{/unless}}
     {{/if}}
   {{/each}}
   
@@ -38,7 +45,7 @@ const CreateFilters = (filters: Get{{entityName}}Query): any => {
 /**
  * Get all {{entityName}}
  */
-export async function getAll(filters?: Get{{entityName}}Query{{#if isProtectedRoute}}{{#if (hasField fields "userId")}}, userId?: string, isSuperUser: boolean = false{{/if}}{{/if}}) {
+export async function getAll(filters?: Get{{entityName}}Query{{#if isProtectedRoute}}, userId?: string{{#if (hasField fields "userId")}}, isSuperUser: boolean = false{{/if}}{{/if}}) {
   try {
     {{#if (hasSearchableFields fields)}}
     const filtersQuery: any = CreateFilters(filters || {});
@@ -77,7 +84,7 @@ export async function getAll(filters?: Get{{entityName}}Query{{#if isProtectedRo
 /**
  * Get {{entityName}} by ID
  */
-export async function getById(id: string{{#if isProtectedRoute}}{{#if (hasField fields "userId")}}, userId?: string, isSuperUser: boolean = false{{/if}}{{/if}}) {
+export async function getById(id: string{{#if isProtectedRoute}}, userId?: string{{#if (hasField fields "userId")}}, isSuperUser: boolean = false{{/if}}{{/if}}) {
   try {
     
     {{#if isProtectedRoute}}
@@ -106,7 +113,7 @@ export async function getById(id: string{{#if isProtectedRoute}}{{#if (hasField 
     const {{camelEntityName}} = await query.exec();
 
     if (!{{camelEntityName}}) {
-      return ErrorResponse('{{entityName}} not found', 'NOT_FOUND');
+      return ErrorResponse({ message: '{{entityName}} not found', code: 'NOT_FOUND' });
     }
     return SuccessResponse({{camelEntityName}});
   } catch (error) {
@@ -117,7 +124,7 @@ export async function getById(id: string{{#if isProtectedRoute}}{{#if (hasField 
 /**
  * Create a new {{entityName}}
  */
-export async function create(data: I{{entityName}}Input{{#if isProtectedRoute}}{{#if (hasField fields "userId")}}, userId?: string, isSuperUser: boolean = false{{/if}}{{/if}}) {
+export async function create(data: I{{entityName}}Input{{#if isProtectedRoute}}, userId?: string{{#if (hasField fields "userId")}}, isSuperUser: boolean = false{{/if}}{{/if}}) {
   try {
     {{#if isProtectedRoute}}
       {{#if (hasField fields "userId")}}
@@ -147,7 +154,7 @@ export async function create(data: I{{entityName}}Input{{#if isProtectedRoute}}{
 /**
  * Update {{entityName}} by ID
  */
-export async function update(id: string, data: Partial<I{{entityName}}Input>{{#if isProtectedRoute}}{{#if (hasField fields "userId")}}, userId?: string, isSuperUser: boolean = false{{/if}}{{/if}}) {
+export async function update(id: string, data: Partial<I{{entityName}}Input>{{#if isProtectedRoute}}, userId?: string{{#if (hasField fields "userId")}}, isSuperUser: boolean = false{{/if}}{{/if}}) {
   try {
     {{#if isProtectedRoute}}
       {{#if (hasField fields "userId")}}
@@ -178,7 +185,7 @@ export async function update(id: string, data: Partial<I{{entityName}}Input>{{#i
     {{/if}}
     
     if (!updated{{entityName}}) {
-      return ErrorResponse('{{entityName}} not found or unauthorized', 'NOT_FOUND');
+      return ErrorResponse({ message: '{{entityName}} not found or unauthorized', code: 'NOT_FOUND' });
     }
     return SuccessResponse(updated{{entityName}});
   } catch (error) {
@@ -189,7 +196,7 @@ export async function update(id: string, data: Partial<I{{entityName}}Input>{{#i
 /**
  * Delete {{entityName}} by ID
  */
-export async function delete{{entityName}}(id: string{{#if isProtectedRoute}}{{#if (hasField fields "userId")}}, userId?: string, isSuperUser: boolean = false{{/if}}{{/if}}) {
+export async function delete{{entityName}}(id: string{{#if isProtectedRoute}}, userId?: string{{#if (hasField fields "userId")}}, isSuperUser: boolean = false{{/if}}{{/if}}) {
   try {
     {{#if isProtectedRoute}}
       {{#if (hasField fields "userId")}}
@@ -209,9 +216,9 @@ export async function delete{{entityName}}(id: string{{#if isProtectedRoute}}{{#
     {{/if}}
 
     if (!deleted{{entityName}}) {
-      return ErrorResponse('{{entityName}} not found or unauthorized', 'NOT_FOUND');
+      return ErrorResponse({ message: '{{entityName}} not found or unauthorized', code: 'NOT_FOUND' });
     }
-    return SuccessResponse({ message: '{{entityName}} deleted successfully' });
+    return SuccessResponse(null, '{{entityName}} deleted successfully');
   } catch (error) {
     return InternalServerErrorResponse(error, 'Failed to delete {{entityName}}');
   }

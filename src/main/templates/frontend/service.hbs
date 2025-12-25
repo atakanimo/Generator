@@ -164,7 +164,7 @@ export const update = async (
 /**
  * Delete {{entityName}}
  */
-export const delete{{entityName}} = async (id: string): Promise<LocalResponse<string>> => {
+export const delete{{entityName}} = async (id: string): Promise<LocalResponse<null>> => {
   return API({
     url: `{{#if baseUrl}}{{baseUrl}}/{{entityNameLower}}/${id}{{else}}/{{entityNameLower}}/${id}{{/if}}{{#if (eq isSuperUser true)}}?isSuperUser=true{{/if}}`,
     method: 'DELETE'

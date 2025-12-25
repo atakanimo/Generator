@@ -8,7 +8,7 @@ export type Get{{entityName}}sResponseType = LocalResponse<I{{entityName}}[]>;
 export type Get{{entityName}}ResponseType = LocalResponse<I{{entityName}}>;
 export type Create{{entityName}}ResponseType = LocalResponse<I{{entityName}}>;
 export type Update{{entityName}}ResponseType = LocalResponse<I{{entityName}}>;
-export type Delete{{entityName}}ResponseType = LocalResponse<string>;
+export type Delete{{entityName}}ResponseType = LocalResponse<null>;
 
 /**
  * Fetch all {{entityName}}
@@ -77,8 +77,8 @@ export const delete{{entityName}} = createAsyncThunk<Delete{{entityName}}Respons
   '{{camelEntityName}}/delete',
   async (id: string) => {
     try {
-      await {{camelEntityName}}Service.delete{{entityName}}(id);
-      return { isSuccess: true, data: id } as Delete{{entityName}}ResponseType;
+      const result = await {{camelEntityName}}Service.delete{{entityName}}(id);
+      return result;
     } catch (error: any) {
       return error;
     }

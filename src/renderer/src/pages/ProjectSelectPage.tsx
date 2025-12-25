@@ -18,9 +18,10 @@ import {
   Divider,
   Snackbar
 } from '@mui/material';
-import { FolderOpen, Add as AddIcon } from '@mui/icons-material';
+import { FolderOpen, Add as AddIcon, Edit as EditIcon } from '@mui/icons-material';
 import { useAppSelector, useAppDispatch } from '../store/hooks';
-import { setProjectPath, setSourceType, scanProjectFiles, parseModelFile, createModel, SourceType } from '../features/project/projectSlice';
+import { setProjectPath, setSourceType, scanProjectFiles, parseModelFile, createModel, updateModel, parseModelToModelData, SourceType } from '../features/project/projectSlice';
+import { IconButton } from '@mui/material';
 import SchemaDesignPage from './SchemaDesignPage';
 import AddModelModal, { ModelData } from '../components/AddModelModal';
 import { useState, useEffect } from 'react';
@@ -38,9 +39,14 @@ const ProjectSelectPage = () => {
     parsingError,
     creatingModelStatus,
     creatingModelError,
-    lastCreatedModelPath
+    lastCreatedModelPath,
+    updatingModelStatus,
+    updatingModelError,
+    lastUpdatedModelPath
   } = useAppSelector(state => state.project);
   const [addModelModalOpen, setAddModelModalOpen] = useState(false);
+  const [editModelData, setEditModelData] = useState<ModelData | null>(null);
+  const [editModelFilePath, setEditModelFilePath] = useState<string | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
@@ -106,9 +112,59 @@ const ProjectSelectPage = () => {
     }
   }, [creatingModelStatus, creatingModelError, lastCreatedModelPath, projectPath, sourceType, dispatch]);
 
+  // Show snackbar when model update status changes
+  useEffect(() => {
+    if (updatingModelStatus === 'success') {
+      const message = lastUpdatedModelPath ? `Model updated successfully: ${lastUpdatedModelPath}` : 'Model updated successfully!';
+      setSnackbarMessage(message);
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+      setAddModelModalOpen(false);
+      setEditModelData(null);
+      setEditModelFilePath(null);
+      // Refresh the models list by scanning again
+      if (projectPath && sourceType) {
+        dispatch(scanProjectFiles({ path: projectPath, type: sourceType }));
+      }
+    } else if (updatingModelStatus === 'error') {
+      setSnackbarMessage(updatingModelError || 'Failed to update model');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    }
+  }, [updatingModelStatus, updatingModelError, lastUpdatedModelPath, projectPath, sourceType, dispatch]);
+
   const handleAddModel = async (modelData: ModelData) => {
     if (projectPath && sourceType) {
       await dispatch(createModel({ projectPath, sourceType, modelData }));
+    }
+  };
+
+  const handleEditModel = async (modelPath: string) => {
+    if (sourceType) {
+      try {
+        const result = await dispatch(parseModelToModelData({ filePath: modelPath, sourceType }));
+        if (parseModelToModelData.fulfilled.match(result)) {
+          setEditModelData(result.payload);
+          setEditModelFilePath(modelPath);
+          setAddModelModalOpen(true);
+        } else {
+          const errorMessage = result.payload || 'Failed to load model data for editing';
+          setSnackbarMessage(typeof errorMessage === 'string' ? errorMessage : 'Failed to load model data for editing');
+          setSnackbarSeverity('error');
+          setSnackbarOpen(true);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to load model data for editing';
+        setSnackbarMessage(errorMessage);
+        setSnackbarSeverity('error');
+        setSnackbarOpen(true);
+      }
+    }
+  };
+
+  const handleUpdateModel = async (modelData: ModelData) => {
+    if (editModelFilePath && sourceType) {
+      await dispatch(updateModel({ filePath: editModelFilePath, sourceType, modelData }));
     }
   };
 
@@ -224,6 +280,17 @@ const ProjectSelectPage = () => {
                       <ListItemText primary={model.fileName} secondary={model.path} />
                       {parsingStatus === 'parsing' && <CircularProgress size={20} sx={{ ml: 2 }} />}
                     </ListItemButton>
+                    <IconButton
+                      edge='end'
+                      aria-label='edit'
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditModel(model.path);
+                      }}
+                      sx={{ mr: 1 }}
+                    >
+                      <EditIcon />
+                    </IconButton>
                   </ListItem>
                   {index < modelsFound.length - 1 && <Divider />}
                 </Box>
@@ -251,13 +318,20 @@ const ProjectSelectPage = () => {
         </Box>
       )}
 
-      {/* Add Model Modal */}
+      {/* Add/Edit Model Modal */}
       <AddModelModal
         open={addModelModalOpen}
-        onClose={() => setAddModelModalOpen(false)}
-        onSave={handleAddModel}
+        onClose={() => {
+          setAddModelModalOpen(false);
+          setEditModelData(null);
+          setEditModelFilePath(null);
+        }}
+        onSave={editModelData ? handleUpdateModel : handleAddModel}
         projectPath={projectPath}
         sourceType={sourceType}
+        initialData={editModelData}
+        isEditMode={!!editModelData}
+        modelFilePath={editModelFilePath || undefined}
       />
 
       {/* Snackbar for notifications */}

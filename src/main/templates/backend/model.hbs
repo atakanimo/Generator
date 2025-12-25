@@ -21,13 +21,28 @@ const {{schemaName}} = new Schema<{{interfaceName}}>(
 {{/each}}
   },
   {
-    timestamps: true,
+    {{#if hasTimestamps}}
+    timestamps: {
+      {{#if timestamps.createdAt}}
+      createdAt: true{{#if timestamps.updatedAt}},{{/if}}
+      {{/if}}
+      {{#if timestamps.updatedAt}}
+      updatedAt: true
+      {{/if}}
+    },
+    {{/if}}
     versionKey: false,
     toJSON: {
       transform: function (doc, ret) {
         const obj = ret as Record<string, any>;
+        {{#if hasTimestamps}}
+        {{#if timestamps.createdAt}}
         delete obj.createdAt;
+        {{/if}}
+        {{#if timestamps.updatedAt}}
         delete obj.updatedAt;
+        {{/if}}
+        {{/if}}
         delete obj.__v;
         return obj;
       }
@@ -61,4 +76,3 @@ export const {{initializeFunctionName}} = async (): Promise<void> => {
   }
 };
 {{/if}}
-

@@ -1,9 +1,13 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
-import Handlebars from 'handlebars';
-import { SchemaDefinition } from './schemaParser';
-import { getTemplatesDir, registerHandlebarsHelpers } from '../utils/templateHelpers.js';
+/**
+ * Code Generator (Refactored)
+ * Simple template-based code generation utility
+ */
+
+import { renderTemplate } from '../utils/templateEngine.js';
+import { safeWriteFile } from '../utils/fileUtils.js';
+import { handleError, ErrorCode } from '../utils/errorHandler.js';
 import { logGenerate } from '../utils/logger.js';
+import { SchemaDefinition } from './schemaParser.js';
 
 export interface GenerateCodeResult {
   success: boolean;
@@ -13,46 +17,35 @@ export interface GenerateCodeResult {
 
 /**
  * Generate code from a template
+ * Simplified wrapper around template engine and file utilities
  */
 export function generateCode(templateName: string, schema: SchemaDefinition, outputPath: string, outputFileName: string): GenerateCodeResult {
   try {
-    // Register helpers
-    registerHandlebarsHelpers();
+    // Render template
+    const renderResult = renderTemplate(templateName, schema, 'react');
 
-    // Read template file
-    const templatesDir = getTemplatesDir('react');
-    const templatePath = join(templatesDir, `${templateName}.hbs`);
-
-    if (!existsSync(templatePath)) {
+    if (!renderResult.success || !renderResult.content) {
       return {
         success: false,
-        error: `Template file not found: ${templatePath}`
+        error: renderResult.error || 'Template rendering failed'
       };
     }
 
-    const templateContent = readFileSync(templatePath, 'utf-8');
+    // Write file
+    const outputFilePath = `${outputPath}/${outputFileName}`;
+    const writeResult = safeWriteFile(outputFilePath, renderResult.content, {
+      ensureDirectory: true,
+      createBackup: false
+    });
 
-    // Compile template
-    const template = Handlebars.compile(templateContent);
-
-    // Render with schema data
-    let generatedCode = template(schema);
-
-    // Replace placeholders with actual JSX object literal braces
-    // Do this after Handlebars has processed the template
-    generatedCode = generatedCode.replace(/OBJ_START/g, '{');
-    generatedCode = generatedCode.replace(/OBJ_END/g, '}');
-
-    // Ensure output directory exists
-    if (!existsSync(outputPath)) {
-      mkdirSync(outputPath, { recursive: true });
+    if (!writeResult.success) {
+      return {
+        success: false,
+        error: writeResult.error || 'File write failed'
+      };
     }
 
-    // Write generated file
-    const outputFilePath = join(outputPath, outputFileName);
-    writeFileSync(outputFilePath, generatedCode, 'utf-8');
-
-    // Log successful generation
+    // Log success
     logGenerate(outputFileName, outputFilePath);
 
     return {
@@ -60,12 +53,13 @@ export function generateCode(templateName: string, schema: SchemaDefinition, out
       filePath: outputFilePath
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    // Log error
-    logGenerate(outputFileName, outputPath, errorMessage);
+    const appError = handleError(error as Error, ErrorCode.GENERATION_FAILED, { templateName, outputFileName });
+
+    logGenerate(outputFileName, outputPath, appError.message);
+
     return {
       success: false,
-      error: errorMessage
+      error: appError.userMessage
     };
   }
 }

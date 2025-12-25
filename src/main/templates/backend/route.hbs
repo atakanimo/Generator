@@ -16,13 +16,13 @@ router.use(authMiddleware);
 // POST /api/{{entityNameLower}}/get-all - Get all {{entityName}} (with filters in body)
 router.post('/get-all', async (req, res) => {
   {{#if isProtectedRoute}}
-  {{#if (hasField fields "userId")}}
   const authenticatedReq = req as BaseRequestAuthenticated<any>;
   const userId = authenticatedReq.userId;
+  {{#if (hasField fields "userId")}}
   const isSuperUser = req.body?.isSuperUser === true || req.query?.isSuperUser === 'true';
   const result = await {{entityNameLower}}Service.getAll(req.body, userId, isSuperUser);
   {{else}}
-  const result = await {{entityNameLower}}Service.getAll(req.body);
+  const result = await {{entityNameLower}}Service.getAll(req.body, userId);
   {{/if}}
   {{else}}
   const result = await {{entityNameLower}}Service.getAll(req.body);
@@ -33,13 +33,13 @@ router.post('/get-all', async (req, res) => {
 // GET /api/{{entityNameLower}}/:id - Get {{entityName}} by ID
 router.get('/:id', async (req, res) => {
   {{#if isProtectedRoute}}
-  {{#if (hasField fields "userId")}}
   const authenticatedReq = req as BaseRequestAuthenticated<any>;
   const userId = authenticatedReq.userId;
+  {{#if (hasField fields "userId")}}
   const isSuperUser = req.query?.isSuperUser === 'true';
   const result = await {{entityNameLower}}Service.getById(req.params.id, userId, isSuperUser);
   {{else}}
-  const result = await {{entityNameLower}}Service.getById(req.params.id);
+  const result = await {{entityNameLower}}Service.getById(req.params.id, userId);
   {{/if}}
   {{else}}
   const result = await {{entityNameLower}}Service.getById(req.params.id);
@@ -50,13 +50,13 @@ router.get('/:id', async (req, res) => {
 // POST /api/{{entityNameLower}}/create - Create new {{entityName}}
 router.post('/create', async (req, res) => {
   {{#if isProtectedRoute}}
-  {{#if (hasField fields "userId")}}
   const authenticatedReq = req as BaseRequestAuthenticated<any>;
   const userId = authenticatedReq.userId;
+  {{#if (hasField fields "userId")}}
   const isSuperUser = req.body?.isSuperUser === true;
   const result = await {{entityNameLower}}Service.create(req.body, userId, isSuperUser);
   {{else}}
-  const result = await {{entityNameLower}}Service.create(req.body);
+  const result = await {{entityNameLower}}Service.create(req.body, userId);
   {{/if}}
   {{else}}
   const result = await {{entityNameLower}}Service.create(req.body);
@@ -67,13 +67,13 @@ router.post('/create', async (req, res) => {
 // POST /api/{{entityNameLower}}/update/:id - Update {{entityName}}
 router.post('/update/:id', async (req, res) => {
   {{#if isProtectedRoute}}
-  {{#if (hasField fields "userId")}}
   const authenticatedReq = req as BaseRequestAuthenticated<any>;
   const userId = authenticatedReq.userId;
+  {{#if (hasField fields "userId")}}
   const isSuperUser = req.body?.isSuperUser === true;
   const result = await {{entityNameLower}}Service.update(req.params.id, req.body, userId, isSuperUser);
   {{else}}
-  const result = await {{entityNameLower}}Service.update(req.params.id, req.body);
+  const result = await {{entityNameLower}}Service.update(req.params.id, req.body, userId);
   {{/if}}
   {{else}}
   const result = await {{entityNameLower}}Service.update(req.params.id, req.body);
@@ -84,13 +84,13 @@ router.post('/update/:id', async (req, res) => {
 // DELETE /api/{{entityNameLower}}/:id - Delete {{entityName}}
 router.delete('/:id', async (req, res) => {
   {{#if isProtectedRoute}}
-  {{#if (hasField fields "userId")}}
   const authenticatedReq = req as BaseRequestAuthenticated<any>;
   const userId = authenticatedReq.userId;
+  {{#if (hasField fields "userId")}}
   const isSuperUser = req.query?.isSuperUser === 'true';
   const result = await {{entityNameLower}}Service.delete{{entityName}}(req.params.id, userId, isSuperUser);
   {{else}}
-  const result = await {{entityNameLower}}Service.delete{{entityName}}(req.params.id);
+  const result = await {{entityNameLower}}Service.delete{{entityName}}(req.params.id, userId);
   {{/if}}
   {{else}}
   const result = await {{entityNameLower}}Service.delete{{entityName}}(req.params.id);

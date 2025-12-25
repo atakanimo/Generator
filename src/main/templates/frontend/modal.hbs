@@ -11,6 +11,7 @@ import {
   InputLabel,
   Typography,
   Button,
+  Avatar,
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -202,6 +203,43 @@ const {{entityName}}Modal: React.FC<{{entityName}}ModalProps> = ({ open, onClose
                {/* TODO: Add options dynamically */}
             </Select>
           </FormControl>
+        );
+      case 'ImageField':
+        return (
+          <Box key={fieldName} sx=\{{ mb: 2 }}>
+            <TextField
+              label={field.label}
+              value={value || ''}
+              onChange={(e) => handleChange(fieldName, e.target.value)}
+              fullWidth
+              required={field.required}
+              margin="normal"
+              disabled={isReadOnly}
+              placeholder="Enter image URL or base64 string"
+              helperText="Supports URL or base64 encoded image"
+            />
+            {value && (() => {
+              const imageValue = value;
+              const isBase64 = typeof imageValue === 'string' && 
+                (imageValue.startsWith('/9j/') || 
+                 imageValue.startsWith('iVBORw0KGgo') || 
+                 imageValue.startsWith('UklGR') ||
+                 (imageValue.length > 100 && !imageValue.startsWith('http')));
+              const imageSrc = isBase64 && !imageValue.startsWith('data:image/')
+                ? `data:image/jpeg;base64,${imageValue}`
+                : imageValue;
+              return (
+                <Box sx=\{{ mt: 2, display: 'flex', justifyContent: 'center' }}>
+                  <Avatar
+                    src={imageSrc}
+                    alt={field.label}
+                    sx=\{{ width: 100, height: 100 }}
+                    variant="rounded"
+                  />
+                </Box>
+              );
+            })()}
+          </Box>
         );
       default:
         return (

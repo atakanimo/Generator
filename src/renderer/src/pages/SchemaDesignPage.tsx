@@ -58,7 +58,8 @@ const SchemaDesignPage = () => {
     page: true
   });
   const [selectedBackendFiles, setSelectedBackendFiles] = useState({
-    route: true
+    route: true,
+    responseModel: false
   });
   const [features, setFeatures] = useState({
     deletable: true,
@@ -264,6 +265,7 @@ const SchemaDesignPage = () => {
             isProtectedRoute,
             sourceType,
             shouldAddRoute: selectedBackendFiles.route,
+            shouldGenerateResponseModel: selectedBackendFiles.responseModel,
             baseUrl: baseUrl || undefined,
             updateExistingFiles: updateExistingBackendFiles,
             isSuperUser
@@ -277,7 +279,7 @@ const SchemaDesignPage = () => {
     setSnackbarOpen(false);
   };
 
-  const uiComponentOptions: UIComponent[] = ['TextField', 'TextArea', 'NumberField', 'Switch', 'Select', 'DatePicker', 'MultiSelect'];
+  const uiComponentOptions: UIComponent[] = ['TextField', 'TextArea', 'NumberField', 'Switch', 'Select', 'DatePicker', 'MultiSelect', 'ImageField'];
 
   return (
     <Container maxWidth='lg' sx={{ py: 4 }}>
@@ -413,6 +415,15 @@ const SchemaDesignPage = () => {
                   />
                 }
                 label='Route'
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={selectedBackendFiles.responseModel}
+                    onChange={e => setSelectedBackendFiles({ ...selectedBackendFiles, responseModel: e.target.checked })}
+                  />
+                }
+                label='Response Model'
               />
             </FormGroup>
           </Box>

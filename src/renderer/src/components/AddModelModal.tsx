@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -36,6 +36,10 @@ export interface ModelData {
   fields: ModelField[];
   hasInitializeFunction: boolean;
   initializeData?: Array<Record<string, string>>;
+  timestamps?: {
+    createdAt?: boolean;
+    updatedAt?: boolean;
+  };
 }
 
 interface AddModelModalProps {
@@ -44,9 +48,21 @@ interface AddModelModalProps {
   onSave: (modelData: ModelData) => Promise<void>;
   projectPath: string;
   sourceType: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null;
+  initialData?: ModelData | null;
+  isEditMode?: boolean;
+  modelFilePath?: string;
 }
 
-const AddModelModal: React.FC<AddModelModalProps> = ({ open, onClose, onSave, projectPath, sourceType }) => {
+const AddModelModal: React.FC<AddModelModalProps> = ({
+  open,
+  onClose,
+  onSave,
+  projectPath,
+  sourceType,
+  initialData,
+  isEditMode = false,
+  modelFilePath
+}) => {
   const [modelName, setModelName] = useState('');
   const [fields, setFields] = useState<ModelField[]>([
     { name: 'value', type: 'String', required: true, unique: true, trim: true },
@@ -54,11 +70,40 @@ const AddModelModal: React.FC<AddModelModalProps> = ({ open, onClose, onSave, pr
   ]);
   const [hasInitializeFunction, setHasInitializeFunction] = useState(false);
   const [initializeData, setInitializeData] = useState<Array<Record<string, string>>>([{}]);
+  const [timestamps, setTimestamps] = useState({ createdAt: false, updatedAt: false });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Only support mongoose for now
   const isMongoose = sourceType === 'nodejs-mongoose';
+
+  // Load initial data when modal opens or initialData changes
+  useEffect(() => {
+    if (open && initialData) {
+      setModelName(initialData.modelName);
+      setFields(
+        initialData.fields.length > 0
+          ? initialData.fields
+          : [
+              { name: 'value', type: 'String', required: true, unique: true, trim: true },
+              { name: 'displayText', type: 'String', required: true, trim: true }
+            ]
+      );
+      setHasInitializeFunction(initialData.hasInitializeFunction);
+      setInitializeData(initialData.initializeData && initialData.initializeData.length > 0 ? initialData.initializeData : [{}]);
+      setTimestamps(initialData.timestamps || { createdAt: false, updatedAt: false });
+    } else if (open && !initialData) {
+      // Reset to defaults when opening in add mode
+      setModelName('');
+      setFields([
+        { name: 'value', type: 'String', required: true, unique: true, trim: true },
+        { name: 'displayText', type: 'String', required: true, trim: true }
+      ]);
+      setHasInitializeFunction(false);
+      setInitializeData([{}]);
+      setTimestamps({ createdAt: false, updatedAt: false });
+    }
+  }, [open, initialData]);
 
   const handleAddField = () => {
     setFields([...fields, { name: '', type: 'String', required: false, unique: false, trim: false }]);
@@ -138,32 +183,35 @@ const AddModelModal: React.FC<AddModelModalProps> = ({ open, onClose, onSave, pr
           name: f.name.trim()
         })),
         hasInitializeFunction,
+        timestamps: isMongoose ? timestamps : undefined,
         initializeData: hasInitializeFunction
-          ? initializeData.map(item => {
-              // Ensure all fields are present in the item (even if empty)
-              const completeItem: Record<string, string> = {};
-              fields.forEach(field => {
-                // Preserve the value if it exists, otherwise set empty string
-                completeItem[field.name] = item[field.name] !== undefined && item[field.name] !== null ? String(item[field.name]) : '';
-              });
-              return completeItem;
-            }).filter(item => {
-              // Keep items that have at least one non-empty field value
-              // Check each field based on its type
-              return fields.some(field => {
-                const value = item[field.name];
-                if (field.type === 'Boolean') {
-                  // Boolean fields: keep if value is explicitly set (true or false)
-                  return value !== undefined && value !== null && value !== '';
-                } else if (field.type === 'Number') {
-                  // Number fields: keep if value is a valid number or not empty
-                  return value !== undefined && value !== null && value !== '' && !isNaN(Number(value));
-                } else {
-                  // String fields: keep if value is not empty
-                  return value && typeof value === 'string' && value.trim() !== '';
-                }
-              });
-            })
+          ? initializeData
+              .map(item => {
+                // Ensure all fields are present in the item (even if empty)
+                const completeItem: Record<string, string> = {};
+                fields.forEach(field => {
+                  // Preserve the value if it exists, otherwise set empty string
+                  completeItem[field.name] = item[field.name] !== undefined && item[field.name] !== null ? String(item[field.name]) : '';
+                });
+                return completeItem;
+              })
+              .filter(item => {
+                // Keep items that have at least one non-empty field value
+                // Check each field based on its type
+                return fields.some(field => {
+                  const value = item[field.name];
+                  if (field.type === 'Boolean') {
+                    // Boolean fields: keep if value is explicitly set (true or false)
+                    return value !== undefined && value !== null && value !== '';
+                  } else if (field.type === 'Number') {
+                    // Number fields: keep if value is a valid number or not empty
+                    return value !== undefined && value !== null && value !== '' && !isNaN(Number(value));
+                  } else {
+                    // String fields: keep if value is not empty
+                    return value && typeof value === 'string' && value.trim() !== '';
+                  }
+                });
+              })
           : undefined
       });
       handleClose();
@@ -182,6 +230,7 @@ const AddModelModal: React.FC<AddModelModalProps> = ({ open, onClose, onSave, pr
     ]);
     setHasInitializeFunction(false);
     setInitializeData([{}]);
+    setTimestamps({ createdAt: false, updatedAt: false });
     setError(null);
     onClose();
   };
@@ -204,7 +253,7 @@ const AddModelModal: React.FC<AddModelModalProps> = ({ open, onClose, onSave, pr
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth='md' fullWidth>
-      <DialogTitle>Add New Model</DialogTitle>
+      <DialogTitle>{isEditMode ? 'Edit Model' : 'Add New Model'}</DialogTitle>
       <DialogContent>
         <Box sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 3 }}>
           {error && (
@@ -221,6 +270,7 @@ const AddModelModal: React.FC<AddModelModalProps> = ({ open, onClose, onSave, pr
             required
             placeholder='e.g., SymbolTypes'
             helperText='Model name (will be used for interface and schema names)'
+            disabled={isEditMode}
           />
 
           <Box>
@@ -303,6 +353,41 @@ const AddModelModal: React.FC<AddModelModalProps> = ({ open, onClose, onSave, pr
 
           <Divider />
 
+          {isMongoose && (
+            <Box>
+              <Typography variant='h6' gutterBottom sx={{ mb: 2 }}>
+                Timestamps
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={timestamps.createdAt}
+                      onChange={e => setTimestamps({ ...timestamps, createdAt: e.target.checked })}
+                      color='primary'
+                    />
+                  }
+                  label='Created At'
+                />
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={timestamps.updatedAt}
+                      onChange={e => setTimestamps({ ...timestamps, updatedAt: e.target.checked })}
+                      color='primary'
+                    />
+                  }
+                  label='Updated At'
+                />
+              </Box>
+              <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 1 }}>
+                Select which timestamp fields should be automatically managed by Mongoose
+              </Typography>
+            </Box>
+          )}
+
+          {isMongoose && <Divider />}
+
           <Box>
             <FormControlLabel
               control={<Checkbox checked={hasInitializeFunction} onChange={e => setHasInitializeFunction(e.target.checked)} />}
@@ -343,9 +428,7 @@ const AddModelModal: React.FC<AddModelModalProps> = ({ open, onClose, onSave, pr
                               control={
                                 <Switch
                                   checked={item[field.name] === 'true' || item[field.name] === true}
-                                  onChange={e =>
-                                    handleInitializeDataFieldChange(itemIndex, field.name, e.target.checked ? 'true' : 'false')
-                                  }
+                                  onChange={e => handleInitializeDataFieldChange(itemIndex, field.name, e.target.checked ? 'true' : 'false')}
                                 />
                               }
                               label={field.name}
@@ -379,7 +462,7 @@ const AddModelModal: React.FC<AddModelModalProps> = ({ open, onClose, onSave, pr
           Cancel
         </Button>
         <Button onClick={handleSave} variant='contained' disabled={loading}>
-          {loading ? 'Creating...' : 'Create Model'}
+          {loading ? (isEditMode ? 'Updating...' : 'Creating...') : isEditMode ? 'Update Model' : 'Create Model'}
         </Button>
       </DialogActions>
     </Dialog>

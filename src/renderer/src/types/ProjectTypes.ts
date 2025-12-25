@@ -16,7 +16,7 @@ export interface FieldConfig {
   isArray: boolean;
   // UI Configuration
   label: string;
-  uiComponent: 'TextField' | 'TextArea' | 'NumberField' | 'Switch' | 'Select' | 'DatePicker' | 'MultiSelect';
+  uiComponent: 'TextField' | 'TextArea' | 'NumberField' | 'Switch' | 'Select' | 'DatePicker' | 'MultiSelect' | 'ImageField';
   showInTable: boolean;
   showInForm: boolean;
   isSearchable: boolean;
@@ -32,4 +32,3 @@ export interface SchemaDefinition {
   fields: FieldConfig[];
   nestedSchemas?: SchemaDefinition[];
 }
-

@@ -87,12 +87,24 @@ export interface ModelData {
   modelName: string;
   fields: ModelField[];
   hasInitializeFunction: boolean;
-  initializeData?: Array<{ value: string }>;
+  initializeData?: Array<Record<string, string>>;
 }
 
 export interface CreateModelResult {
   success: boolean;
   filePath?: string;
+  error?: string;
+}
+
+export interface UpdateModelResult {
+  success: boolean;
+  filePath?: string;
+  error?: string;
+}
+
+export interface ParseModelToModelDataResult {
+  success: boolean;
+  modelData?: ModelData;
   error?: string;
 }
 
@@ -104,7 +116,11 @@ export interface ElectronAPI {
   // Project scanning commands
   project: {
     scan: (path: string, type: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm') => Promise<ScanResult>;
-    parseModel: (filePath: string, projectRoot: string) => Promise<ParseResult>;
+    parseModel: (
+      filePath: string,
+      projectRoot: string,
+      sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null
+    ) => Promise<ParseResult>;
     saveSchemaConfig: (projectRoot: string, schema: SchemaDefinition) => Promise<SaveResult>;
     generateCode: (templateName: string, schema: SchemaDefinition, outputPath: string, outputFileName: string) => Promise<GenerateCodeResult>;
     generateBackend: (
@@ -113,6 +129,7 @@ export interface ElectronAPI {
       isProtectedRoute: boolean,
       sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
       shouldAddRoute?: boolean,
+      shouldGenerateResponseModel?: boolean,
       baseUrl?: string,
       updateExistingFiles?: boolean,
       isSuperUser?: boolean
@@ -135,6 +152,15 @@ export interface ElectronAPI {
       sourceType: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
       modelData: ModelData
     ) => Promise<CreateModelResult>;
+    parseModelToModelData: (
+      filePath: string,
+      sourceType: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null
+    ) => Promise<ParseModelToModelDataResult>;
+    updateModel: (
+      filePath: string,
+      sourceType: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
+      modelData: ModelData
+    ) => Promise<UpdateModelResult>;
   };
   // Database connection commands (for future use)
   database: {
@@ -170,6 +196,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       isProtectedRoute: boolean,
       sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
       shouldAddRoute?: boolean,
+      shouldGenerateResponseModel?: boolean,
       baseUrl?: string,
       updateExistingFiles?: boolean,
       isSuperUser?: boolean
@@ -180,6 +207,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         isProtectedRoute,
         sourceType,
         shouldAddRoute,
+        shouldGenerateResponseModel,
         baseUrl,
         updateExistingFiles,
         isSuperUser
@@ -209,11 +237,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         isSuperUser
       }),
     parseBaseUrl: (backendPath: string) => ipcRenderer.invoke('project:parseBaseUrl', { backendPath }),
-    createModel: (
-      projectPath: string,
-      sourceType: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
-      modelData: ModelData
-    ) => ipcRenderer.invoke('project:createModel', { projectPath, sourceType, modelData })
+    createModel: (projectPath: string, sourceType: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null, modelData: ModelData) =>
+      ipcRenderer.invoke('project:createModel', { projectPath, sourceType, modelData }),
+    parseModelToModelData: (filePath: string, sourceType: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null) =>
+      ipcRenderer.invoke('project:parseModelToModelData', { filePath, sourceType }),
+    updateModel: (filePath: string, sourceType: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null, modelData: ModelData) =>
+      ipcRenderer.invoke('project:updateModel', { filePath, sourceType, modelData })
   },
   database: {
     connect: (config: unknown) => ipcRenderer.invoke('database:connect', config),

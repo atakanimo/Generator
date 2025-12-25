@@ -7,7 +7,7 @@ import { loadSchemaConfig, saveSchemaConfig } from './ipc/configManager.js';
 import { generateCode } from './ipc/codeGenerator.js';
 import { generateBackend } from './ipc/backendGenerator.js';
 import { generateFrontend, parseBaseUrlFromBackend } from './ipc/frontendGenerator.js';
-import { createModel } from './ipc/modelCreator.js';
+import { createModel, parseModelToModelData, updateModel } from './ipc/modelCreator.js';
 import { log } from './utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -119,18 +119,34 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('project:generateBackend', async (_, { schema, projectPath, isProtectedRoute, sourceType, shouldAddRoute, baseUrl, updateExistingFiles, isSuperUser }) => {
-    try {
-      const result = generateBackend(schema, projectPath, isProtectedRoute, sourceType, shouldAddRoute, baseUrl, updateExistingFiles, isSuperUser);
-      return result;
-    } catch (error) {
-      log(`Error generating backend code: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
+  ipcMain.handle(
+    'project:generateBackend',
+    async (
+      _,
+      { schema, projectPath, isProtectedRoute, sourceType, shouldAddRoute, shouldGenerateResponseModel, baseUrl, updateExistingFiles, isSuperUser }
+    ) => {
+      try {
+        const result = generateBackend(
+          schema,
+          projectPath,
+          isProtectedRoute,
+          sourceType,
+          shouldAddRoute,
+          shouldGenerateResponseModel,
+          baseUrl,
+          updateExistingFiles,
+          isSuperUser
+        );
+        return result;
+      } catch (error) {
+        log(`Error generating backend code: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        };
+      }
     }
-  });
+  );
 
   ipcMain.handle('project:parseBaseUrl', async (_, { backendPath }) => {
     try {
@@ -147,9 +163,23 @@ app.whenReady().then(() => {
 
   ipcMain.handle(
     'project:generateFrontend',
-    async (_, { schema, projectPath, selectedFiles, backendPath, features, baseUrl, sourceType, isProtectedRoute, updateExistingFiles, isSuperUser }) => {
+    async (
+      _,
+      { schema, projectPath, selectedFiles, backendPath, features, baseUrl, sourceType, isProtectedRoute, updateExistingFiles, isSuperUser }
+    ) => {
       try {
-        const result = generateFrontend(schema, projectPath, selectedFiles, backendPath, features, baseUrl, sourceType, isProtectedRoute, updateExistingFiles, isSuperUser);
+        const result = generateFrontend(
+          schema,
+          projectPath,
+          selectedFiles,
+          backendPath,
+          features,
+          baseUrl,
+          sourceType,
+          isProtectedRoute,
+          updateExistingFiles,
+          isSuperUser
+        );
         return result;
       } catch (error) {
         log(`Error generating frontend code: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
@@ -167,6 +197,32 @@ app.whenReady().then(() => {
       return result;
     } catch (error) {
       log(`Error creating model: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  });
+
+  ipcMain.handle('project:parseModelToModelData', async (_, { filePath, sourceType }) => {
+    try {
+      const result = parseModelToModelData(filePath, sourceType);
+      return result;
+    } catch (error) {
+      log(`Error parsing model to ModelData: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  });
+
+  ipcMain.handle('project:updateModel', async (_, { filePath, sourceType, modelData }) => {
+    try {
+      const result = await updateModel(filePath, sourceType, modelData);
+      return result;
+    } catch (error) {
+      log(`Error updating model: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'

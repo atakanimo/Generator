@@ -36,6 +36,9 @@ interface ProjectState {
   creatingModelStatus: 'idle' | 'creating' | 'success' | 'error';
   creatingModelError: string | null;
   lastCreatedModelPath: string | null;
+  updatingModelStatus: 'idle' | 'updating' | 'success' | 'error';
+  updatingModelError: string | null;
+  lastUpdatedModelPath: string | null;
 }
 
 const initialState: ProjectState = {
@@ -62,7 +65,10 @@ const initialState: ProjectState = {
   lastGeneratedFrontendFiles: null,
   creatingModelStatus: 'idle',
   creatingModelError: null,
-  lastCreatedModelPath: null
+  lastCreatedModelPath: null,
+  updatingModelStatus: 'idle',
+  updatingModelError: null,
+  lastUpdatedModelPath: null
 };
 
 // Async thunk for scanning project files
@@ -180,6 +186,7 @@ export const generateBackend = createAsyncThunk(
       isProtectedRoute,
       sourceType,
       shouldAddRoute,
+      shouldGenerateResponseModel,
       baseUrl,
       updateExistingFiles,
       isSuperUser
@@ -189,6 +196,7 @@ export const generateBackend = createAsyncThunk(
       isProtectedRoute: boolean;
       sourceType?: SourceType;
       shouldAddRoute?: boolean;
+      shouldGenerateResponseModel?: boolean;
       baseUrl?: string;
       updateExistingFiles?: boolean;
       isSuperUser?: boolean;
@@ -203,6 +211,7 @@ export const generateBackend = createAsyncThunk(
           isProtectedRoute,
           sourceType,
           shouldAddRoute,
+          shouldGenerateResponseModel,
           baseUrl,
           updateExistingFiles,
           isSuperUser
@@ -257,6 +266,79 @@ export const createModel = createAsyncThunk(
         }
       } else {
         return rejectWithValue('Create model API not available');
+      }
+    } catch (error) {
+      return rejectWithValue(error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+);
+
+// Async thunk for parsing model to ModelData
+export const parseModelToModelData = createAsyncThunk(
+  'project/parseModelToModelData',
+  async (
+    {
+      filePath,
+      sourceType
+    }: {
+      filePath: string;
+      sourceType: SourceType;
+    },
+    { rejectWithValue }
+  ) => {
+    try {
+      if (window.electronAPI?.project?.parseModelToModelData) {
+        const result = await window.electronAPI.project.parseModelToModelData(filePath, sourceType);
+        if (result.success && result.modelData) {
+          return result.modelData;
+        } else {
+          return rejectWithValue(result.error || 'Parse model failed');
+        }
+      } else {
+        return rejectWithValue('Parse model to ModelData API not available');
+      }
+    } catch (error) {
+      return rejectWithValue(error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+);
+
+// Async thunk for updating a model
+export const updateModel = createAsyncThunk(
+  'project/updateModel',
+  async (
+    {
+      filePath,
+      sourceType,
+      modelData
+    }: {
+      filePath: string;
+      sourceType: SourceType;
+      modelData: {
+        modelName: string;
+        fields: Array<{
+          name: string;
+          type: string;
+          required: boolean;
+          unique: boolean;
+          trim: boolean;
+        }>;
+        hasInitializeFunction: boolean;
+        initializeData?: Array<{ value: string }>;
+      };
+    },
+    { rejectWithValue }
+  ) => {
+    try {
+      if (window.electronAPI?.project?.updateModel) {
+        const result = await window.electronAPI.project.updateModel(filePath, sourceType, modelData);
+        if (result.success) {
+          return { success: true, filePath: result.filePath || null };
+        } else {
+          return rejectWithValue(result.error || 'Model update failed');
+        }
+      } else {
+        return rejectWithValue('Update model API not available');
       }
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Unknown error');
@@ -472,6 +554,19 @@ const projectSlice = createSlice({
       .addCase(createModel.rejected, (state, action) => {
         state.creatingModelStatus = 'error';
         state.creatingModelError = action.payload as string;
+      })
+      .addCase(updateModel.pending, state => {
+        state.updatingModelStatus = 'updating';
+        state.updatingModelError = null;
+      })
+      .addCase(updateModel.fulfilled, (state, action) => {
+        state.updatingModelStatus = 'success';
+        state.updatingModelError = null;
+        state.lastUpdatedModelPath = action.payload.filePath || null;
+      })
+      .addCase(updateModel.rejected, (state, action) => {
+        state.updatingModelStatus = 'error';
+        state.updatingModelError = action.payload as string;
       });
   }
 });
