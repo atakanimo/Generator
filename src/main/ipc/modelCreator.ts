@@ -1,10 +1,18 @@
 import { readFileSync } from 'fs';
-import { writeFile, mkdir, stat } from 'fs/promises';
+import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import Handlebars from 'handlebars';
 import { getTemplatesDir, registerHandlebarsHelpers } from '../utils/templateHelpers.js';
 import { log } from '../utils/logger.js';
+import { moduleNameFromEntity, pascalCase } from '../utils/namingUtils.js';
+import { applyCustomBlockMerge } from '../utils/customBlockMerge.js';
+import { getCustomBlockMarkersPresentInSource, getDefaultCustomBlockMarkerNames } from '../utils/customBlockMarkers.js';
+import {
+  resolveMainMongooseSchemaName,
+  extractMainSchemaRegions,
+  mainSchemaFieldsInner
+} from '../utils/mongooseSchemaExtract.js';
 import { SourceType } from './projectScanner.js';
 import { parseModelFile } from './schemaParser.js';
 
@@ -47,17 +55,12 @@ export interface UpdateModelResult {
 function generateMongooseModel(modelData: ModelData): string {
   const { modelName, fields, hasInitializeFunction, initializeData, timestamps } = modelData;
 
-  // Generate interface name (e.g., SymbolTypes -> ISymbolTypeModel)
-  const interfaceName = `I${modelName.charAt(0).toUpperCase() + modelName.slice(1).replace(/s$/, '')}Model`;
-
-  // Generate schema name (e.g., SymbolTypes -> SymbolTypesSchema)
-  const schemaName = `${modelName}Schema`;
-
-  // Generate model name (e.g., symbolTypes -> SymbolTypes)
-  const modelExportName = modelName.charAt(0).toUpperCase() + modelName.slice(1);
-
-  // Generate initialize function name (e.g., SymbolTypes -> initializeSymbolTypes)
-  const initializeFunctionName = `initialize${modelName.charAt(0).toUpperCase() + modelName.slice(1)}`;
+  // Align with BackendGenerator.buildMongooseModelTemplateData (model.hbs)
+  const pascalName = pascalCase(modelName.trim());
+  const interfaceName = `I${pascalName}`;
+  const schemaName = `${pascalName}Schema`;
+  const modelExportName = pascalName;
+  const initializeFunctionName = `initialize${pascalName}`;
 
   // Check if ModelType pattern exists (value and displayText fields)
   const hasValueField = fields.some(f => f.name === 'value');
@@ -85,7 +88,7 @@ function generateMongooseModel(modelData: ModelData): string {
     if (field.type === 'Number') tsType = 'number';
     else if (field.type === 'Boolean') tsType = 'boolean';
     else if (field.type === 'Date') tsType = 'Date';
-    else if (field.type === 'ObjectId') tsType = 'Schema.Types.ObjectId';
+    else if (field.type === 'ObjectId') tsType = 'mongoose.Types.ObjectId';
     else if (field.type === 'Array') tsType = 'string[]';
 
     return {
@@ -171,6 +174,12 @@ function generateMongooseModel(modelData: ModelData): string {
   log(`Timestamps config: ${JSON.stringify(timestampsConfig, null, 2)}`, 'info');
   log(`Has timestamps: ${hasTimestamps}`, 'info');
 
+  // model.hbs reads `modelFields` (same as BackendGenerator); exclude audit fields from schema body
+  const modelFields = templateFields.filter(f => {
+    const n = String(f.name).trim();
+    return n !== '_id' && n !== 'createdAt' && n !== 'updatedAt';
+  });
+
   // Prepare template context
   const templateContext = {
     modelName,
@@ -180,7 +189,7 @@ function generateMongooseModel(modelData: ModelData): string {
     initializeFunctionName,
     hasModelTypePattern,
     interfaceExtends,
-    fields: templateFields,
+    modelFields,
     hasInitializeFunction,
     initializeData: templateInitializeData,
     timestamps: timestampsConfig,
@@ -192,8 +201,8 @@ function generateMongooseModel(modelData: ModelData): string {
   log(`Template context hasTimestamps: ${hasTimestamps}`, 'info');
   log(`Template context initializeData: ${JSON.stringify(templateInitializeData, null, 2)}`, 'info');
   log(
-    `Template context fields: ${JSON.stringify(
-      templateFields.map(f => ({ name: f.name, mongooseType: f.mongooseType })),
+    `Template context modelFields: ${JSON.stringify(
+      modelFields.map(f => ({ name: f.name, mongooseType: f.mongooseType })),
       null,
       2
     )}`,
@@ -207,74 +216,18 @@ function generateMongooseModel(modelData: ModelData): string {
 }
 
 /**
- * Finds the models directory in the project using the same logic as scanProject
+ * Module output dir for new Mongoose models — same layout as `BackendGenerator` / `scanModulesDirectory`.
+ * e.g. `MobileAppConfig` → `src/modules/mobile-app-config/`
  */
-async function findModelsDirectory(projectPath: string, sourceType: SourceType): Promise<string | null> {
-  if (sourceType === 'nodejs-mongoose' || sourceType === 'nodejs-typeorm') {
-    // Look for 'src/models' folder first (most common structure)
-    const srcModelsPath = join(projectPath, 'src', 'models');
-    try {
-      const srcModelsStats = await stat(srcModelsPath);
-      if (srcModelsStats.isDirectory()) {
-        return srcModelsPath;
-      }
-    } catch {
-      // src/models folder doesn't exist, try models folder
-    }
-
-    // Fallback: Look for 'models' folder at root
-    const modelsPath = join(projectPath, 'models');
-    try {
-      const modelsStats = await stat(modelsPath);
-      if (modelsStats.isDirectory()) {
-        return modelsPath;
-      }
-    } catch {
-      // models folder doesn't exist
-    }
-
-    // If no models directory exists, create src/models (most common)
-    try {
-      await mkdir(srcModelsPath, { recursive: true });
-      return srcModelsPath;
-    } catch (error) {
-      log(`Error creating models directory: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
-      return null;
-    }
-  } else if (sourceType === 'dotnet-ef') {
-    // Look for 'Entities' or 'Models' folder
-    const entitiesPath = join(projectPath, 'Entities');
-    const modelsPath = join(projectPath, 'Models');
-
-    try {
-      const entitiesStats = await stat(entitiesPath);
-      if (entitiesStats.isDirectory()) {
-        return entitiesPath;
-      }
-    } catch {
-      // Entities folder doesn't exist
-    }
-
-    try {
-      const modelsStats = await stat(modelsPath);
-      if (modelsStats.isDirectory()) {
-        return modelsPath;
-      }
-    } catch {
-      // Models folder doesn't exist
-    }
-
-    // If no directory exists, create Entities (most common for .NET)
-    try {
-      await mkdir(entitiesPath, { recursive: true });
-      return entitiesPath;
-    } catch (error) {
-      log(`Error creating models directory: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
-      return null;
-    }
+async function ensureModuleDirectory(projectPath: string, moduleName: string): Promise<string | null> {
+  const moduleDir = join(projectPath, 'src', 'modules', moduleName);
+  try {
+    await mkdir(moduleDir, { recursive: true });
+    return moduleDir;
+  } catch (error) {
+    log(`Error creating module directory: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    return null;
   }
-
-  return null;
 }
 
 /**
@@ -311,42 +264,12 @@ export function parseModelToModelData(filePath: string, sourceType: SourceType):
 
     const schema = parseResult.schema;
 
-    // Find the main schema definition in the content to parse unique and trim
-    const mainSchemaPattern = /const\s+\w+Schema\s*=\s*new\s+Schema\s*<[^>]*>\s*\(\s*\{/;
-    const mainSchemaMatch = content.match(mainSchemaPattern);
+    const mainSchemaName = resolveMainMongooseSchemaName(content, fileName);
     let schemaFieldsContent = '';
-
-    if (mainSchemaMatch) {
-      const schemaStart = mainSchemaMatch.index! + mainSchemaMatch[0].length;
-      // Find the matching closing brace for the fields object
-      let braceCount = 1;
-      let inString = false;
-      let stringChar = '';
-
-      for (let i = schemaStart; i < content.length; i++) {
-        const char = content[i];
-        const prevChar = i > 0 ? content[i - 1] : '';
-
-        if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
-          if (!inString) {
-            inString = true;
-            stringChar = char;
-          } else if (char === stringChar) {
-            inString = false;
-          }
-          continue;
-        }
-
-        if (!inString) {
-          if (char === '{') braceCount++;
-          if (char === '}') {
-            braceCount--;
-            if (braceCount === 0) {
-              schemaFieldsContent = content.substring(schemaStart, i);
-              break;
-            }
-          }
-        }
+    if (mainSchemaName) {
+      const regions = extractMainSchemaRegions(content, mainSchemaName);
+      if (regions) {
+        schemaFieldsContent = mainSchemaFieldsInner(regions);
       }
     }
 
@@ -760,21 +683,19 @@ export async function createModel(projectPath: string, sourceType: SourceType, m
       };
     }
 
-    // Find or create models directory
-    const modelsDir = await findModelsDirectory(projectPath, sourceType);
-    if (!modelsDir) {
+    const moduleName = moduleNameFromEntity(modelData.modelName);
+    const moduleDir = await ensureModuleDirectory(projectPath, moduleName);
+    if (!moduleDir) {
       return {
         success: false,
-        error: 'Could not find or create models directory'
+        error: 'Could not find or create module directory'
       };
     }
 
-    // Generate model file content
     const modelContent = generateMongooseModel(modelData);
 
-    // Generate file name (e.g., SymbolTypes -> symbolTypes.model.ts)
-    const fileName = `${modelData.modelName.charAt(0).toLowerCase() + modelData.modelName.slice(1)}.model.ts`;
-    const filePath = join(modelsDir, fileName);
+    const fileName = `${moduleName}.model.ts`;
+    const filePath = join(moduleDir, fileName);
 
     // Check if file already exists
     if (existsSync(filePath)) {
@@ -822,8 +743,41 @@ export async function updateModel(filePath: string, sourceType: SourceType, mode
       };
     }
 
+    // Preserve initialize seed data when the modal round-trip dropped it (no field edits)
+    let effectiveModelData = modelData;
+    if (
+      modelData.hasInitializeFunction &&
+      (!modelData.initializeData || modelData.initializeData.length === 0)
+    ) {
+      const parsed = parseModelToModelData(filePath, sourceType);
+      if (parsed.success && parsed.modelData?.initializeData?.length) {
+        effectiveModelData = {
+          ...modelData,
+          initializeData: parsed.modelData.initializeData
+        };
+      }
+    }
+
     // Generate model file content
-    const modelContent = generateMongooseModel(modelData);
+    let modelContent = generateMongooseModel(effectiveModelData);
+
+    const existingContent = readFileSync(filePath, 'utf-8');
+    const markerNames = getCustomBlockMarkersPresentInSource(modelContent, getDefaultCustomBlockMarkerNames());
+    if (markerNames.length > 0) {
+      const mergeResult = applyCustomBlockMerge({
+        existingContent,
+        renderedContent: modelContent,
+        markerNames,
+        customImportsPrecedence: true
+      });
+      if (mergeResult.merged === null) {
+        return {
+          success: false,
+          error: mergeResult.error || 'Failed to preserve custom blocks in model file'
+        };
+      }
+      modelContent = mergeResult.merged;
+    }
 
     // Write file (overwrite existing)
     await writeFile(filePath, modelContent, 'utf-8');

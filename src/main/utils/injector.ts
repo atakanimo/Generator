@@ -23,8 +23,8 @@ export function injectRoute(projectPath: string, entityName: string, camelEntity
 
     let content = readFileSync(routesFilePath, 'utf-8');
 
-    // Step 1: Add import for the entity page if not exists
-    const entityImport = `import ${entityName} from '@/pages/${entityName}';`;
+    // Step 1: Add import for the entity page if not exists (module-centric UI output)
+    const entityImport = `import ${entityName} from '@/modules/${camelEntityName}/pages/${entityName}Page';`;
     const circleImport = `import { Circle } from '@mui/icons-material';`;
 
     // Check if entity import already exists

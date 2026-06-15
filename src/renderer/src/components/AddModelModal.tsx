@@ -176,6 +176,37 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
 
     setLoading(true);
     try {
+      let resolvedInitializeData: Array<Record<string, string>> | undefined;
+      if (hasInitializeFunction) {
+        const processed = initializeData
+          .map(item => {
+            const completeItem: Record<string, string> = {};
+            fields.forEach(field => {
+              completeItem[field.name] = item[field.name] !== undefined && item[field.name] !== null ? String(item[field.name]) : '';
+            });
+            return completeItem;
+          })
+          .filter(item =>
+            fields.some(field => {
+              const value = item[field.name];
+              if (field.type === 'Boolean') {
+                return value !== undefined && value !== null && value !== '';
+              }
+              if (field.type === 'Number') {
+                return value !== undefined && value !== null && value !== '' && !isNaN(Number(value));
+              }
+              return value && typeof value === 'string' && value.trim() !== '';
+            })
+          );
+
+        if (processed.length > 0) {
+          resolvedInitializeData = processed;
+        } else if (isEditMode && initialData?.initializeData?.length) {
+          // Edit round-trip: keep disk seed data when user did not touch initialize section
+          resolvedInitializeData = initialData.initializeData;
+        }
+      }
+
       await onSave({
         modelName: modelName.trim(),
         fields: fields.map(f => ({
@@ -184,35 +215,7 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
         })),
         hasInitializeFunction,
         timestamps: isMongoose ? timestamps : undefined,
-        initializeData: hasInitializeFunction
-          ? initializeData
-              .map(item => {
-                // Ensure all fields are present in the item (even if empty)
-                const completeItem: Record<string, string> = {};
-                fields.forEach(field => {
-                  // Preserve the value if it exists, otherwise set empty string
-                  completeItem[field.name] = item[field.name] !== undefined && item[field.name] !== null ? String(item[field.name]) : '';
-                });
-                return completeItem;
-              })
-              .filter(item => {
-                // Keep items that have at least one non-empty field value
-                // Check each field based on its type
-                return fields.some(field => {
-                  const value = item[field.name];
-                  if (field.type === 'Boolean') {
-                    // Boolean fields: keep if value is explicitly set (true or false)
-                    return value !== undefined && value !== null && value !== '';
-                  } else if (field.type === 'Number') {
-                    // Number fields: keep if value is a valid number or not empty
-                    return value !== undefined && value !== null && value !== '' && !isNaN(Number(value));
-                  } else {
-                    // String fields: keep if value is not empty
-                    return value && typeof value === 'string' && value.trim() !== '';
-                  }
-                });
-              })
-          : undefined
+        initializeData: resolvedInitializeData
       });
       handleClose();
     } catch (err) {

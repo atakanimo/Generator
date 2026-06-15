@@ -13,10 +13,12 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src/renderer/src'),
+      '@shared': path.resolve(__dirname, './src/shared'),
     },
   },
   server: {
-    port: 5173,
+    /** Dedicated port — avoids 5173/5174 used by other local Vite apps. */
+    port: 5190,
     strictPort: true,
   },
 });

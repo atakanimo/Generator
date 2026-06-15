@@ -4,13 +4,26 @@
  */
 
 import { BaseGenerator, GenerateOptions, GenerateResult } from './BaseGenerator.js';
-import { renderTemplate } from '../utils/templateEngine.js';
-import { safeWriteFile, safeReadFile } from '../utils/fileUtils.js';
+import { renderTemplate, clearTemplateCache } from '../utils/templateEngine.js';
+import { safeWriteFile, safeReadFile, safePathExists } from '../utils/fileUtils.js';
+import { applyCustomBlockMerge } from '../utils/customBlockMerge.js';
+import { getCustomBlockMarkersPresentInSource } from '../utils/customBlockMarkers.js';
 import { handleError, ErrorCode } from '../utils/errorHandler.js';
 import { log } from '../utils/logger.js';
-import { injectReducer } from '../utils/injector.js';
+import { injectReducer, injectRoute } from '../utils/injector.js';
 import { join } from 'path';
-import { existsSync, unlinkSync } from 'fs';
+import { mergeMongoAuditFrontendSchemaFields } from '../utils/mongoAuditFields.js';
+
+/** Frontend templates that participate in the same custom-block merge as backend (Task 65). */
+const FRONTEND_MERGE_TEMPLATE_NAMES = new Set([
+  'service',
+  'service.admin',
+  'thunk',
+  'slice',
+  'page',
+  'table',
+  'modal'
+]);
 
 export interface FrontendGenerateOptions extends GenerateOptions {
   selectedFiles?: {
@@ -27,7 +40,7 @@ export interface FrontendGenerateOptions extends GenerateOptions {
   baseUrl?: string;
   isProtectedRoute?: boolean;
   updateExistingFiles?: boolean;
-  isSuperUser?: boolean;
+  isAdminUser?: boolean;
 }
 
 /**
@@ -40,7 +53,19 @@ export class FrontendGenerator extends BaseGenerator {
   private baseUrl: string;
   private isProtectedRoute: boolean;
   private updateExistingFiles: boolean;
-  private isSuperUser: boolean;
+  private isAdminUser: boolean;
+
+  private logInfo(message: string, context?: Record<string, unknown>): void {
+    log(`${message}${context ? ` | ${JSON.stringify(context)}` : ''}`, 'info');
+  }
+
+  private logWarn(message: string, context?: Record<string, unknown>): void {
+    log(`${message}${context ? ` | ${JSON.stringify(context)}` : ''}`, 'warn');
+  }
+
+  private logError(message: string, context?: Record<string, unknown>): void {
+    log(`${message}${context ? ` | ${JSON.stringify(context)}` : ''}`, 'error');
+  }
 
   constructor(options: FrontendGenerateOptions) {
     super(options);
@@ -60,7 +85,7 @@ export class FrontendGenerator extends BaseGenerator {
     this.baseUrl = options.baseUrl || '/api';
     this.isProtectedRoute = options.isProtectedRoute ?? false;
     this.updateExistingFiles = options.updateExistingFiles ?? false;
-    this.isSuperUser = options.isSuperUser ?? false;
+    this.isAdminUser = options.isAdminUser ?? false;
   }
 
   /**
@@ -68,7 +93,23 @@ export class FrontendGenerator extends BaseGenerator {
    */
   protected setupDirectories(): string[] {
     const dirs = this.getFrontendDirs();
-    return [dirs.services, dirs.components, dirs.pages, dirs.store, dirs.slices, dirs.thunks, dirs.types, dirs.utils];
+    const entityNames = this.getEntityNames();
+    const moduleBaseDir = join(this.projectRoot, 'src', 'modules', entityNames.camelCase);
+    const moduleComponentsDir = join(moduleBaseDir, 'components');
+    const modulePagesDir = join(moduleBaseDir, 'pages');
+    // Keep services/store in place; UI outputs are module-centric under src/modules/<module>/...
+    return [
+      dirs.services,
+      dirs.store,
+      dirs.slices,
+      dirs.thunks,
+      dirs.types,
+      dirs.utils,
+      dirs.components,
+      join(this.projectRoot, 'src', 'hooks'),
+      moduleComponentsDir,
+      modulePagesDir
+    ];
   }
 
   /**
@@ -77,10 +118,12 @@ export class FrontendGenerator extends BaseGenerator {
   public generate(): GenerateResult {
     try {
       this.logStart('Frontend Generation');
+      clearTemplateCache();
 
       // Setup directories
       const directories = this.setupDirectories();
       this.ensureProjectDirectories(directories);
+      this.ensureCoreUiComponents();
 
       // Prepare template data
       const entityNames = this.getEntityNames();
@@ -92,6 +135,16 @@ export class FrontendGenerator extends BaseGenerator {
       // Inject reducer to store if slice was generated
       if (this.selectedFiles.slice && files.slice) {
         this.injectReducerToStore(entityNames.camelCase);
+      }
+
+      // Inject route when page was generated (routes/routes.ts)
+      if (this.selectedFiles.page && files.page) {
+        const routeResult = injectRoute(this.projectRoot, entityNames.pascalCase, entityNames.camelCase);
+        if (routeResult.success) {
+          this.logInfo('Route injected', { entityName: this.schema.entityName });
+        } else {
+          this.logWarn('Route injection skipped/failed', { entityName: this.schema.entityName, reason: routeResult.message });
+        }
       }
 
       this.logEnd('Frontend Generation', true);
@@ -107,22 +160,86 @@ export class FrontendGenerator extends BaseGenerator {
   }
 
   /**
+   * Shared UI shells (page flow only): typography-scale → CoreText → AdminTable → CoreModal + pagination hook.
+   * Service/thunk/slice-only runs must not touch `src/components` shells.
+   */
+  private ensureCoreUiComponents(): void {
+    if (!this.selectedFiles.page) {
+      this.logInfo(
+        'Page not selected; skipping shared Core UI components (TypographyScale, CoreText, AdminTable, CoreModal, useAdminServerPagination)'
+      );
+      return;
+    }
+
+    const dirs = this.getFrontendDirs();
+    const hooksDir = join(this.projectRoot, 'src', 'hooks');
+    const assets: Array<{ template: string; path: string; label: string }> = [
+      { template: 'core.typography-scale', path: join(dirs.components, 'TypographyScale.ts'), label: 'TypographyScale' },
+      { template: 'core.text', path: join(dirs.components, 'CoreText.tsx'), label: 'CoreText' },
+      { template: 'core.admin-table', path: join(dirs.components, 'AdminTable.tsx'), label: 'AdminTable' },
+      { template: 'core.modal', path: join(dirs.components, 'CoreModal.tsx'), label: 'CoreModal' },
+      {
+        template: 'use-admin-server-pagination',
+        path: join(hooksDir, 'useAdminServerPagination.ts'),
+        label: 'useAdminServerPagination'
+      }
+    ];
+
+    for (const asset of assets) {
+      if (safePathExists(asset.path) && !this.updateExistingFiles) {
+        this.logInfo(`${asset.label} already exists, skipping`, { filePath: asset.path });
+        continue;
+      }
+
+      const renderResult = renderTemplate(asset.template, {}, 'frontend');
+      if (!renderResult.success || !renderResult.content) {
+        this.logError(`Failed to render ${asset.label} template`, {
+          template: asset.template,
+          error: renderResult.error
+        });
+        continue;
+      }
+
+      const writeResult = safeWriteFile(asset.path, renderResult.content, {
+        ensureDirectory: true,
+        createBackup: false
+      });
+
+      if (writeResult.success) {
+        this.logInfo(`${asset.label} component written`, { filePath: asset.path, template: asset.template });
+      } else {
+        this.logError(`Failed to write ${asset.label} component`, {
+          filePath: asset.path,
+          error: writeResult.error
+        });
+      }
+    }
+  }
+
+  /**
    * Prepare template data
    */
   private prepareTemplateData(entityNames: any): any {
+    const rawFields = Array.isArray(this.schema.fields) ? this.schema.fields : [];
+    const fields = mergeMongoAuditFrontendSchemaFields(this.sourceType, [...rawFields]);
+
     return {
       ...this.schema,
+      fields,
       entityName: entityNames.pascalCase,
       camelEntityName: entityNames.camelCase,
-      entityNameLower: entityNames.lowerCase,
+      /** URL path segment (camelCase) - matches backend route path e.g. transactions/admin */
+      entityNameLower: entityNames.camelCase,
       baseUrl: this.baseUrl,
       sourceType: this.sourceType,
       isProtectedRoute: this.isProtectedRoute,
-      isSuperUser: this.isSuperUser,
+      isAdminUser: this.isAdminUser,
       features: this.features,
+      updatable: this.features.updatable,
+      deletable: this.features.deletable,
       // Additional computed properties
-      hasSearchableFields: this.schema.fields?.some((f: any) => f.isSearchable) || false,
-      hasSchemaFields: this.schema.fields?.some((f: any) => f.type === 'schema') || false
+      hasSearchableFields: fields.some((f: any) => f.isSearchable) || false,
+      hasSchemaFields: fields.some((f: any) => f.type === 'schema') || false
     };
   }
 
@@ -132,11 +249,19 @@ export class FrontendGenerator extends BaseGenerator {
   private generateFrontendFiles(templateData: any, entityNames: any): Record<string, string> {
     const dirs = this.getFrontendDirs();
     const files: Record<string, string> = {};
+    const moduleBaseDir = join(this.projectRoot, 'src', 'modules', entityNames.camelCase);
+    const moduleComponentsDir = join(moduleBaseDir, 'components');
+    const modulePagesDir = join(moduleBaseDir, 'pages');
 
-    // Service file
+    // Include Admin API (SchemaDesigner `isAdminUser`): admin → service.admin.hbs only; else → service.hbs only (mutually exclusive).
     if (this.selectedFiles.service) {
-      const serviceFile = this.generateFile('service', 'frontend', dirs.services, `${entityNames.camelCase}.service.ts`, templateData);
-      if (serviceFile) files.service = serviceFile;
+      if (this.isAdminUser) {
+        const serviceAdminFile = this.generateFile('service.admin', 'frontend', dirs.services, `${entityNames.camelCase}.service.admin.ts`, templateData);
+        if (serviceAdminFile) files.serviceAdmin = serviceAdminFile;
+      } else {
+        const serviceFile = this.generateFile('service', 'frontend', dirs.services, `${entityNames.camelCase}.service.ts`, templateData);
+        if (serviceFile) files.service = serviceFile;
+      }
     }
 
     // Thunk file
@@ -151,21 +276,21 @@ export class FrontendGenerator extends BaseGenerator {
       if (sliceFile) files.slice = sliceFile;
     }
 
-    // Page file
+    // Page file: modules/{module}/pages/{EntityName}Page.tsx (e.g. modules/transactions/pages/TransactionsPage.tsx)
     if (this.selectedFiles.page) {
-      const pageFile = this.generateFile('page', 'frontend', dirs.pages, `${entityNames.pascalCase}Page.tsx`, templateData);
+      const pageFile = this.generateFile('page', 'frontend', modulePagesDir, `${entityNames.pascalCase}Page.tsx`, templateData);
       if (pageFile) files.page = pageFile;
     }
 
     // Table component (always generated with page)
     if (this.selectedFiles.page) {
-      const tableFile = this.generateFile('table', 'frontend', dirs.components, `${entityNames.pascalCase}Table.tsx`, templateData);
+      const tableFile = this.generateFile('table', 'frontend', moduleComponentsDir, `${entityNames.pascalCase}Table.tsx`, templateData);
       if (tableFile) files.table = tableFile;
     }
 
     // Modal component (generated if updatable feature is enabled)
     if (this.selectedFiles.page && this.features.updatable) {
-      const modalFile = this.generateFile('modal', 'frontend', dirs.components, `${entityNames.pascalCase}Modal.tsx`, templateData);
+      const modalFile = this.generateFile('modal', 'frontend', moduleComponentsDir, `${entityNames.pascalCase}Modal.tsx`, templateData);
       if (modalFile) files.modal = modalFile;
     }
 
@@ -184,33 +309,57 @@ export class FrontendGenerator extends BaseGenerator {
   ): string | null {
     const filePath = join(outputPath, fileName);
 
-    // Delete existing file if update mode
-    if (this.updateExistingFiles && existsSync(filePath)) {
-      unlinkSync(filePath);
-      log(`Deleted existing file: ${filePath}`, 'info');
-    }
-
     // Generate if file doesn't exist or in update mode
-    if (!existsSync(filePath) || this.updateExistingFiles) {
+    if (!safePathExists(filePath) || this.updateExistingFiles) {
       const renderResult = renderTemplate(templateName, templateData, templateType);
 
       if (renderResult.success && renderResult.content) {
-        const writeResult = safeWriteFile(filePath, renderResult.content, {
+        let contentToWrite = renderResult.content;
+
+        if (this.updateExistingFiles && FRONTEND_MERGE_TEMPLATE_NAMES.has(templateName) && safePathExists(filePath)) {
+          const existingResult = safeReadFile(filePath);
+          if (existingResult.success && existingResult.content) {
+            const markerNames = getCustomBlockMarkersPresentInSource(contentToWrite);
+            if (markerNames.length > 0) {
+              const mergeResult = applyCustomBlockMerge({
+                existingContent: existingResult.content,
+                renderedContent: contentToWrite,
+                markerNames,
+                customImportsPrecedence: true
+              });
+              if (mergeResult.merged === null) {
+                this.logWarn(
+                  'Custom block merge failed; writing rendered template only (fix marker pairs in the existing file to preserve custom blocks)',
+                  {
+                    fileName,
+                    filePath,
+                    templateName,
+                    reason: mergeResult.error
+                  }
+                );
+              } else {
+                contentToWrite = mergeResult.merged;
+              }
+            }
+          }
+        }
+
+        const writeResult = safeWriteFile(filePath, contentToWrite, {
           ensureDirectory: true,
           createBackup: false
         });
 
         if (writeResult.success) {
-          log(`Generated: ${fileName}`, 'info');
+          this.logInfo('Generated frontend file', { fileName, filePath });
           return filePath;
         } else {
-          log(`Failed to write ${fileName}: ${writeResult.error}`, 'error');
+          this.logError('Failed to write generated frontend file', { fileName, filePath, error: writeResult.error });
         }
       } else {
-        log(`Failed to render ${templateName}: ${renderResult.error}`, 'error');
+        this.logError('Failed to render frontend template', { templateName, error: renderResult.error });
       }
     } else {
-      log(`File already exists, skipping: ${fileName}`, 'info');
+      this.logInfo('Frontend file already exists, skipping', { fileName, filePath });
     }
 
     return null;
@@ -220,21 +369,15 @@ export class FrontendGenerator extends BaseGenerator {
    * Inject reducer to store
    */
   private injectReducerToStore(entityNameLower: string): void {
-    const storeIndexPath = join(this.projectRoot, 'src', 'store', 'store.ts');
-
-    if (!existsSync(storeIndexPath)) {
-      log(`Store file not found at: ${storeIndexPath}`, 'warn');
-      return;
-    }
-
     try {
-      const sliceImport = `import ${entityNameLower}Reducer from './slices/${entityNameLower}.slice';`;
-      const reducerEntry = `${entityNameLower}: ${entityNameLower}Reducer`;
-
-      injectReducer(storeIndexPath, this.schema.entityName, sliceImport, reducerEntry);
-      log(`Reducer injected to store for ${this.schema.entityName}`, 'info');
+      const result = injectReducer(this.projectRoot, this.schema.entityName, entityNameLower);
+      if (result.success) {
+        this.logInfo('Reducer injected to store', { entityName: this.schema.entityName });
+      } else {
+        this.logWarn('Reducer injection skipped/failed', { entityName: this.schema.entityName, reason: result.message });
+      }
     } catch (error) {
-      log(`Failed to inject reducer: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+      this.logError('Failed to inject reducer', { error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
 }
@@ -258,7 +401,7 @@ export function parseBaseUrlFromBackend(backendPath: string): string {
     ];
 
     for (const path of possiblePaths) {
-      if (existsSync(path)) {
+      if (safePathExists(path)) {
         const readResult = safeReadFile(path);
         if (readResult.success && readResult.content) {
           const matches = Array.from(readResult.content.matchAll(/app\.use\(['"]([^'"]+)['"]/g));
@@ -286,7 +429,7 @@ export function parseBaseUrlFromBackend(backendPath: string): string {
 
     return '/api'; // Default fallback
   } catch (error) {
-    log(`Error parsing base URL from backend: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    log(`Error parsing base URL from backend | ${JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' })}`, 'error');
     return '/api';
   }
 }

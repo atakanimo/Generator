@@ -8,9 +8,27 @@ import { SchemaDefinition } from './schemaParser.js';
 import { parseBaseUrlFromBackend } from './frontendGenerator.js';
 import { log } from '../utils/logger.js';
 
+function logInfo(message: string, context?: Record<string, unknown>): void {
+  log(`${message}${context ? ` | ${JSON.stringify(context)}` : ''}`, 'info');
+}
+
+function logError(message: string, context?: Record<string, unknown>): void {
+  log(`${message}${context ? ` | ${JSON.stringify(context)}` : ''}`, 'error');
+}
+
 export interface GenerateBackendResult {
   success: boolean;
-  files?: { route?: string; service?: string; types?: string };
+  files?: {
+    model?: string;
+    crud?: string;
+    filters?: string;
+    types?: string;
+    service?: string;
+    serviceAdmin?: string;
+    schema?: string;
+    route?: string;
+    routeAdmin?: string;
+  };
   error?: string;
 }
 
@@ -24,15 +42,25 @@ export function generateBackend(
   isProtectedRoute: boolean,
   sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
   shouldAddRoute?: boolean,
-  shouldGenerateResponseModel?: boolean,
   baseUrl?: string,
   updateExistingFiles?: boolean,
-  isSuperUser?: boolean
+  isAdminUser?: boolean,
+  selectedFiles?: {
+    model?: boolean;
+    crud?: boolean;
+    filters?: boolean;
+    types?: boolean;
+    service?: boolean;
+    serviceAdmin?: boolean;
+    schema?: boolean;
+    route?: boolean;
+    routeAdmin?: boolean;
+  }
 ): GenerateBackendResult {
   try {
     // Parse base URL from backend if not provided
     const finalBaseUrl = baseUrl || parseBaseUrlFromBackend(projectPath);
-    log(`Using base URL: ${finalBaseUrl}`, 'info');
+    logInfo('Using base URL for backend generation', { baseUrl: finalBaseUrl, projectPath });
 
     // Create options object
     const options: BackendGenerateOptions = {
@@ -41,10 +69,10 @@ export function generateBackend(
       sourceType,
       isProtectedRoute,
       shouldAddRoute: shouldAddRoute ?? true,
-      shouldGenerateResponseModel: shouldGenerateResponseModel ?? false,
       baseUrl: finalBaseUrl,
       updateExistingFiles: updateExistingFiles ?? false,
-      isSuperUser: isSuperUser ?? false
+      isAdminUser: isAdminUser ?? false,
+      selectedFiles
     };
 
     // Create generator instance and generate
@@ -52,12 +80,11 @@ export function generateBackend(
     return generator.generate();
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    log(`Backend generation failed: ${errorMessage}`, 'error');
-    
+    logError('Backend generation failed', { error: errorMessage, projectPath, entityName: schema?.entityName });
+
     return {
       success: false,
       error: errorMessage
     };
   }
 }
-

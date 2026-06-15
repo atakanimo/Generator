@@ -1,12 +1,13 @@
 # Universal Code Generator - Coding Rules & Standards
 
-**Son Güncelleme:** 25 Aralık 2025  
+**Son Güncelleme:** 7 Mayıs 2026  
 **Versiyon:** 1.0.0
 
 ---
 
 ## 📚 İçindekiler
 
+0. [Proje Scope ve Core Principle](#0-proje-scope-ve-core-principle)
 1. [Genel Prensipler](#1-genel-prensipler)
 2. [Mimari Kuralları](#2-mimari-kuralları)
 3. [Kod Organizasyonu](#3-kod-organizasyonu)
@@ -17,6 +18,90 @@
 8. [Yeni Feature Ekleme](#8-yeni-feature-ekleme)
 9. [Testing](#9-testing)
 10. [Yasaklar](#10-yasaklar)
+
+---
+
+## 0. Proje Scope ve Core Principle
+
+### 0.0 Proje Hakkında
+
+**Universal Code Generator**, backend ve frontend CRUD kodlarını otomatik üreten bir Electron desktop uygulamasıdır.
+
+### 0.1 Application Tech Stack
+
+- **Desktop Runtime:** Electron 28
+- **Renderer:** React 18, TypeScript, Redux Toolkit, Material-UI
+- **Main Process:** Node.js, TypeScript
+- **Template Engine:** Handlebars
+- **Build:** Vite, esbuild
+
+### 0.2 Desteklenen / Planlanan Stack'ler
+
+- **Backend:**
+  - Node.js + Express + Mongoose: aktif
+  - Node.js + TypeORM: planlanan
+  - .NET + Entity Framework: planlanan
+- **Frontend:**
+  - React + Redux Toolkit: aktif
+  - React Native Service Integration: planlanan
+
+### Core Generation Principle
+
+Raw model files are never passed directly to templates.
+
+Flow:
+
+Model File  
+-> Parser  
+-> NormalizedModel  
+-> Template Context  
+-> Handlebars Template  
+-> Generated Files
+
+### 0.3 Development Scripts (Local)
+
+```bash
+# Electron dev (Vite + Electron)
+yarn dev
+
+# Web-only dev (sadece Vite)
+yarn web:dev
+
+# Electron build assets + Vite build
+yarn build
+```
+
+Example shape:
+
+```typescript
+type NormalizedModel = {
+  name: string;
+  camelName: string;
+  pascalName: string;
+  kebabName: string;
+  fields: NormalizedField[];
+
+  ownership?: {
+    field: string;
+    normalApiFromAuth: boolean;
+    adminApiBodyAllowed: boolean;
+    adminApiFilterable: boolean;
+  };
+};
+
+type NormalizedField = {
+  name: string;
+  type: 'string' | 'number' | 'boolean' | 'date' | 'objectId' | 'array' | 'object';
+  required: boolean;
+  filterable?: boolean;
+  filterType?: 'regex' | 'exact' | 'objectId' | 'range' | 'boolean' | 'date-range';
+  relation?: {
+    target: string;
+    type: 'oneToOne' | 'oneToMany' | 'manyToOne' | 'manyToMany';
+    displayField?: string;
+  };
+};
+```
 
 ---
 
@@ -212,6 +297,38 @@ function doSomething(): Result {
 }
 ```
 
+### 2.5 Safe Update / Custom Block Standardı
+
+Generated files may be updated, but custom blocks must be preserved.
+
+Update existing files aktif olduğunda sıralı akış:
+
+1. Mevcut dosya okunur
+2. Custom block'lar extract edilir
+3. Yeni template render edilir
+4. Custom block'lar yeni output'a merge edilir
+5. Dosya yazılır
+
+Kurallar:
+
+- Custom block'lar overwrite edilemez
+- Generated alanlar update edilebilir
+- Eksik closing marker varsa işlem durmalı
+- Eksik marker warning/error olarak loglanmalı
+
+Markers:
+
+```typescript
+// <custom-imports>
+// </custom-imports>
+
+// <custom-methods>
+// </custom-methods>
+
+// <custom-routes>
+// </custom-routes>
+```
+
 ---
 
 ## 3. Kod Organizasyonu
@@ -243,7 +360,6 @@ src/main/
 ```typescript
 // 1. Node.js built-ins
 import { join } from 'path';
-import { existsSync } from 'fs';
 
 // 2. Third-party
 import Handlebars from 'handlebars';
@@ -252,7 +368,7 @@ import Handlebars from 'handlebars';
 import { BaseGenerator } from '../generators/BaseGenerator.js';
 
 // 4. Internal - Utils
-import { safeWriteFile } from '../utils/fileUtils.js';
+import { safePathExists, safeWriteFile } from '../utils/fileUtils.js';
 import { renderTemplate } from '../utils/templateEngine.js';
 
 // 5. Internal - Types
@@ -406,18 +522,36 @@ src/main/utils/
 ```
 src/main/templates/
 ├── backend/
-│   ├── model.hbs
-│   ├── route.hbs
-│   ├── service.hbs
-│   └── types.hbs
+│   └── express-mongoose/
+│       ├── model.hbs
+│       ├── crud.hbs
+│       ├── filters.hbs
+│       ├── types.hbs
+│       ├── service.hbs
+│       ├── admin.service.hbs
+│       ├── schema.hbs
+│       ├── routes.hbs
+│       └── routes.admin.hbs
 └── frontend/
-    ├── page.hbs
-    ├── slice.hbs
-    ├── thunk.hbs
-    └── service.hbs
+    ├── react-mui/
+    └── react-native-service/
 ```
 
 **KURAL:** Template'ler stack tipine göre organize edilmeli!
+
+### 6.4 Backend Generated Module Standard
+
+Each backend module must generate/update the following files:
+
+- `{module}.model.ts`
+- `{module}.crud.ts`
+- `{module}.filters.ts`
+- `{module}.types.ts`
+- `{module}.service.ts`
+- `{module}.admin.service.ts`
+- `{module}.schema.ts`
+- `{module}.routes.ts`
+- `{module}.routes.admin.ts`
 
 ---
 
@@ -560,14 +694,14 @@ src/main/templates/spring/
  */
 
 // Interfaces
-export interface UtilityResult {
+export interface UtilityResult<T = unknown> {
   success: boolean;
-  data?: any;
+  data?: T;
   error?: string;
 }
 
 // Main function
-export function utilityFunction(param: string): UtilityResult {
+export function utilityFunction(param: string): UtilityResult<string> {
   try {
     // Implementation
     return { success: true, data: result };
@@ -729,8 +863,21 @@ Her PR'da kontrol edilecekler:
 // ✅ Template Caching (otomatik yapılıyor)
 const result = renderTemplate('name', data, 'backend');
 
-// ✅ Parallel File Generation
-const files = await Promise.all([generateFile('model'), generateFile('route'), generateFile('service')]);
+// ✅ Ordered Generation: dependency order korunur
+const files = [
+  await generateFile('model'),
+  await generateFile('crud'),
+  await generateFile('filters'),
+  await generateFile('types'),
+  await generateFile('service'),
+  await generateFile('admin.service'),
+  await generateFile('schema'),
+  await generateFile('routes'),
+  await generateFile('routes.admin')
+];
+
+// ✅ Parallel Generation: sadece bağımsız dosyalarda
+const independentFiles = await Promise.all([generateFile('readme'), generateFile('docs')]);
 
 // ✅ Lazy Loading
 const heavyUtil = await import('./heavyUtil.js');
@@ -747,15 +894,21 @@ for (const item of items) {
 
 ```typescript
 // ✅ DOĞRU
-log('Backend generation started for entity: User', 'info');
-log('Using base URL: /api/assety', 'info');
-log('Template loaded from cache: backend:model', 'debug');
-log(`Failed to write file: ${error.message}`, 'error');
+logInfo('Model parsed', {
+  step: 'model-parse',
+  model: normalizedModel.name
+});
+
+logError('Generation failed', {
+  step: 'service-generation',
+  module: 'user-watch-list',
+  error
+});
 
 // ❌ YANLIŞ
 console.log('Started'); // console kullanma
-log('Error'); // Generic message
-log(JSON.stringify(obj)); // Object dump
+logError('Error'); // Context yok
+logInfo(JSON.stringify(obj)); // Structured context yerine dump
 ```
 
 **Log Levels:**
@@ -767,105 +920,4 @@ log(JSON.stringify(obj)); // Object dump
 
 ---
 
-## 14. Örnek: Yeni Stack Ekleme (Django)
-
-```typescript
-// 1. Generator Class
-// src/main/generators/DjangoGenerator.ts
-export class DjangoGenerator extends BaseGenerator {
-  constructor(options: DjangoGenerateOptions) {
-    super(options);
-  }
-
-  protected setupDirectories(): string[] {
-    return ['models/', 'views/', 'serializers/'];
-  }
-
-  public generate(): GenerateResult {
-    this.logStart('Django Generation');
-
-    const dirs = this.setupDirectories();
-    this.ensureProjectDirectories(dirs);
-
-    const files = this.generateDjangoFiles();
-
-    this.logEnd('Django Generation', true);
-    return this.createSuccessResult(files);
-  }
-
-  private generateDjangoFiles(): Record<string, string> {
-    // Implementation
-  }
-}
-
-// 2. Wrapper
-// src/main/ipc/djangoGenerator.ts
-export function generateDjango(schema: SchemaDefinition, projectPath: string): GenerateResult {
-  const generator = new DjangoGenerator({ schema, projectPath });
-  return generator.generate();
-}
-
-// 3. IPC Handler
-// src/main/index.ts
-ipcMain.handle('project:generateDjango', async (_, { schema, projectPath }) => {
-  try {
-    return generateDjango(schema, projectPath);
-  } catch (error) {
-    log(`Django generation failed: ${error.message}`, 'error');
-    return { success: false, error: error.message };
-  }
-});
-
-// 4. Templates
-// src/main/templates/django/model.hbs
-// src/main/templates/django/view.hbs
-// src/main/templates/django/serializer.hbs
-```
-
----
-
-## 15. Version Control
-
-### Commit Messages
-
-```
-✅ DOĞRU:
-feat: Add Django generator support
-fix: Template caching race condition
-refactor: Extract file utilities
-docs: Update coding rules
-
-❌ YANLIŞ:
-updated
-fix bug
-changes
-wip
-```
-
-### Branch Naming
-
-```
-✅ DOĞRU:
-feature/django-generator
-fix/template-caching
-refactor/backend-generator
-docs/api-documentation
-
-❌ YANLIŞ:
-dev
-test
-my-branch
-fix
-```
-
----
-
-## 📞 Sorular?
-
-Bu kurallara uymayan kod görürseniz veya yeni bir durum için kural belirsizse:
-
-1. Bu dokümanı güncelleyin
-2. Team'e sorun
-3. Tasks.md'de not alın
-
-**Son Güncelleme:** 25 Aralık 2025
+**Son Güncelleme:** 6 Mayıs 2026

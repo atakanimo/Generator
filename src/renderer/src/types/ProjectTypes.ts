@@ -1,7 +1,3 @@
-/**
- * Project-related types and interfaces
- */
-
 export interface SchemaField {
   name: string;
   type: string;
@@ -14,17 +10,34 @@ export interface FieldConfig {
   type: string;
   required: boolean;
   isArray: boolean;
-  // UI Configuration
   label: string;
-  uiComponent: 'TextField' | 'TextArea' | 'NumberField' | 'Switch' | 'Select' | 'DatePicker' | 'MultiSelect' | 'ImageField';
+  uiComponent:
+    | 'TextField'
+    | 'TextArea'
+    | 'NumberField'
+    | 'Switch'
+    | 'Select'
+    | 'DatePicker'
+    | 'MultiSelect'
+    | 'ImageField'
+    | 'Autocomplete'
+    | 'AsyncSelect'
+    | 'Chips';
   showInTable: boolean;
-  showInForm: boolean;
   isSearchable: boolean;
-  // Relation Configuration (for schema type fields)
+  filterType?: 'regex' | 'exact' | 'objectId' | 'range' | 'boolean' | 'date-range';
+  defaultValue?: string;
+  isReadonly?: boolean;
+  hiddenFromCreate?: boolean;
+  hiddenFromUpdate?: boolean;
   includeRelation?: boolean;
-  relationProperty?: string; // e.g., "name", "email" - property to display from related entity
-  relationEntityName?: string; // e.g., "User", "Symbol" - name of the related entity
-  ref?: string; // Mongoose ref (e.g., "User", "Symbol") - used in schema definition
+  relationProperty?: string;
+  relationPopulateFields?: string[];
+  relationEntityName?: string;
+  relationType?: 'oneToOne' | 'oneToMany' | 'manyToOne' | 'manyToMany';
+  ref?: string;
+  trim?: boolean;
+  unique?: boolean;
 }
 
 export interface SchemaDefinition {

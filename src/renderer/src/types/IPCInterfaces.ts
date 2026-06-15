@@ -10,6 +10,9 @@ export interface ScannedModel {
 export interface ScanResult {
   success: boolean;
   models: ScannedModel[];
+  detectedType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm';
+  detectedTechnologies?: string[];
+  discoveryInfo?: string;
   error?: string;
 }
 
@@ -41,9 +44,15 @@ export interface GenerateCodeResult {
 export interface GenerateBackendResult {
   success: boolean;
   files?: {
+    model?: string;
+    crud?: string;
+    filters?: string;
+    schema?: string;
     route?: string;
     service?: string;
     types?: string;
+    routeAdmin?: string;
+    serviceAdmin?: string;
   };
   error?: string;
 }
@@ -51,10 +60,15 @@ export interface GenerateBackendResult {
 export interface GenerateFrontendResult {
   success: boolean;
   files?: {
+    /** Present when Include Admin API is off (`service.hbs`) */
     service?: string;
+    /** Present when Include Admin API is on (`service.admin.hbs`) */
+    serviceAdmin?: string;
     thunk?: string;
     slice?: string;
     page?: string;
+    table?: string;
+    modal?: string;
   };
   warnings?: string[];
   errors?: string[];

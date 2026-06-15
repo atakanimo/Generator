@@ -8,16 +8,27 @@ import {
   update{{entityName}},
   delete{{entityName}},
 } from '../thunks/{{camelEntityName}}.thunk';
-import { I{{entityName}} } from '@/services/{{camelEntityName}}.service';
+import { I{{entityName}} } from '@/services/{{camelEntityName}}.service{{feServiceImportSuffix isAdminUser}}';
+
+// <custom-imports>
+// </custom-imports>
 
 interface {{entityName}}State {
   items: I{{entityName}}[];
   currentItem: I{{entityName}} | null;
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
 }
 
 const initialState: {{entityName}}State = {
   items: [],
   currentItem: null,
+  total: 0,
+  page: 1,
+  limit: 50,
+  hasMore: false,
 };
 
 const {{entityName}}Slicer = createSlice({
@@ -31,11 +42,16 @@ const {{entityName}}Slicer = createSlice({
       state.currentItem = null;
     },
   },
-  extraReducers: (builder) => {
+  extraReducers: builder => {
     // Fetch list
     builder.addCase(fetch{{entityName}}List.fulfilled, (state, action) => {
       if (action.payload.isSuccess && action.payload.data) {
-        state.items = action.payload.data;
+        const { data } = action.payload;
+        state.items = data.items;
+        state.total = data.total;
+        state.hasMore = data.hasMore;
+        state.page = data.currentPage;
+        state.limit = data.currentLimit;
       }
     });
 
@@ -56,42 +72,14 @@ const {{entityName}}Slicer = createSlice({
     // Update
     builder.addCase(update{{entityName}}.fulfilled, (state, action) => {
       if (action.payload.isSuccess && action.payload.data) {
-        {{#if (eq sourceType "nodejs-mongoose")}}
-        const index = state.items.findIndex(item => item._id === action.payload.data._id);
-        if (index !== -1) {
-          state.items[index] = action.payload.data;
-        }
-        if (state.currentItem && state.currentItem._id === action.payload.data._id) {
-          state.currentItem = action.payload.data;
-        }
-        {{else}}
-        const index = state.items.findIndex(item => item.id === action.payload.data.id);
-        if (index !== -1) {
-          state.items[index] = action.payload.data;
-        }
-        if (state.currentItem && state.currentItem.id === action.payload.data.id) {
-          state.currentItem = action.payload.data;
-        }
-        {{/if}}
+{{feSliceUpdateFulfilledBody sourceType}}
       }
     });
 
     // Delete
     builder.addCase(delete{{entityName}}.fulfilled, (state, action) => {
       if (action.payload.isSuccess && action.payload.data) {
-        {{#if (eq sourceType "nodejs-mongoose")}}
-        const deletedId = action.payload.data;
-        state.items = state.items.filter(item => item._id !== deletedId);
-        if (state.currentItem && state.currentItem._id === deletedId) {
-          state.currentItem = null;
-        }
-        {{else}}
-        const deletedId = action.payload.data;
-        state.items = state.items.filter(item => item.id !== deletedId);
-        if (state.currentItem && state.currentItem.id === deletedId) {
-          state.currentItem = null;
-        }
-        {{/if}}
+{{feSliceDeleteFulfilledBody sourceType}}
       }
     });
   },
@@ -102,4 +90,3 @@ export default {{entityName}}Slicer.reducer;
 
 // Selector
 export const Get{{entityName}}State = (state: RootState) => state.{{camelEntityName}};
-

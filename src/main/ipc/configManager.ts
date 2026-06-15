@@ -2,6 +2,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { SchemaDefinition } from './schemaParser';
 import { getGeneratorRoot } from '../utils/templateHelpers.js';
+import { recordWorkspaceManifestUpsert, type ManifestWorkspacePrefs } from '../utils/manifestSnapshot.js';
+import { log } from '../utils/logger.js';
 
 const CONFIG_DIR_NAME = '.scaffold';
 
@@ -35,14 +37,36 @@ export function ensureConfigDir(): void {
 
 /**
  * Save schema configuration to disk
- * Saves to Generator project's .scaffold folder
+ * Saves to Generator project's .scaffold folder; optionally updates workspace `.generator/manifest.json`.
  */
-export function saveSchemaConfig(_projectRoot: string, schema: SchemaDefinition): { success: boolean; error?: string; filePath?: string } {
+export function saveSchemaConfig(
+  projectRoot: string,
+  schema: SchemaDefinition,
+  sourceRelativePath?: string,
+  workspace?: ManifestWorkspacePrefs
+): { success: boolean; error?: string; filePath?: string; manifestPath?: string } {
   try {
     ensureConfigDir();
     const configPath = getSchemaConfigPath(schema.entityName);
     writeFileSync(configPath, JSON.stringify(schema, null, 2), 'utf-8');
-    return { success: true, filePath: configPath };
+
+    let manifestPath: string | undefined;
+    if (projectRoot?.trim() && sourceRelativePath?.trim()) {
+      const man = recordWorkspaceManifestUpsert(
+        projectRoot.trim(),
+        schema,
+        sourceRelativePath.trim(),
+        'save',
+        workspace
+      );
+      if (man.success && man.manifestPath) {
+        manifestPath = man.manifestPath;
+      } else if (!man.success) {
+        log(`Manifest snapshot skipped or failed on save | ${JSON.stringify({ reason: man.error })}`, 'warn');
+      }
+    }
+
+    return { success: true, filePath: configPath, manifestPath };
   } catch (error) {
     return {
       success: false,

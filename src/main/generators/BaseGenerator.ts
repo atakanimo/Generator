@@ -9,6 +9,7 @@ import { validateSchema, validateDirectory } from '../utils/validationUtils.js';
 import { handleError, ErrorCode, AppError, errorToResult } from '../utils/errorHandler.js';
 import { logGenerate, log } from '../utils/logger.js';
 import { getProjectRootPath } from '../utils/templateHelpers.js';
+import { camelCase, pascalCase } from '../utils/namingUtils.js';
 
 export interface GenerateOptions {
   schema: any;
@@ -196,8 +197,8 @@ export abstract class BaseGenerator {
   protected getEntityNames() {
     const entityName = this.schema.entityName;
     return {
-      pascalCase: entityName,
-      camelCase: entityName.charAt(0).toLowerCase() + entityName.slice(1),
+      pascalCase: pascalCase(entityName),
+      camelCase: camelCase(entityName),
       lowerCase: entityName.toLowerCase(),
       upperCase: entityName.toUpperCase()
     };

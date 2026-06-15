@@ -5,10 +5,6 @@ import {
   TextField,
   Button,
   Box,
-  MenuItem,
-  Select,
-  FormControl,
-  InputLabel,
   Alert,
   CircularProgress,
   List,
@@ -20,7 +16,7 @@ import {
 } from '@mui/material';
 import { FolderOpen, Add as AddIcon, Edit as EditIcon } from '@mui/icons-material';
 import { useAppSelector, useAppDispatch } from '../store/hooks';
-import { setProjectPath, setSourceType, scanProjectFiles, parseModelFile, createModel, updateModel, parseModelToModelData, SourceType } from '../features/project/projectSlice';
+import { setProjectPath, scanProjectFiles, parseModelFile, createModel, updateModel, parseModelToModelData } from '../features/project/projectSlice';
 import { IconButton } from '@mui/material';
 import SchemaDesignPage from './SchemaDesignPage';
 import AddModelModal, { ModelData } from '../components/AddModelModal';
@@ -61,20 +57,18 @@ const ProjectSelectPage = () => {
       const result = await window.electronAPI.dialog.openDirectory();
 
       if (result && !result.canceled && result.filePaths && result.filePaths.length > 0) {
-        dispatch(setProjectPath(result.filePaths[0]));
+        const selectedPath = result.filePaths[0];
+        dispatch(setProjectPath(selectedPath));
+        dispatch(scanProjectFiles({ path: selectedPath }));
       }
     } catch (err) {
       console.error('Error opening folder dialog:', err);
     }
   };
 
-  const handleSourceTypeChange = (event: any) => {
-    dispatch(setSourceType(event.target.value as SourceType));
-  };
-
   const handleScanProject = () => {
-    if (projectPath && sourceType) {
-      dispatch(scanProjectFiles({ path: projectPath, type: sourceType }));
+    if (projectPath) {
+      dispatch(scanProjectFiles({ path: projectPath }));
     }
   };
 
@@ -84,13 +78,7 @@ const ProjectSelectPage = () => {
     }
   };
 
-  const sourceTypeOptions = [
-    { value: 'nodejs-mongoose', label: 'Node.js (Mongoose)' },
-    { value: 'dotnet-ef', label: '.NET 8 (Entity Framework)' },
-    { value: 'nodejs-typeorm', label: 'Node.js (TypeORM)' }
-  ];
-
-  const isScanDisabled = !projectPath || !sourceType || status === 'scanning';
+  const isScanDisabled = !projectPath || status === 'scanning';
   const isAddModelDisabled = status !== 'ready' || !projectPath || !sourceType;
 
   // Show snackbar when model creation status changes
@@ -102,8 +90,8 @@ const ProjectSelectPage = () => {
       setSnackbarOpen(true);
       setAddModelModalOpen(false);
       // Refresh the models list by scanning again
-      if (projectPath && sourceType) {
-        dispatch(scanProjectFiles({ path: projectPath, type: sourceType }));
+      if (projectPath) {
+        dispatch(scanProjectFiles({ path: projectPath }));
       }
     } else if (creatingModelStatus === 'error') {
       setSnackbarMessage(creatingModelError || 'Failed to create model');
@@ -122,9 +110,8 @@ const ProjectSelectPage = () => {
       setAddModelModalOpen(false);
       setEditModelData(null);
       setEditModelFilePath(null);
-      // Refresh the models list by scanning again
-      if (projectPath && sourceType) {
-        dispatch(scanProjectFiles({ path: projectPath, type: sourceType }));
+      if (projectPath) {
+        dispatch(scanProjectFiles({ path: projectPath }));
       }
     } else if (updatingModelStatus === 'error') {
       setSnackbarMessage(updatingModelError || 'Failed to update model');
@@ -164,7 +151,7 @@ const ProjectSelectPage = () => {
 
   const handleUpdateModel = async (modelData: ModelData) => {
     if (editModelFilePath && sourceType) {
-      await dispatch(updateModel({ filePath: editModelFilePath, sourceType, modelData }));
+      await dispatch(updateModel({ filePath: editModelFilePath, projectPath: projectPath ?? undefined, sourceType, modelData }));
     }
   };
 
@@ -173,12 +160,13 @@ const ProjectSelectPage = () => {
   };
 
   return (
-    <Container maxWidth='md' sx={{ py: 4 }}>
-      <Typography variant='h4' component='h1' gutterBottom sx={{ mb: 4 }}>
-        Backend Project
-      </Typography>
+    <>
+      <Container maxWidth='md' sx={{ py: 4 }}>
+        <Typography variant='h4' component='h1' gutterBottom sx={{ mb: 4 }}>
+          Backend Project
+        </Typography>
 
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         {/* Card 1: Project Location */}
         <Paper sx={{ p: 3 }}>
           <Typography variant='h6' gutterBottom sx={{ mb: 2 }}>
@@ -201,42 +189,34 @@ const ProjectSelectPage = () => {
           </Box>
         </Paper>
 
-        {/* Card 2: Technology Stack */}
+        {/* Card 2: Auto Detected Technology Stack */}
         <Paper sx={{ p: 3 }}>
           <Typography variant='h6' gutterBottom sx={{ mb: 2 }}>
-            Technology Stack
+            Detected Technology Stack
           </Typography>
-          <FormControl fullWidth>
-            <InputLabel id='source-type-label'>Which framework are you using?</InputLabel>
-            <Select
-              labelId='source-type-label'
-              id='source-type-select'
-              value={sourceType || ''}
-              label='Which framework are you using?'
-              onChange={handleSourceTypeChange}
-            >
-              {sourceTypeOptions.map(option => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          {sourceType && (
-            <Alert severity='info' sx={{ mt: 2 }}>
-              <Typography variant='body2'>
-                {sourceType === 'nodejs-mongoose' || sourceType === 'nodejs-typeorm' ? (
-                  <>
-                    <strong>Node.js:</strong> <code>src/models</code> klasörü taranır. Model dosyalarının isminde "model" kelimesi bulunmalıdır.
-                  </>
-                ) : sourceType === 'dotnet-ef' ? (
-                  <>
-                    <strong>.NET:</strong> <code>Entities</code> veya <code>Models</code> klasörü taranır. Entity Framework model dosyaları aranır.
-                  </>
-                ) : null}
-              </Typography>
-            </Alert>
-          )}
+          <Box sx={{ mb: 2, color: 'text.secondary' }}>
+            <Typography variant='body2'>Scan strategy:</Typography>
+            <Typography variant='body2'>
+              - Node.js: <code>src/modules/**</code> altında <code>*.model.ts|*.model.js</code> dosyaları taranır.
+            </Typography>
+            <Typography variant='body2'>- .NET: <code>Entities/Models</code> altı entity dosyaları taranır.</Typography>
+          </Box>
+          <Alert severity={sourceType ? 'success' : 'warning'}>
+            <Typography variant='body2'>
+              {sourceType ? (
+                <>
+                  <strong>Detected stack:</strong>{' '}
+                  {sourceType === 'nodejs-mongoose'
+                    ? 'Node.js / Express / Mongoose'
+                    : sourceType === 'nodejs-typeorm'
+                      ? 'Node.js / TypeORM'
+                      : 'C# / ASP.NET Core / Entity Framework'}
+                </>
+              ) : (
+                'Stack could not be detected yet. Select project root and run scan.'
+              )}
+            </Typography>
+          </Alert>
         </Paper>
 
         {/* Error Alert */}
@@ -310,15 +290,22 @@ const ProjectSelectPage = () => {
           </Paper>
         )}
       </Box>
+      </Container>
 
-      {/* Schema Designer - shown when schema is selected */}
       {selectedModelSchema && parsingStatus === 'success' && (
-        <Box sx={{ mt: 4 }}>
+        <Box
+          sx={{
+            width: '100%',
+            maxWidth: '100%',
+            px: { xs: 1.5, sm: 2, md: 3 },
+            py: 2,
+            boxSizing: 'border-box'
+          }}
+        >
           <SchemaDesignPage />
         </Box>
       )}
 
-      {/* Add/Edit Model Modal */}
       <AddModelModal
         open={addModelModalOpen}
         onClose={() => {
@@ -340,7 +327,7 @@ const ProjectSelectPage = () => {
           {snackbarMessage}
         </Alert>
       </Snackbar>
-    </Container>
+    </>
   );
 };
 

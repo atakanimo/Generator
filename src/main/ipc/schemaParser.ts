@@ -1,4 +1,13 @@
 import { readFileSync } from 'fs';
+import {
+  entityNameFromModelFileName,
+  resolveMainMongooseSchemaName,
+  extractMainSchemaRegions,
+  parseSchemaOptionsMeta,
+  parseMongooseFieldModifiers
+} from '../utils/mongooseSchemaExtract.js';
+
+export { entityNameFromModelFileName };
 
 export interface SchemaField {
   name: string;
@@ -8,11 +17,17 @@ export interface SchemaField {
   includeRelation?: boolean;
   relationEntityName?: string;
   relationProperty?: string;
+  relationPopulateFields?: string[];
   uiComponent?: string;
-  showInForm?: boolean;
   showInTable?: boolean;
   isSearchable?: boolean;
+  filterType?: string;
+  isReadonly?: boolean;
+  hiddenFromCreate?: boolean;
+  hiddenFromUpdate?: boolean;
   label?: string;
+  trim?: boolean;
+  unique?: boolean;
 }
 
 export interface SchemaDefinition {
@@ -79,11 +94,20 @@ function isModelFile(content: string, fileName: string): { isValid: boolean; rea
   };
 }
 
+export interface ParseModelFileOptions {
+  /** When the file stem differs from mongoose.model('ThisName'), pass the registered name so the correct schema is resolved. */
+  preferredMongooseModelName?: string;
+}
+
 /**
  * Parse a TypeScript/JavaScript model file and extract schema information
  * Supports both Mongoose schemas and TypeScript interfaces/classes
  */
-export function parseModelFile(filePath: string, sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null): ParseResult {
+export function parseModelFile(
+  filePath: string,
+  sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
+  options?: ParseModelFileOptions | null
+): ParseResult {
   try {
     const content = readFileSync(filePath, 'utf-8');
     const fileName = filePath.split(/[/\\]/).pop() || '';
@@ -97,167 +121,22 @@ export function parseModelFile(filePath: string, sourceType?: 'nodejs-mongoose' 
       };
     }
 
-    // Extract entity name from filename (e.g., "User.model.ts" -> "User")
-    const entityName = fileName
-      .replace(/\.(model|schema|entity)\.(ts|js)$/i, '')
-      .replace(/\.(ts|js)$/i, '')
-      .split(/[-_]/)
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join('');
+    const fileEntityName = entityNameFromModelFileName(fileName);
+    const preferred = options?.preferredMongooseModelName?.trim();
 
-    // Find the main schema (the one exported with mongoose.model)
-    // Pattern: mongoose.model<...>('EntityName', SchemaName)
-    const modelExportPattern = new RegExp(`mongoose\\.model\\s*<[^>]*>\\s*\\(\\s*['"]${entityName}['"]\\s*,\\s*(\\w+Schema)`, 'i');
-    const modelExportMatch = modelExportPattern.exec(content);
+    const mainSchemaName = resolveMainMongooseSchemaName(content, fileName, preferred ?? undefined);
 
-    let mainSchemaName: string | null = null;
-    if (modelExportMatch && modelExportMatch[1]) {
-      mainSchemaName = modelExportMatch[1];
-    } else {
-      // Fallback: find the last schema definition (usually the main one)
-      const schemaPattern = /const\s+(\w+Schema)\s*=\s*new\s+Schema\s*<[^>]*>\s*\(/gi;
-      const schemaMatches: string[] = [];
-      let schemaMatch: RegExpExecArray | null;
-
-      while ((schemaMatch = schemaPattern.exec(content)) !== null) {
-        schemaMatches.push(schemaMatch[1]);
-      }
-
-      if (schemaMatches.length > 0) {
-        mainSchemaName = schemaMatches[schemaMatches.length - 1];
-      }
-    }
-
-    // Extract only the main schema content and parse options
     let schemaContent = content;
     let hasTimestamps = false;
     let deletedInToJSON: string[] = [];
 
     if (mainSchemaName) {
-      // Find the main schema definition: const MainSchema = new Schema<...>({...}, {...})
-      const mainSchemaPattern = new RegExp(`const\\s+${mainSchemaName}\\s*=\\s*new\\s+Schema\\s*<[^>]*>\\s*\\(`, 'i');
-      const mainSchemaMatch = mainSchemaPattern.exec(content);
-
-      if (mainSchemaMatch) {
-        const schemaStart = mainSchemaMatch.index + mainSchemaMatch[0].length;
-
-        // Find the matching closing parenthesis for the Schema constructor
-        let parenCount = 1;
-        let inString = false;
-        let stringChar = '';
-        let braceCount = 0;
-        let firstBraceEnd = -1;
-        let firstBraceStart = -1;
-        let secondBraceStart = -1;
-
-        for (let i = schemaStart; i < content.length; i++) {
-          const char = content[i];
-          const prevChar = i > 0 ? content[i - 1] : '';
-
-          // Handle string literals
-          if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
-            if (!inString) {
-              inString = true;
-              stringChar = char;
-            } else if (char === stringChar) {
-              inString = false;
-            }
-            continue;
-          }
-
-          if (!inString) {
-            if (char === '(') parenCount++;
-            if (char === ')') {
-              parenCount--;
-              if (parenCount === 0) {
-                break;
-              }
-            }
-
-            // Track braces for first parameter (fields)
-            if (char === '{' && firstBraceStart === -1) {
-              firstBraceStart = i;
-              braceCount = 1;
-            } else if (char === '{' && firstBraceStart !== -1 && firstBraceEnd === -1) {
-              braceCount++;
-            } else if (char === '}' && firstBraceStart !== -1 && firstBraceEnd === -1) {
-              braceCount--;
-              if (braceCount === 0) {
-                firstBraceEnd = i + 1;
-                // Look for comma and second parameter (options)
-                for (let j = i + 1; j < content.length && j < i + 100; j++) {
-                  if (content[j] === '{') {
-                    secondBraceStart = j;
-                    break;
-                  }
-                  if (content[j] === ')') break; // No second parameter
-                }
-              }
-            }
-          }
-        }
-
-        // Extract schema fields (first parameter)
-        if (firstBraceStart !== -1 && firstBraceEnd !== -1) {
-          schemaContent = content.substring(firstBraceStart, firstBraceEnd);
-        }
-
-        // Extract and parse schema options (second parameter) if exists
-        if (secondBraceStart !== -1) {
-          let optionsBraceCount = 1;
-          let optionsBraceEnd = secondBraceStart + 1;
-          let inStringOptions = false;
-          let stringCharOptions = '';
-
-          for (let i = secondBraceStart + 1; i < content.length; i++) {
-            const char = content[i];
-            const prevChar = i > 0 ? content[i - 1] : '';
-
-            if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
-              if (!inStringOptions) {
-                inStringOptions = true;
-                stringCharOptions = char;
-              } else if (char === stringCharOptions) {
-                inStringOptions = false;
-              }
-              continue;
-            }
-
-            if (!inStringOptions) {
-              if (char === '{') optionsBraceCount++;
-              if (char === '}') {
-                optionsBraceCount--;
-                if (optionsBraceCount === 0) {
-                  optionsBraceEnd = i + 1;
-                  break;
-                }
-              }
-            }
-          }
-
-          const schemaOptions = content.substring(secondBraceStart, optionsBraceEnd);
-
-          // Check for timestamps: true
-          const timestampsPattern = /timestamps\s*:\s*(true|1)/i;
-          hasTimestamps = timestampsPattern.test(schemaOptions);
-
-          // Check toJSON transform for deleted fields - more robust pattern
-          // Match: toJSON: { transform: function (doc, ret) { ... delete obj.fieldName; ... } }
-          const toJSONPattern = /toJSON\s*:\s*\{[^{}]*transform\s*:\s*function\s*\([^)]*\)\s*\{([^}]+(?:\{[^}]*\}[^}]*)*)\}/s;
-          const toJSONMatch = schemaOptions.match(toJSONPattern);
-          if (toJSONMatch && toJSONMatch[1]) {
-            const transformContent = toJSONMatch[1];
-            // Find all delete statements: delete obj.fieldName; (including commented ones)
-            const deletePattern = /(?:^|\s)(?:delete\s+obj\.(\w+);|delete\s+obj\[['"](\w+)['"]\];)/gm;
-            let deleteMatch: RegExpExecArray | null;
-            while ((deleteMatch = deletePattern.exec(transformContent)) !== null) {
-              const fieldName = deleteMatch[1] || deleteMatch[2];
-              if (fieldName) {
-                deletedInToJSON.push(fieldName);
-              }
-            }
-          }
-        }
+      const regions = extractMainSchemaRegions(content, mainSchemaName);
+      if (regions) {
+        schemaContent = regions.fieldsBlock;
+        const meta = parseSchemaOptionsMeta(regions.optionsBlock);
+        hasTimestamps = meta.hasTimestamps;
+        deletedInToJSON = meta.deletedInToJSON;
       }
     }
 
@@ -362,7 +241,8 @@ export function parseModelFile(filePath: string, sourceType?: 'nodejs-mongoose' 
           required: isRequired,
           isArray: isArrayField,
           includeRelation: true,
-          relationEntityName
+          relationEntityName,
+          ...parseMongooseFieldModifiers(fieldContent, 'schema')
         });
         continue;
       }
@@ -382,11 +262,13 @@ export function parseModelFile(filePath: string, sourceType?: 'nodejs-mongoose' 
         // Check if it's an array: type: [String] or type:[String]
         const isArray = fieldContent.includes('type: [') || fieldContent.includes('type:[');
 
+        const mapped = mapMongooseTypeToGeneric(mongooseType);
         fields.push({
           name: fieldName,
-          type: mapMongooseTypeToGeneric(mongooseType),
+          type: fieldName === '_id' ? 'schema' : mapped,
           required: isRequired,
-          isArray
+          isArray,
+          ...parseMongooseFieldModifiers(fieldContent, fieldName === '_id' ? 'schema' : mapped)
         });
       }
     }
@@ -411,9 +293,10 @@ export function parseModelFile(filePath: string, sourceType?: 'nodejs-mongoose' 
           continue;
         }
 
+        const mappedTs = mapTypeScriptTypeToGeneric(tsType);
         fields.push({
           name: fieldName,
-          type: mapTypeScriptTypeToGeneric(tsType),
+          type: fieldName === '_id' ? 'schema' : mappedTs,
           required: !optional,
           isArray
         });
@@ -437,9 +320,10 @@ export function parseModelFile(filePath: string, sourceType?: 'nodejs-mongoose' 
 
           // Avoid duplicates
           if (!fields.some(f => f.name === fieldName)) {
+            const mappedTs = mapTypeScriptTypeToGeneric(tsType);
             fields.push({
               name: fieldName,
-              type: mapTypeScriptTypeToGeneric(tsType),
+              type: fieldName === '_id' ? 'schema' : mappedTs,
               required: !optional,
               isArray
             });
@@ -452,14 +336,21 @@ export function parseModelFile(filePath: string, sourceType?: 'nodejs-mongoose' 
     if (sourceType === 'nodejs-mongoose' && !fields.some(f => f.name === '_id')) {
       fields.unshift({
         name: '_id',
-        type: 'string',
-        required: false,
+        type: 'schema',
+        required: true,
         isArray: false,
         showInTable: true,
-        showInForm: true,
         isSearchable: true,
         label: 'ID'
       });
+    }
+
+    if (sourceType === 'nodejs-mongoose') {
+      for (let i = 0; i < fields.length; i++) {
+        if (fields[i].name === '_id') {
+          fields[i] = { ...fields[i], type: 'schema', required: true, isArray: false };
+        }
+      }
     }
 
     // Add createdAt and updatedAt if timestamps is enabled and not deleted in toJSON
@@ -471,9 +362,12 @@ export function parseModelFile(filePath: string, sourceType?: 'nodejs-mongoose' 
           required: false,
           isArray: false,
           showInTable: true,
-          showInForm: false,
           isSearchable: true,
-          label: 'Created At'
+          filterType: 'date-range',
+          label: 'Created At',
+          isReadonly: true,
+          hiddenFromCreate: true,
+          hiddenFromUpdate: true
         });
       }
       if (!deletedInToJSON.includes('updatedAt') && !fields.some(f => f.name === 'updatedAt')) {
@@ -483,14 +377,17 @@ export function parseModelFile(filePath: string, sourceType?: 'nodejs-mongoose' 
           required: false,
           isArray: false,
           showInTable: true,
-          showInForm: false,
           isSearchable: true,
-          label: 'Updated At'
+          filterType: 'date-range',
+          label: 'Updated At',
+          isReadonly: true,
+          hiddenFromCreate: true,
+          hiddenFromUpdate: true
         });
       }
     }
 
-    if (fields.length === 0) {
+    if (fields.length === 0 && !mainSchemaName) {
       return {
         success: false,
         error: 'No fields found in the model file'
@@ -526,7 +423,7 @@ export function parseModelFile(filePath: string, sourceType?: 'nodejs-mongoose' 
     return {
       success: true,
       schema: {
-        entityName,
+        entityName: fileEntityName,
         fields,
         nestedSchemas: nestedSchemas.length > 0 ? nestedSchemas : undefined
       }
@@ -672,7 +569,8 @@ function parseNestedSchema(content: string, schemaName: string): SchemaDefinitio
           required: isRequired,
           isArray: isArrayField,
           includeRelation: true,
-          relationEntityName
+          relationEntityName,
+          ...parseMongooseFieldModifiers(fieldContent, 'schema')
         });
         continue;
       }
@@ -692,11 +590,13 @@ function parseNestedSchema(content: string, schemaName: string): SchemaDefinitio
         // Check if it's an array: type: [String] or type:[String]
         const isArray = fieldContent.includes('type: [') || fieldContent.includes('type:[');
 
+        const mapped = mapMongooseTypeToGeneric(mongooseType);
         fields.push({
           name: fieldName,
-          type: mapMongooseTypeToGeneric(mongooseType),
+          type: fieldName === '_id' ? 'schema' : mapped,
           required: isRequired,
-          isArray
+          isArray,
+          ...parseMongooseFieldModifiers(fieldContent, fieldName === '_id' ? 'schema' : mapped)
         });
       }
     }
@@ -718,35 +618,44 @@ function parseNestedSchema(content: string, schemaName: string): SchemaDefinitio
  * Map Mongoose types to generic types
  */
 function mapMongooseTypeToGeneric(mongooseType: string): string {
+  const trimmed = mongooseType.trim();
+  // Schema.Types.ObjectId, Types.ObjectId, ObjectId → object id (stored as generic 'schema' in this app)
+  if (/objectid$/i.test(trimmed) || /types\.objectid$/i.test(trimmed)) {
+    return 'schema';
+  }
   const typeMap: Record<string, string> = {
     String: 'string',
     Number: 'number',
     Boolean: 'boolean',
     Date: 'date',
-    ObjectId: 'string',
+    ObjectId: 'schema',
     Object: 'object',
     Array: 'array',
     Buffer: 'buffer',
     Mixed: 'mixed'
   };
 
-  return typeMap[mongooseType] || mongooseType.toLowerCase();
+  return typeMap[trimmed] || trimmed.toLowerCase();
 }
 
 /**
  * Map TypeScript types to generic types
  */
 function mapTypeScriptTypeToGeneric(tsType: string): string {
+  const key = tsType.toLowerCase();
+  if (key.includes('objectid')) {
+    return 'schema';
+  }
   const typeMap: Record<string, string> = {
     string: 'string',
     number: 'number',
     boolean: 'boolean',
     Date: 'date',
-    ObjectId: 'string',
+    ObjectId: 'schema',
     object: 'object',
     any: 'mixed',
     unknown: 'mixed'
   };
 
-  return typeMap[tsType.toLowerCase()] || tsType.toLowerCase();
+  return typeMap[key] || key;
 }

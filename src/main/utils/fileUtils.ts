@@ -20,6 +20,17 @@ export interface FileWriteResult {
 }
 
 /**
+ * Safe path existence check.
+ */
+export function safePathExists(targetPath: string): boolean {
+  try {
+    return existsSync(targetPath);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Safely read a file with error handling
  */
 export function safeReadFile(filePath: string): FileReadResult {
@@ -208,6 +219,7 @@ export function getFrontendDirectories(projectRoot: string) {
   return {
     services: join(projectRoot, 'src', 'services'),
     components: join(projectRoot, 'src', 'components'),
+    hooks: join(projectRoot, 'src', 'hooks'),
     pages: join(projectRoot, 'src', 'pages'),
     store: join(projectRoot, 'src', 'store'),
     slices: join(projectRoot, 'src', 'store', 'slices'),

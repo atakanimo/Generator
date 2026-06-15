@@ -1,7 +1,15 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
 import { SchemaDefinition, FieldConfig } from '../../types/ProjectTypes';
-import { ScanResult, ParseResult, GenerateCodeResult, GenerateBackendResult, GenerateFrontendResult } from '../../types/IPCInterfaces';
-import { enrichFieldWithUIConfig, mergeSchema } from '../../utils/schemaUtils';
+import { GenerateBackendResult, GenerateFrontendResult } from '../../types/IPCInterfaces';
+import { mergeSchema, filePathToProjectRelativePath } from '../../utils/schemaUtils';
+import {
+  DEFAULT_WORKSPACE_GENERATE_PREFS,
+  WorkspaceGeneratePrefs,
+  buildManifestWorkspacePayload,
+  hydrateWorkspaceFromManifest,
+  mergeWorkspaceGeneratePrefs,
+  ManifestWorkspacePayload
+} from './workspacePrefs';
 
 export type SourceType = 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null;
 export type ProjectStatus = 'idle' | 'scanning' | 'ready' | 'error';
@@ -15,10 +23,13 @@ interface ProjectState {
   projectPath: string;
   frontendPath: string;
   sourceType: SourceType;
+  detectedTechnologies: string[];
+  discoveryInfo: string | null;
   modelsFound: ScannedModel[];
   status: ProjectStatus;
   error: string | null;
   selectedModelSchema: SchemaDefinition | null;
+  selectedModelSourceRelativePath: string | null;
   parsingStatus: 'idle' | 'parsing' | 'success' | 'error';
   parsingError: string | null;
   savingStatus: 'idle' | 'saving' | 'success' | 'error';
@@ -39,16 +50,21 @@ interface ProjectState {
   updatingModelStatus: 'idle' | 'updating' | 'success' | 'error';
   updatingModelError: string | null;
   lastUpdatedModelPath: string | null;
+  workspaceGeneratePrefs: WorkspaceGeneratePrefs;
+  workspaceManifestLoaded: boolean;
 }
 
 const initialState: ProjectState = {
-  projectPath: '/Users/atakanatabey/Projects/Varlik360/trading-bot-bot-backend/beckend-bot/src',
-  frontendPath: '',
-  sourceType: 'nodejs-mongoose',
+  projectPath: '/Users/atakanatabey/Projects/Varlik360',
+  frontendPath: '/Users/atakanatabey/Projects/Varlik360/apps/admin',
+  sourceType: null,
+  detectedTechnologies: [],
+  discoveryInfo: null,
   modelsFound: [],
   status: 'idle',
   error: null,
   selectedModelSchema: null,
+  selectedModelSourceRelativePath: null,
   parsingStatus: 'idle',
   parsingError: null,
   savingStatus: 'idle',
@@ -68,22 +84,31 @@ const initialState: ProjectState = {
   lastCreatedModelPath: null,
   updatingModelStatus: 'idle',
   updatingModelError: null,
-  lastUpdatedModelPath: null
+  lastUpdatedModelPath: null,
+  workspaceGeneratePrefs: DEFAULT_WORKSPACE_GENERATE_PREFS,
+  workspaceManifestLoaded: false
 };
 
 // Async thunk for scanning project files
 export const scanProjectFiles = createAsyncThunk(
   'project/scanProjectFiles',
-  async ({ path, type }: { path: string; type: SourceType }, { rejectWithValue }) => {
-    if (!type) {
-      return rejectWithValue('Source type is required');
-    }
-
+  async ({ path, type }: { path: string; type?: SourceType }, { rejectWithValue }) => {
     try {
       if (window.electronAPI?.project?.scan) {
-        const result = await window.electronAPI.project.scan(path, type as 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm');
+        const result = await window.electronAPI.project.scan(path, type);
         if (result.success) {
-          return result.models;
+          let workspace: ManifestWorkspacePayload | null = null;
+          if (window.electronAPI.project.getWorkspaceManifest) {
+            const man = await window.electronAPI.project.getWorkspaceManifest(path);
+            if (man.success) workspace = man.workspace ?? null;
+          }
+          return {
+            models: result.models,
+            detectedType: result.detectedType || type || null,
+            detectedTechnologies: result.detectedTechnologies || [],
+            discoveryInfo: result.discoveryInfo || null,
+            workspace
+          };
         } else {
           return rejectWithValue(result.error || 'Scan failed');
         }
@@ -96,19 +121,71 @@ export const scanProjectFiles = createAsyncThunk(
   }
 );
 
+function selectManifestWorkspacePayload(state: ProjectState) {
+  return buildManifestWorkspacePayload(state.frontendPath, state.workspaceGeneratePrefs);
+}
+
+export const persistWorkspaceManifest = createAsyncThunk(
+  'project/persistWorkspaceManifest',
+  async (projectRoot: string | undefined, { getState, rejectWithValue }) => {
+    const state = (getState() as { project: ProjectState }).project;
+    const root = (projectRoot || state.projectPath)?.trim();
+    if (!root || !window.electronAPI?.project?.updateWorkspaceManifest) {
+      return rejectWithValue('Workspace manifest API not available');
+    }
+    try {
+      const workspace = selectManifestWorkspacePayload(state);
+      const result = await window.electronAPI.project.updateWorkspaceManifest(root, workspace);
+      if (result.success) return { success: true };
+      return rejectWithValue(result.error || 'Failed to persist workspace manifest');
+    } catch (error) {
+      return rejectWithValue(error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+);
+
+export const stashActiveModelManifest = createAsyncThunk(
+  'project/stashActiveModelManifest',
+  async (_, { getState, rejectWithValue }) => {
+    const state = (getState() as { project: ProjectState }).project;
+    if (!state.projectPath || !state.selectedModelSchema || !state.selectedModelSourceRelativePath) {
+      return { skipped: true as const };
+    }
+    if (!window.electronAPI?.project?.stashModelManifest) {
+      return rejectWithValue('stashModelManifest API not available');
+    }
+    try {
+      const workspace = selectManifestWorkspacePayload(state);
+      const result = await window.electronAPI.project.stashModelManifest(
+        state.projectPath,
+        state.selectedModelSchema,
+        state.selectedModelSourceRelativePath,
+        workspace
+      );
+      if (result.success) return { success: true };
+      return rejectWithValue(result.error || 'Stash failed');
+    } catch (error) {
+      return rejectWithValue(error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+);
+
 // Async thunk for parsing model files
 export const parseModelFile = createAsyncThunk(
   'project/parseModelFile',
-  async ({ filePath, projectRoot }: { filePath: string; projectRoot: string }, { getState, rejectWithValue }) => {
+  async ({ filePath, projectRoot }: { filePath: string; projectRoot: string }, { getState, dispatch, rejectWithValue }) => {
     try {
+      await dispatch(stashActiveModelManifest());
+      await dispatch(persistWorkspaceManifest(projectRoot));
+
       if (window.electronAPI?.project?.parseModel) {
         const state = getState() as { project: ProjectState };
         const sourceType = state.project.sourceType;
         const result = await window.electronAPI.project.parseModel(filePath, projectRoot, sourceType);
         if (result.success && result.codeSchema) {
-          // Merge code schema with saved schema (if exists)
-          const mergedSchema = mergeSchema(result.codeSchema, result.savedSchema || null);
-          return mergedSchema;
+          const mergedSchema = mergeSchema(result.codeSchema, result.savedSchema || null, sourceType);
+          const sourceRelativePath = filePathToProjectRelativePath(projectRoot, filePath);
+          return { schema: mergedSchema, sourceRelativePath };
         } else {
           return rejectWithValue(result.error || 'Parse failed');
         }
@@ -124,12 +201,15 @@ export const parseModelFile = createAsyncThunk(
 // Async thunk for saving schema configuration
 export const saveSchemaConfig = createAsyncThunk(
   'project/saveSchemaConfig',
-  async ({ projectRoot, schema }: { projectRoot: string; schema: SchemaDefinition }, { rejectWithValue }) => {
+  async ({ projectRoot, schema }: { projectRoot: string; schema: SchemaDefinition }, { getState, rejectWithValue }) => {
     try {
       if (window.electronAPI?.project?.saveSchemaConfig) {
-        const result = await window.electronAPI.project.saveSchemaConfig(projectRoot, schema);
+        const state = getState() as { project: ProjectState };
+        const rel = state.project.selectedModelSourceRelativePath;
+        const workspace = selectManifestWorkspacePayload(state.project);
+        const result = await window.electronAPI.project.saveSchemaConfig(projectRoot, schema, rel ?? undefined, workspace);
         if (result.success) {
-          return { success: true, filePath: result.filePath || null };
+          return { success: true, filePath: result.filePath || null, manifestPath: result.manifestPath || null };
         } else {
           return rejectWithValue(result.error || 'Save failed');
         }
@@ -186,20 +266,30 @@ export const generateBackend = createAsyncThunk(
       isProtectedRoute,
       sourceType,
       shouldAddRoute,
-      shouldGenerateResponseModel,
       baseUrl,
       updateExistingFiles,
-      isSuperUser
+      isAdminUser,
+      selectedFiles
     }: {
       schema: SchemaDefinition;
       projectPath: string;
       isProtectedRoute: boolean;
       sourceType?: SourceType;
       shouldAddRoute?: boolean;
-      shouldGenerateResponseModel?: boolean;
       baseUrl?: string;
       updateExistingFiles?: boolean;
-      isSuperUser?: boolean;
+      isAdminUser?: boolean;
+      selectedFiles?: {
+        model?: boolean;
+        crud?: boolean;
+        filters?: boolean;
+        types?: boolean;
+        service?: boolean;
+        serviceAdmin?: boolean;
+        schema?: boolean;
+        route?: boolean;
+        routeAdmin?: boolean;
+      };
     },
     { rejectWithValue }
   ) => {
@@ -211,10 +301,10 @@ export const generateBackend = createAsyncThunk(
           isProtectedRoute,
           sourceType,
           shouldAddRoute,
-          shouldGenerateResponseModel,
           baseUrl,
           updateExistingFiles,
-          isSuperUser
+          isAdminUser,
+          selectedFiles
         );
         if (result.success) {
           return { success: true, files: result.files || null };
@@ -258,9 +348,14 @@ export const createModel = createAsyncThunk(
   ) => {
     try {
       if (window.electronAPI?.project?.createModel) {
-        const result = await window.electronAPI.project.createModel(projectPath, sourceType, modelData);
+        const result = await window.electronAPI.project.createModel(projectPath, sourceType, modelData as any);
         if (result.success) {
-          return { success: true, filePath: result.filePath || null };
+          return {
+            success: true,
+            filePath: result.filePath || null,
+            schema: result.schema,
+            sourceRelativePath: result.sourceRelativePath
+          };
         } else {
           return rejectWithValue(result.error || 'Model creation failed');
         }
@@ -309,10 +404,12 @@ export const updateModel = createAsyncThunk(
   async (
     {
       filePath,
+      projectPath,
       sourceType,
       modelData
     }: {
       filePath: string;
+      projectPath?: string;
       sourceType: SourceType;
       modelData: {
         modelName: string;
@@ -331,9 +428,14 @@ export const updateModel = createAsyncThunk(
   ) => {
     try {
       if (window.electronAPI?.project?.updateModel) {
-        const result = await window.electronAPI.project.updateModel(filePath, sourceType, modelData);
+        const result = await window.electronAPI.project.updateModel(filePath, sourceType, modelData as any, projectPath);
         if (result.success) {
-          return { success: true, filePath: result.filePath || null };
+          return {
+            success: true,
+            filePath: result.filePath || null,
+            schema: result.schema,
+            sourceRelativePath: result.sourceRelativePath
+          };
         } else {
           return rejectWithValue(result.error || 'Model update failed');
         }
@@ -360,7 +462,7 @@ export const generateFrontend = createAsyncThunk(
       sourceType,
       isProtectedRoute,
       updateExistingFiles,
-      isSuperUser
+      isAdminUser
     }: {
       schema: SchemaDefinition;
       projectPath: string;
@@ -371,7 +473,7 @@ export const generateFrontend = createAsyncThunk(
       sourceType?: SourceType;
       isProtectedRoute?: boolean;
       updateExistingFiles?: boolean;
-      isSuperUser?: boolean;
+      isAdminUser?: boolean;
     },
     { rejectWithValue, getState }
   ) => {
@@ -392,7 +494,7 @@ export const generateFrontend = createAsyncThunk(
           frontendSourceType,
           isProtectedRoute,
           updateExistingFiles,
-          isSuperUser
+          isAdminUser
         );
         if (result.success) {
           return { success: true, files: result.files || null };
@@ -419,9 +521,40 @@ const projectSlice = createSlice({
     setFrontendPath: (state, action: PayloadAction<string>) => {
       state.frontendPath = action.payload;
     },
+    patchWorkspaceGeneratePrefs: (state, action: PayloadAction<Partial<WorkspaceGeneratePrefs>>) => {
+      state.workspaceGeneratePrefs = mergeWorkspaceGeneratePrefs({
+        ...state.workspaceGeneratePrefs,
+        ...action.payload,
+        selectedFrontendFiles: action.payload.selectedFrontendFiles
+          ? { ...state.workspaceGeneratePrefs.selectedFrontendFiles, ...action.payload.selectedFrontendFiles }
+          : state.workspaceGeneratePrefs.selectedFrontendFiles,
+        selectedBackendFiles: action.payload.selectedBackendFiles
+          ? { ...state.workspaceGeneratePrefs.selectedBackendFiles, ...action.payload.selectedBackendFiles }
+          : state.workspaceGeneratePrefs.selectedBackendFiles,
+        features: action.payload.features
+          ? { ...state.workspaceGeneratePrefs.features, ...action.payload.features }
+          : state.workspaceGeneratePrefs.features
+      });
+    },
+    hydrateWorkspaceFromManifestAction: (
+      state,
+      action: PayloadAction<{ frontendPath?: string; prefs: Partial<WorkspaceGeneratePrefs> }>
+    ) => {
+      if (action.payload.frontendPath) {
+        state.frontendPath = action.payload.frontendPath;
+      }
+      state.workspaceGeneratePrefs = mergeWorkspaceGeneratePrefs({
+        ...state.workspaceGeneratePrefs,
+        ...action.payload.prefs
+      });
+      state.workspaceManifestLoaded = true;
+    },
     setSourceType: (state, action: PayloadAction<SourceType>) => {
       state.sourceType = action.payload;
       state.error = null;
+    },
+    setDetectedTechnologies: (state, action: PayloadAction<string[]>) => {
+      state.detectedTechnologies = action.payload;
     },
     setModelsFound: (state, action: PayloadAction<ScannedModel[]>) => {
       state.modelsFound = action.payload;
@@ -438,11 +571,10 @@ const projectSlice = createSlice({
       state.modelsFound = [];
       state.error = null;
     },
-    resetProject: state => {
-      return initialState;
-    },
+    resetProject: () => initialState,
     clearSelectedSchema: state => {
       state.selectedModelSchema = null;
+      state.selectedModelSourceRelativePath = null;
       state.parsingStatus = 'idle';
       state.parsingError = null;
     },
@@ -467,8 +599,22 @@ const projectSlice = createSlice({
       })
       .addCase(scanProjectFiles.fulfilled, (state, action) => {
         state.status = 'ready';
-        state.modelsFound = action.payload;
+        state.modelsFound = action.payload.models;
+        state.sourceType = action.payload.detectedType;
+        state.detectedTechnologies = action.payload.detectedTechnologies;
+        state.discoveryInfo = action.payload.discoveryInfo;
         state.error = null;
+        if (action.payload.workspace) {
+          const hydrated = hydrateWorkspaceFromManifest(action.payload.workspace);
+          if (hydrated.frontendPath) {
+            state.frontendPath = hydrated.frontendPath;
+          }
+          state.workspaceGeneratePrefs = mergeWorkspaceGeneratePrefs({
+            ...state.workspaceGeneratePrefs,
+            ...hydrated.prefs
+          });
+        }
+        state.workspaceManifestLoaded = true;
       })
       .addCase(scanProjectFiles.rejected, (state, action) => {
         state.status = 'error';
@@ -479,16 +625,19 @@ const projectSlice = createSlice({
         state.parsingStatus = 'parsing';
         state.parsingError = null;
         state.selectedModelSchema = null;
+        state.selectedModelSourceRelativePath = null;
       })
       .addCase(parseModelFile.fulfilled, (state, action) => {
         state.parsingStatus = 'success';
-        state.selectedModelSchema = action.payload;
+        state.selectedModelSchema = action.payload.schema;
+        state.selectedModelSourceRelativePath = action.payload.sourceRelativePath;
         state.parsingError = null;
       })
       .addCase(parseModelFile.rejected, (state, action) => {
         state.parsingStatus = 'error';
         state.parsingError = action.payload as string;
         state.selectedModelSchema = null;
+        state.selectedModelSourceRelativePath = null;
       })
       .addCase(saveSchemaConfig.pending, state => {
         state.savingStatus = 'saving';
@@ -550,6 +699,13 @@ const projectSlice = createSlice({
         state.creatingModelStatus = 'success';
         state.creatingModelError = null;
         state.lastCreatedModelPath = action.payload.filePath || null;
+        if (
+          action.payload.schema &&
+          action.payload.sourceRelativePath &&
+          state.selectedModelSourceRelativePath === action.payload.sourceRelativePath
+        ) {
+          state.selectedModelSchema = action.payload.schema;
+        }
       })
       .addCase(createModel.rejected, (state, action) => {
         state.creatingModelStatus = 'error';
@@ -563,6 +719,13 @@ const projectSlice = createSlice({
         state.updatingModelStatus = 'success';
         state.updatingModelError = null;
         state.lastUpdatedModelPath = action.payload.filePath || null;
+        if (
+          action.payload.schema &&
+          action.payload.sourceRelativePath &&
+          state.selectedModelSourceRelativePath === action.payload.sourceRelativePath
+        ) {
+          state.selectedModelSchema = action.payload.schema;
+        }
       })
       .addCase(updateModel.rejected, (state, action) => {
         state.updatingModelStatus = 'error';
@@ -574,6 +737,8 @@ const projectSlice = createSlice({
 export const {
   setProjectPath,
   setFrontendPath,
+  patchWorkspaceGeneratePrefs,
+  hydrateWorkspaceFromManifestAction,
   setSourceType,
   setModelsFound,
   setStatus,
@@ -583,5 +748,7 @@ export const {
   clearSelectedSchema,
   updateFieldConfig
 } = projectSlice.actions;
+
+export { buildManifestWorkspacePayload } from './workspacePrefs';
 
 export default projectSlice.reducer;

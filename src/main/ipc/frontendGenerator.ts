@@ -13,6 +13,7 @@ export interface GenerateFrontendResult {
   success: boolean;
   files?: {
     service?: string;
+    serviceAdmin?: string;
     thunk?: string;
     slice?: string;
     page?: string;
@@ -37,7 +38,7 @@ export function generateFrontend(
   sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
   isProtectedRoute?: boolean,
   updateExistingFiles?: boolean,
-  isSuperUser?: boolean
+  isAdminUser?: boolean
 ): GenerateFrontendResult {
   try {
     log(`Frontend generation started for entity: ${schema.entityName}`, 'info');
@@ -64,7 +65,7 @@ export function generateFrontend(
       baseUrl: finalBaseUrl,
       isProtectedRoute: isProtectedRoute ?? false,
       updateExistingFiles: updateExistingFiles ?? false,
-      isSuperUser: isSuperUser ?? false
+      isAdminUser: isAdminUser ?? false
     };
 
     // Create generator instance and generate

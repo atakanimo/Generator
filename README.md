@@ -28,7 +28,7 @@ npm run electron:dev
 ```
 
 This will:
-1. Start the Vite dev server on http://localhost:5173
+1. Start the Vite dev server on http://localhost:5190
 2. Launch Electron when the server is ready
 
 ### Build
