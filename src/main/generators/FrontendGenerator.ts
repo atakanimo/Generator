@@ -13,6 +13,9 @@ import { log } from '../utils/logger.js';
 import { injectReducer, injectRoute } from '../utils/injector.js';
 import { join } from 'path';
 import { mergeMongoAuditFrontendSchemaFields } from '../utils/mongoAuditFields.js';
+import { readWorkspaceManifest } from '../utils/manifestSnapshot.js';
+import { enrichRelationPropertyObjectFields } from '../../shared/relationDisplayMeta.js';
+import { getProjectRootPath } from '../utils/templateHelpers.js';
 
 /** Frontend templates that participate in the same custom-block merge as backend (Task 65). */
 const FRONTEND_MERGE_TEMPLATE_NAMES = new Set([
@@ -54,6 +57,7 @@ export class FrontendGenerator extends BaseGenerator {
   private isProtectedRoute: boolean;
   private updateExistingFiles: boolean;
   private isAdminUser: boolean;
+  private backendPath?: string;
 
   private logInfo(message: string, context?: Record<string, unknown>): void {
     log(`${message}${context ? ` | ${JSON.stringify(context)}` : ''}`, 'info');
@@ -86,6 +90,7 @@ export class FrontendGenerator extends BaseGenerator {
     this.isProtectedRoute = options.isProtectedRoute ?? false;
     this.updateExistingFiles = options.updateExistingFiles ?? false;
     this.isAdminUser = options.isAdminUser ?? false;
+    this.backendPath = options.backendPath;
   }
 
   /**
@@ -221,7 +226,13 @@ export class FrontendGenerator extends BaseGenerator {
    */
   private prepareTemplateData(entityNames: any): any {
     const rawFields = Array.isArray(this.schema.fields) ? this.schema.fields : [];
-    const fields = mergeMongoAuditFrontendSchemaFields(this.sourceType, [...rawFields]);
+    let fields = mergeMongoAuditFrontendSchemaFields(this.sourceType, [...rawFields]);
+
+    const manifestRoot = this.backendPath
+      ? getProjectRootPath(this.backendPath)
+      : this.projectRoot;
+    const manifest = readWorkspaceManifest(manifestRoot) ?? readWorkspaceManifest(this.projectRoot);
+    fields = enrichRelationPropertyObjectFields(fields, manifest?.models);
 
     return {
       ...this.schema,

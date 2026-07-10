@@ -40,6 +40,23 @@ export function validateMarkerStructure(content: string, markerName: string): { 
   return { valid: true };
 }
 
+/** True when marker block has non-comment, non-whitespace content (e.g. custom toJSON transform logic). */
+export function hasNonEmptyCustomBlockContent(content: string, markerName: string): boolean {
+  const extraction = extractCustomBlock(content, markerName);
+  if (extraction.error || extraction.content === undefined) {
+    return false;
+  }
+  const stripped = extraction.content
+    .replace(/\/\/[^\n]*/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .trim();
+  return stripped.length > 0;
+}
+
+export function hasCustomToJsonTransformContent(modelSource: string): boolean {
+  return hasNonEmptyCustomBlockContent(modelSource, 'custom-tojson-transform');
+}
+
 export function extractCustomBlock(content: string, markerName: string): { content?: string; error?: string } {
   const startMarker = `// <${markerName}>`;
   const endMarker = `// </${markerName}>`;

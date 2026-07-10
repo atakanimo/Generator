@@ -38,6 +38,7 @@ const {{entityName}}Modal: React.FC<{{entityName}}ModalProps> = ({ open, onClose
       }
     }
     {{feDeletePrimaryKeyOnVar "initialData" sourceType}}
+    {{feDeleteDataGridRowKeyOnVar "initialData" sourceType}}
     {{feModalDeleteScopedUserIdFromVar "initialData" isProtectedRoute isAdminUser}}
 {{feModalStripNonWritableApply "initialData"}}
 {{feModalJsonDraftFinalizeApply}}
@@ -70,6 +71,7 @@ const {{entityName}}Modal: React.FC<{{entityName}}ModalProps> = ({ open, onClose
 {{feModalNormalizeRelationsCall "dataToSave"}}
       // Remove main ID field from payload
       {{feModalDeletePrimaryKeyLine sourceType}}
+      {{feModalDeleteDataGridRowKeyLine sourceType}}
       {{feModalDeleteScopedUserIdFromVar "dataToSave" isProtectedRoute isAdminUser}}
 
       await onSave(dataToSave as I{{entityName}}Input);

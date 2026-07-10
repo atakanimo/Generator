@@ -6,7 +6,7 @@
 import { BaseGenerator, GenerateOptions, GenerateResult } from './BaseGenerator.js';
 import { renderTemplate, clearTemplateCache } from '../utils/templateEngine.js';
 import { safeWriteFile, safeReadFile, safePathExists } from '../utils/fileUtils.js';
-import { applyCustomBlockMerge } from '../utils/customBlockMerge.js';
+import { applyCustomBlockMerge, hasCustomToJsonTransformContent } from '../utils/customBlockMerge.js';
 import { getCustomBlockMarkersPresentInSource, getDefaultCustomBlockMarkerNames } from '../utils/customBlockMarkers.js';
 import { handleError, ErrorCode } from '../utils/errorHandler.js';
 import { log } from '../utils/logger.js';
@@ -66,9 +66,21 @@ interface NormalizedField {
     displayField?: string;
   };
   relationPopulateFields?: string[];
+  relationPropertyObjectFields?: Array<{
+    name: string;
+    type: 'String' | 'Number' | 'Boolean';
+    required: boolean;
+    trim: boolean;
+  }>;
   relationType?: NormalizedRelationType;
   trim?: boolean;
   unique?: boolean;
+  objectFields?: Array<{
+    name: string;
+    type: 'String' | 'Number' | 'Boolean';
+    required: boolean;
+    trim: boolean;
+  }>;
   ui: {
     showInTable: boolean;
     label: string;
@@ -98,6 +110,14 @@ type MongooseFieldShape = {
   unique: boolean;
   trim: boolean;
   ref?: string;
+  isObject?: boolean;
+  objectFields?: Array<{
+    name: string;
+    mongooseType: string;
+    tsType: string;
+    required: boolean;
+    trim: boolean;
+  }>;
 };
 
 interface MergeConflictPolicy {
@@ -473,7 +493,11 @@ export class BackendGenerator extends BaseGenerator {
         templateCandidates: ['express-mongoose/service', 'service'],
         outputDir: moduleDir,
         outputFileName: `${fileBase}.service.ts`,
-        enabled: this.selectedFiles.service ?? true
+        enabled: this.selectedFiles.service ?? true,
+        buildTemplateData: baseTemplateData => ({
+          ...baseTemplateData,
+          needsMongooseDocumentLean: this.resolveNeedsMongooseDocumentLean(moduleDir, fileBase)
+        })
       },
       {
         key: 'serviceAdmin',
@@ -504,6 +528,22 @@ export class BackendGenerator extends BaseGenerator {
         enabled: this.shouldAddRoute && this.isAdminUser && (this.selectedFiles.routeAdmin ?? true)
       }
     ];
+  }
+
+  /**
+   * Model `custom-tojson-transform` doluysa normal API servisi Mongoose dokümanı döndürmeli
+   * (`lean: false`) — `.lean()` toJSON transform'u atlar. Admin serviste gerek yok.
+   */
+  private resolveNeedsMongooseDocumentLean(moduleDir: string, fileBase: string): boolean {
+    if (!this.isExpressMongooseStack()) {
+      return false;
+    }
+    const modelPath = join(moduleDir, `${fileBase}.model.ts`);
+    const read = safeReadFile(modelPath);
+    if (!read.success || !read.content) {
+      return false;
+    }
+    return hasCustomToJsonTransformContent(read.content);
   }
 
   private buildMongooseModelTemplateData(baseTemplateData: Record<string, unknown>): Record<string, unknown> {
@@ -610,6 +650,20 @@ export class BackendGenerator extends BaseGenerator {
           }
         : undefined,
       relationPopulateFields: relationPopulateFields && relationPopulateFields.length > 0 ? relationPopulateFields : undefined,
+      relationPropertyObjectFields:
+        Array.isArray(field.relationPropertyObjectFields) && field.relationPropertyObjectFields.length > 0
+          ? (field.relationPropertyObjectFields as Array<Record<string, unknown>>)
+              .map(sub => ({
+                name: String(sub.name || '').trim(),
+                type: (sub.type === 'number' ? 'Number' : sub.type === 'boolean' ? 'Boolean' : 'String') as
+                  | 'String'
+                  | 'Number'
+                  | 'Boolean',
+                required: Boolean(sub.required),
+                trim: sub.type === 'string' || sub.type === 'String' ? sub.trim !== false : false,
+              }))
+              .filter(sub => sub.name)
+          : undefined,
       relationType: relationTarget
         ? typeof field.relationType === 'string'
           ? (field.relationType as NormalizedRelationType)
@@ -619,6 +673,20 @@ export class BackendGenerator extends BaseGenerator {
         : undefined,
       trim: typeof field.trim === 'boolean' ? field.trim : undefined,
       unique: typeof field.unique === 'boolean' ? field.unique : undefined,
+      objectFields:
+        normalizedType === 'object' && Array.isArray(field.objectFields)
+          ? (field.objectFields as Array<Record<string, unknown>>)
+              .map(sub => ({
+                name: String(sub.name || '').trim(),
+                type: (sub.type === 'number' ? 'Number' : sub.type === 'boolean' ? 'Boolean' : 'String') as
+                  | 'String'
+                  | 'Number'
+                  | 'Boolean',
+                required: Boolean(sub.required),
+                trim: sub.type === 'string' || sub.type === 'String' ? sub.trim !== false : false
+              }))
+              .filter(sub => sub.name)
+          : undefined,
       ui: {
         showInTable: field.showInTable !== false,
         label: String(field.label || field.name || ''),
@@ -685,16 +753,63 @@ export class BackendGenerator extends BaseGenerator {
       relationEntityName: field.relation?.target,
       relationProperty: field.relation?.displayField,
       relationPopulateFields: field.relationPopulateFields,
+      relationPropertyObjectFields:
+        field.relationPropertyObjectFields?.map(sub => ({
+          name: sub.name,
+          type: sub.type === 'Number' ? 'number' : sub.type === 'Boolean' ? 'boolean' : 'string',
+          required: sub.required,
+          trim: sub.trim,
+        })),
       relationType: field.relationType,
       /** Explicit DB field type for helpers (avoids Handlebars `type` name ambiguity in some contexts). */
       fieldDbType: field.type === 'objectId' ? 'schema' : field.type,
-      type: field.type === 'objectId' ? 'schema' : field.type
+      type: field.type === 'objectId' ? 'schema' : field.type,
+      objectFields:
+        field.type === 'object' && Array.isArray(field.objectFields)
+          ? field.objectFields.map(sub => ({
+              name: sub.name,
+              type: sub.type,
+              required: sub.required,
+              trim: sub.trim
+            }))
+          : undefined
     }));
   }
 
   private toMongooseModelFields(model: NormalizedModel): MongooseFieldShape[] {
     return model.fields.map(field => {
       const effectiveType = this.sourceType === 'nodejs-mongoose' && field.name === '_id' ? 'objectId' : field.type;
+
+      if (effectiveType === 'object' && field.objectFields?.length) {
+        return {
+          name: field.name,
+          tsType: '',
+          mongooseType: '',
+          required: field.required,
+          unique: field.unique === true,
+          trim: false,
+          isObject: true,
+          objectFields: field.objectFields.map(sub => {
+            let mongooseType = 'String';
+            let tsType = 'string';
+            if (sub.type === 'Number') {
+              mongooseType = 'Number';
+              tsType = 'number';
+            } else if (sub.type === 'Boolean') {
+              mongooseType = 'Boolean';
+              tsType = 'boolean';
+            }
+            return {
+              name: sub.name,
+              mongooseType,
+              tsType,
+              required: sub.required,
+              trim: sub.trim && sub.type === 'String'
+            };
+          })
+        };
+      }
+
       const mongooseBaseType = this.toMongooseBaseType(effectiveType);
       const mongooseType = field.isArray ? `[${mongooseBaseType}]` : mongooseBaseType;
       const tsBaseType = this.toTsBaseType(effectiveType);
@@ -707,7 +822,8 @@ export class BackendGenerator extends BaseGenerator {
         required: field.required,
         unique: field.unique === true,
         trim: effectiveType === 'string' && field.trim === true,
-        ref: field.relation?.target
+        ref: field.relation?.target,
+        isObject: false
       };
     });
   }

@@ -8,6 +8,7 @@ import { fieldsHaveSearchable, uppercaseFirstStr } from './handlebars-schema-pre
 import {
   fieldsHaveSchemaType,
   schemaFieldToBackendTsType,
+  emitObjectZodLiteral,
 } from '../../shared/schemaFieldTypes.js';
 import { registerFrontendHandlebarsHelpers } from './handlebars-fe-helpers.js';
 import { registerBeTypesHelpers } from './handlebars-be-types.js';
@@ -257,6 +258,7 @@ export function registerHandlebarsHelpers(): void {
     else if (t === 'number') inner = 'z.number()';
     else if (t === 'boolean') inner = 'z.boolean()';
     else if (t === 'date') inner = 'z.union([z.string(), z.date()])';
+    else if (t === 'object') inner = emitObjectZodLiteral(field);
     else inner = required ? "z.string().min(1)" : 'z.string()';
 
     const expr = isArray ? `z.array(${inner})` : inner;
@@ -310,6 +312,7 @@ export function registerHandlebarsHelpers(): void {
     z.date(),
   ])`;
       } else if (t === 'date') inner = 'z.union([z.string(), z.date()])';
+      else if (t === 'object') inner = emitObjectZodLiteral(field);
       else inner = required ? "z.string().min(1)" : 'z.string()';
 
       const expr = isArray ? `z.array(${inner})` : inner;
@@ -363,11 +366,23 @@ export function registerHandlebarsHelpers(): void {
     return new Handlebars.SafeString(`,\n    populate: ${bePopulateLiteral(entries)}`);
   });
 
-  Handlebars.registerHelper('beServiceGetByIdPopulateArgs', (fields: unknown) => {
+  Handlebars.registerHelper('beServiceGetByIdPopulateArgs', (fields: unknown, needsLean?: boolean) => {
     const entries = bePopulateEntries(fields);
-    if (entries.length === 0) return '';
-    // BaseCrudService#getById supports (id, projection?, options?)
-    return new Handlebars.SafeString(`, {}, { populate: ${bePopulateLiteral(entries)} }`);
+    const lean = needsLean === true;
+    if (entries.length === 0 && !lean) return '';
+    const optionsParts: string[] = [];
+    if (entries.length > 0) {
+      optionsParts.push(`populate: ${bePopulateLiteral(entries)}`);
+    }
+    if (lean) {
+      optionsParts.push('lean: false');
+    }
+    return new Handlebars.SafeString(`, {}, { ${optionsParts.join(', ')} }`);
+  });
+
+  Handlebars.registerHelper('beServiceLeanOptionLine', (needsLean?: boolean) => {
+    if (needsLean !== true) return '';
+    return new Handlebars.SafeString(`,\n    lean: false`);
   });
 
   registerBeTypesHelpers();

@@ -2,9 +2,20 @@ import { readFileSync } from 'fs';
 import { listMongooseModelFiles, type ScannedModel, type SourceType } from './projectScanner.js';
 import { parseModelFile, entityNameFromModelFileName } from './schemaParser.js';
 
+export interface RelatedModelFieldInfo {
+  name: string;
+  type: string;
+  objectFields?: Array<{
+    name: string;
+    type: string;
+    required: boolean;
+    trim?: boolean;
+  }>;
+}
+
 export interface RelatedModelFieldsResult {
   success: boolean;
-  fields?: string[];
+  fields?: RelatedModelFieldInfo[];
   modelPath?: string;
   error?: string;
 }
@@ -132,7 +143,21 @@ export async function getRelatedModelFieldNames(
     };
   }
 
-  const fields = parsed.schema.fields.map(f => f.name).filter(n => typeof n === 'string' && n.length > 0 && n !== '__v');
+  const fields: RelatedModelFieldInfo[] = parsed.schema.fields
+    .filter(f => typeof f.name === 'string' && f.name.length > 0 && f.name !== '__v')
+    .map(f => ({
+      name: f.name,
+      type: f.type,
+      objectFields:
+        String(f.type).toLowerCase() === 'object' && Array.isArray(f.objectFields)
+          ? f.objectFields.map(sub => ({
+              name: sub.name,
+              type: sub.type,
+              required: sub.required,
+              trim: sub.trim,
+            }))
+          : undefined,
+    }));
 
   return { success: true, fields, modelPath: match.model.path };
 }

@@ -106,6 +106,7 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
       projection?: string | Record<string, 0 | 1 | boolean> | null;
       sort?: Record<string, 1 | -1>;
       populate?: CrudPopulate;
+      lean?: boolean;
     },
     errorMessages?: { listFailed: string }
   ): Promise<IApiResponse<PaginatedList<unknown>>> {
@@ -133,7 +134,8 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
       q = this.augmentListQuery(q);
 
       const fetchLimit = limit + 1;
-      const docs = await q.skip(skip).limit(fetchLimit).lean().exec();
+      const useLean = options.lean !== false;
+      const docs = useLean ? await q.skip(skip).limit(fetchLimit).lean().exec() : await q.skip(skip).limit(fetchLimit).exec();
 
       const hasMore = docs.length > limit;
       const items = hasMore ? docs.slice(0, limit) : docs;
@@ -225,7 +227,7 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
   async getById(
     id: string,
     extraFilter: FilterQuery<TDoc> = {},
-    options?: { projection?: string | Record<string, 0 | 1 | boolean> | null; populate?: CrudPopulate },
+    options?: { projection?: string | Record<string, 0 | 1 | boolean> | null; populate?: CrudPopulate; lean?: boolean },
     errorMessages?: { getByIdFailed: string; notFound?: string }
   ): Promise<IApiResponse<unknown>> {
     const getByIdFailed = errorMessages?.getByIdFailed ?? this.defaultMessages.getByIdFailed ?? 'Get failed';
@@ -249,7 +251,8 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
         q = q.populate(options.populate as any);
       }
       q = this.augmentDetailQuery(q);
-      const doc = await q.lean().exec();
+      const useLean = options?.lean !== false;
+      const doc = useLean ? await q.lean().exec() : await q.exec();
       if (!doc) {
         return ErrorResponse({ message: notFoundMsg, code: 'NOT_FOUND' });
       }

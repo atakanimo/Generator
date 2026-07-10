@@ -120,22 +120,8 @@ export interface ParseBaseUrlResult {
   error?: string;
 }
 
-export interface ModelField {
-  name: string;
-  type: 'String' | 'Number' | 'Boolean' | 'Date' | 'ObjectId' | 'Array';
-  required: boolean;
-  unique: boolean;
-  trim: boolean;
-  displayText?: string;
-  ref?: string; // Mongoose ref (e.g., "User", "Symbol") - used in schema definition
-}
-
-export interface ModelData {
-  modelName: string;
-  fields: ModelField[];
-  hasInitializeFunction: boolean;
-  initializeData?: Array<Record<string, string>>;
-}
+export type { ModelData, ModelField, ModelObjectSubField } from '../../shared/modelTypes.js';
+import type { ModelData } from '../../shared/modelTypes.js';
 
 export interface CreateModelResult {
   success: boolean;
@@ -164,9 +150,20 @@ export interface ParseModelToModelDataResult {
   error?: string;
 }
 
+export interface RelatedModelFieldInfo {
+  name: string;
+  type: string;
+  objectFields?: Array<{
+    name: string;
+    type: string;
+    required: boolean;
+    trim?: boolean;
+  }>;
+}
+
 export interface RelatedModelFieldsResult {
   success: boolean;
-  fields?: string[];
+  fields?: RelatedModelFieldInfo[];
   modelPath?: string;
   error?: string;
 }

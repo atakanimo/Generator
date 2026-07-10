@@ -36,6 +36,7 @@ export function registerFeCoreTextHelpers(): void {
 export {
   emitFeCoreTextJsx,
   emitFeCoreTextCellDisplay,
+  emitFeFormatScalarOrObjectStringExpr,
   emitFeRelationCellValueExpr,
   FE_TEXT_VARIANT,
 } from '../../shared/feTypography.js';

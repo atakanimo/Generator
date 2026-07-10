@@ -266,3 +266,128 @@ export function parseMongooseFieldModifiers(fieldContent: string, genericType: s
 
   return modifiers;
 }
+
+export type ParsedEmbeddedObjectSubField = {
+  name: string;
+  type: 'String' | 'Number' | 'Boolean';
+  required: boolean;
+  trim: boolean;
+};
+
+/**
+ * Returns the field block's INNER content (between the field braces, no `name:` wrapper).
+ * Accepts either the inner block already, or a full `name: { ... }` block.
+ */
+function normalizeFieldInner(fieldBlock: string): string {
+  const trimmed = fieldBlock.trim();
+  const wrapper = /^\w+\s*:\s*\{/.exec(trimmed);
+  if (!wrapper) return trimmed;
+
+  const openBrace = wrapper.index + wrapper[0].length - 1;
+  const end = scanBalancedDelimiters(trimmed, openBrace);
+  if (end < 0) return trimmed;
+  return trimmed.substring(openBrace + 1, end - 1);
+}
+
+/** Concatenate only the depth-0 characters of a block (drops nested `{ ... }` bodies). */
+function depthZeroText(inner: string): string {
+  let depth = 0;
+  let out = '';
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i];
+    if (ch === '{') {
+      depth++;
+    } else if (ch === '}') {
+      depth = Math.max(0, depth - 1);
+    } else if (depth === 0) {
+      out += ch;
+    }
+  }
+  return out;
+}
+
+/** True when field block is a scalar Mongoose field (`type: String`, `type: Schema.Types.ObjectId`, …). */
+export function isMongooseScalarFieldBlock(fieldBlock: string): boolean {
+  const inner = normalizeFieldInner(fieldBlock);
+  if (!inner.trim()) return false;
+  return /\btype\s*:/i.test(depthZeroText(inner));
+}
+
+/**
+ * Parse embedded subdocument fields, e.g. `displayText: { tr: { type: String, ... }, en: { ... } }`.
+ * Returns null when the block is a scalar Mongoose field (`type: String` at top level).
+ */
+export function parseMongooseEmbeddedObjectSubFields(fieldBlock: string): ParsedEmbeddedObjectSubField[] | null {
+  const inner = normalizeFieldInner(fieldBlock);
+  if (!inner.trim() || isMongooseScalarFieldBlock(fieldBlock)) {
+    return null;
+  }
+
+  const subFields: ParsedEmbeddedObjectSubField[] = [];
+  const fieldPattern = /(\w+)\s*:\s*\{/g;
+  let fieldMatch: RegExpExecArray | null;
+
+  while ((fieldMatch = fieldPattern.exec(inner)) !== null) {
+    const subName = fieldMatch[1];
+    const subStart = fieldMatch.index + fieldMatch[0].length;
+    let braceCount = 1;
+    let inString = false;
+    let stringChar = '';
+    let subEnd = subStart;
+
+    for (let i = subStart; i < inner.length; i++) {
+      const char = inner[i];
+      const prevChar = i > 0 ? inner[i - 1] : '';
+
+      if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
+        if (!inString) {
+          inString = true;
+          stringChar = char;
+        } else if (char === stringChar) {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (!inString) {
+        if (char === '{') braceCount++;
+        if (char === '}') {
+          braceCount--;
+          if (braceCount === 0) {
+            subEnd = i;
+            break;
+          }
+        }
+      }
+    }
+
+    const subDef = inner.substring(subStart, subEnd);
+    const typeMatch = /type\s*:\s*(\w+)/i.exec(subDef);
+    if (!typeMatch) continue;
+
+    const rawType = typeMatch[1];
+    let subType: ParsedEmbeddedObjectSubField['type'] = 'String';
+    if (rawType === 'Number') subType = 'Number';
+    else if (rawType === 'Boolean') subType = 'Boolean';
+
+    const required = /required\s*:\s*(true|1)/i.test(subDef);
+    const trim = subType === 'String' ? /trim\s*:\s*(true|1)/i.test(subDef) : false;
+
+    subFields.push({ name: subName, type: subType, required, trim });
+  }
+
+  return subFields.length > 0 ? subFields : null;
+}
+
+/**
+ * True when the embedded object should be treated as required.
+ * Nested-object syntax (`displayText: { tr: {...}, en: {...} }`) cannot carry a container-level
+ * `required`, so we also infer it from sub-fields: required when every sub-field is required.
+ */
+export function mongooseEmbeddedObjectRequired(fieldBlock: string): boolean {
+  const inner = normalizeFieldInner(fieldBlock);
+  if (/required\s*:\s*(true|1)/i.test(depthZeroText(inner))) return true;
+
+  const subFields = parseMongooseEmbeddedObjectSubFields(fieldBlock);
+  return Boolean(subFields && subFields.length > 0 && subFields.every(sub => sub.required));
+}

@@ -22,6 +22,12 @@ export type AdminTableProps = Pick<
 
 const defaultPageSizeOptions = [25, 50, 100];
 
+/** Mongo `_id` or other stacks `id` — rows are API items, not DataGrid-shaped copies. */
+const defaultGetRowId: NonNullable<DataGridProps['getRowId']> = (row) => {
+  const pk = (row as { _id?: unknown; id?: unknown })._id ?? (row as { id?: unknown }).id;
+  return pk != null && pk !== '' ? String(pk) : '';
+};
+
 export function AdminTable({
   rows,
   columns,
@@ -66,6 +72,7 @@ export function AdminTable({
         key={tableKey}
         rows={rows}
         columns={columns}
+        getRowId={defaultGetRowId}
         disableRowSelectionOnClick
         disableColumnSorting={disableColumnSorting}
         paginationMode={paginationMode}

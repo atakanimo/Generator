@@ -6,6 +6,7 @@ import {
   uppercaseFirstStr,
 } from './handlebars-schema-predicates.js';
 import { resolvePrimaryKeyMemberAccess } from '../../shared/schemaFieldTypes.js';
+import { emitFeFormatScalarOrObjectStringExpr } from '../../shared/feTypography.js';
 import {
   emitFeTableGridColumnSizingProps,
   emitFeTableRowCellJsx,
@@ -14,6 +15,15 @@ import {
 } from '../../shared/feTableCell.js';
 
 type FeFieldLite = { type?: string };
+
+function relationPropertySubFieldNames(f: {
+  relationPropertyObjectFields?: Array<{ name?: string }>;
+}): string[] | undefined {
+  const subs = f.relationPropertyObjectFields;
+  if (!Array.isArray(subs)) return undefined;
+  const names = subs.map(s => String(s?.name || '').trim()).filter(Boolean);
+  return names.length > 0 ? names : undefined;
+}
 
 /** Same output as `feTableFilterFieldAttrs` Handlebars helper (without SafeString). */
 export function emitFeTableFilterFieldAttrs(field: unknown): string {
@@ -148,7 +158,12 @@ export function emitFeTableRelationSupportCode(fields: unknown): string {
     const relPlural = pluralizeName(String(f.relationEntityName));
     const pascalPlural = relPlural.charAt(0).toUpperCase() + relPlural.slice(1);
     const labelProp = String(f.relationProperty || '').trim();
-    const defaultLabel = labelProp ? `opt?.${labelProp}` : `String((opt as any)?._id ?? '')`;
+    const labelValueExpr = labelProp ? `opt?.${labelProp}` : `(opt as any)?._id ?? ''`;
+    const subNames = relationPropertySubFieldNames(f);
+    const formattedLabelExpr = emitFeFormatScalarOrObjectStringExpr(labelValueExpr, subNames);
+    const optionLabelReturn = labelProp
+      ? `((${formattedLabelExpr}) || getOptionId(opt) || '')`
+      : `(String(getOptionId(opt) || ''))`;
     const capName = name.charAt(0).toUpperCase() + name.slice(1);
 
     blocks.push(
@@ -172,8 +187,7 @@ export function emitFeTableRelationSupportCode(fields: unknown): string {
         `    }\n` +
         `  };\n\n` +
         `  const get${capName}OptionLabel = (opt: any): string => {\n` +
-        `    const label = ${defaultLabel};\n` +
-        `    return String(label ?? getOptionId(opt) ?? '');\n` +
+        `    return String(${optionLabelReturn});\n` +
         `  };\n` +
         `\n` +
         `  const ${name}FilteredOptions = React.useMemo(() => {\n` +
@@ -292,16 +306,19 @@ ${cols}
   );\n`;
 }
 
-/** Map API items to DataGrid rows with stable \`id\`. */
+/** DataGrid requires row.id — map document PK (_id / id) without mutating items from API. */
 export function emitFeTableGridRowsUseMemo(entityName: unknown, sourceType: unknown): string {
   const en = String(entityName ?? '');
   const idMember = resolvePrimaryKeyMemberAccess(sourceType);
   return `  const gridRows = React.useMemo(
     () =>
-      (items ?? []).map((row, index) => ({
-        id: (row as I${en})${idMember} ?? (row as any).id ?? index,
-        ...row,
-      })),
+      (items ?? []).map((row, index) => {
+        const pk = (row as I${en})${idMember} ?? (row as any).id;
+        return {
+          ...row,
+          id: pk != null && pk !== '' ? String(pk) : String(index),
+        };
+      }),
     [items]
   );\n`;
 }

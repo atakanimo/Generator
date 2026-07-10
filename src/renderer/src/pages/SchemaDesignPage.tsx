@@ -34,6 +34,7 @@ import { Save as SaveIcon, Code as CodeIcon, FolderOpen } from '@mui/icons-mater
 import { useAppSelector, useAppDispatch } from '../store/hooks';
 import { updateFieldConfig, saveSchemaConfig, generateFrontend, generateBackend, setFrontendPath, patchWorkspaceGeneratePrefs, persistWorkspaceManifest, buildManifestWorkspacePayload } from '../features/project/projectSlice';
 import { FieldConfig, SchemaDefinition } from '../types/ProjectTypes';
+import type { RelationPropertyObjectSubField } from '@shared/relationDisplayMeta';
 import { UIComponent } from '../utils/schemaUtils';
 import { useEffect, useState } from 'react';
 import Radio from '@mui/material/Radio';
@@ -41,12 +42,18 @@ import RadioGroup from '@mui/material/RadioGroup';
 
 const RELATION_FIELD_GRID_COLS = 4;
 
+type RelatedModelFieldInfo = {
+  name: string;
+  type: string;
+  objectFields?: RelationPropertyObjectSubField[];
+};
+
 type RelationPopulatePickerState = {
   open: boolean;
   fieldIndex: number | null;
   loading: boolean;
   error: string | null;
-  candidates: string[];
+  candidates: RelatedModelFieldInfo[];
   selected: Record<string, boolean>;
   displayField: string;
 };
@@ -201,7 +208,7 @@ const SchemaDesignPage = () => {
     dispatch(
       updateFieldConfig({
         fieldIndex,
-        updates: { relationEntityName, relationPopulateFields: undefined, relationProperty: undefined }
+        updates: { relationEntityName, relationPopulateFields: undefined, relationProperty: undefined, relationPropertyObjectFields: undefined }
       })
     );
   };
@@ -235,6 +242,7 @@ const SchemaDesignPage = () => {
           relationEntityName: includeRelation ? relationEntityName : undefined,
           relationProperty: includeRelation ? field.relationProperty : undefined,
           relationPopulateFields: includeRelation ? field.relationPopulateFields : undefined,
+          relationPropertyObjectFields: includeRelation ? field.relationPropertyObjectFields : undefined,
           relationType: includeRelation ? field.relationType || (field.isArray ? 'oneToMany' : 'manyToOne') : undefined
         }
       })
@@ -286,8 +294,8 @@ const SchemaDesignPage = () => {
       const initialPopulate =
         field.relationPopulateFields && field.relationPopulateFields.length > 0 ? field.relationPopulateFields : [];
       const selected: Record<string, boolean> = {};
-      for (const n of fields) {
-        selected[n] = initialPopulate.includes(n);
+      for (const f of fields) {
+        selected[f.name] = initialPopulate.includes(f.name);
       }
       let display = field.relationProperty?.trim() || '';
       if (display && !selected[display]) {
@@ -327,7 +335,7 @@ const SchemaDesignPage = () => {
   const applyRelationPopulatePicker = () => {
     const idx = relationPicker.fieldIndex;
     if (idx === null) return;
-    const ordered = relationPicker.candidates.filter(n => relationPicker.selected[n]);
+    const ordered = relationPicker.candidates.filter(f => relationPicker.selected[f.name]).map(f => f.name);
     if (ordered.length === 0) {
       setSnackbarMessage('En az bir alan seçin.');
       setSnackbarSeverity('error');
@@ -347,10 +355,24 @@ const SchemaDesignPage = () => {
       setSnackbarOpen(true);
       return;
     }
+    const displayFieldMeta = relationPicker.candidates.find(f => f.name === display);
+    const relationPropertyObjectFields =
+      displayFieldMeta && String(displayFieldMeta.type).toLowerCase() === 'object' && displayFieldMeta.objectFields?.length
+        ? displayFieldMeta.objectFields.map(sub => ({
+            name: sub.name,
+            type: sub.type ?? 'string',
+            required: sub.required ?? false,
+            trim: sub.trim,
+          }))
+        : undefined;
     dispatch(
       updateFieldConfig({
         fieldIndex: idx,
-        updates: { relationPopulateFields: ordered, relationProperty: display }
+        updates: {
+          relationPopulateFields: ordered,
+          relationProperty: display,
+          relationPropertyObjectFields,
+        },
       })
     );
     setRelationPicker(relationPickerInitial);
@@ -962,6 +984,11 @@ const SchemaDesignPage = () => {
                   </TableCell>
                   <TableCell>
                     <Chip label={field.type} size='small' color='primary' variant='outlined' />
+                    {field.type === 'object' && field.objectFields && field.objectFields.length > 0 && (
+                      <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 0.5 }}>
+                        {field.objectFields.map(sub => `${sub.name}: ${sub.type}`).join(', ')}
+                      </Typography>
+                    )}
                   </TableCell>
                   <TableCell sx={{ minWidth: 150 }}>
                     <TextField
@@ -1219,18 +1246,18 @@ const SchemaDesignPage = () => {
                   mt: 1
                 }}
               >
-                {relationPicker.candidates.map(name => (
+                {relationPicker.candidates.map(f => (
                   <FormControlLabel
-                    key={name}
+                    key={f.name}
                     sx={{ m: 0, alignItems: 'center' }}
                     control={
                       <Checkbox
-                        checked={Boolean(relationPicker.selected[name])}
-                        onChange={e => toggleRelationPopulateCandidate(name, e.target.checked)}
+                        checked={Boolean(relationPicker.selected[f.name])}
+                        onChange={e => toggleRelationPopulateCandidate(f.name, e.target.checked)}
                         size='small'
                       />
                     }
-                    label={name}
+                    label={f.name}
                     componentsProps={{ typography: { variant: 'caption', noWrap: true } }}
                   />
                 ))}
@@ -1252,14 +1279,14 @@ const SchemaDesignPage = () => {
                   }}
                 >
                   {relationPicker.candidates
-                    .filter(n => relationPicker.selected[n])
-                    .map(n => (
+                    .filter(f => relationPicker.selected[f.name])
+                    .map(f => (
                       <FormControlLabel
-                        key={n}
-                        value={n}
+                        key={f.name}
+                        value={f.name}
                         sx={{ m: 0 }}
                         control={<Radio size='small' />}
-                        label={n}
+                        label={f.name}
                         componentsProps={{ typography: { variant: 'caption', noWrap: true } }}
                       />
                     ))}

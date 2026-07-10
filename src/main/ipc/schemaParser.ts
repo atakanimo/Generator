@@ -4,7 +4,9 @@ import {
   resolveMainMongooseSchemaName,
   extractMainSchemaRegions,
   parseSchemaOptionsMeta,
-  parseMongooseFieldModifiers
+  parseMongooseFieldModifiers,
+  parseMongooseEmbeddedObjectSubFields,
+  mongooseEmbeddedObjectRequired
 } from '../utils/mongooseSchemaExtract.js';
 
 export { entityNameFromModelFileName };
@@ -18,6 +20,12 @@ export interface SchemaField {
   relationEntityName?: string;
   relationProperty?: string;
   relationPopulateFields?: string[];
+  relationPropertyObjectFields?: Array<{
+    name: string;
+    type: string;
+    required: boolean;
+    trim?: boolean;
+  }>;
   uiComponent?: string;
   showInTable?: boolean;
   isSearchable?: boolean;
@@ -28,6 +36,12 @@ export interface SchemaField {
   label?: string;
   trim?: boolean;
   unique?: boolean;
+  objectFields?: Array<{
+    name: string;
+    type: string;
+    required: boolean;
+    trim?: boolean;
+  }>;
 }
 
 export interface SchemaDefinition {
@@ -184,6 +198,10 @@ export function parseModelFile(
         }
       }
 
+      // Resume scanning AFTER this field's full body so nested keys (e.g. embedded object
+      // sub-fields like `tr`/`en`) are not mistaken for top-level fields.
+      fieldPattern.lastIndex = fieldEnd;
+
       const fieldContent = schemaContent.substring(fieldStart, fieldEnd);
       hasMongooseSchema = true;
 
@@ -243,6 +261,23 @@ export function parseModelFile(
           includeRelation: true,
           relationEntityName,
           ...parseMongooseFieldModifiers(fieldContent, 'schema')
+        });
+        continue;
+      }
+
+      const embeddedSubFields = parseMongooseEmbeddedObjectSubFields(fieldContent);
+      if (embeddedSubFields) {
+        fields.push({
+          name: fieldName,
+          type: 'object',
+          required: mongooseEmbeddedObjectRequired(fieldContent),
+          isArray: false,
+          objectFields: embeddedSubFields.map(sub => ({
+            name: sub.name,
+            type: sub.type === 'Number' ? 'number' : sub.type === 'Boolean' ? 'boolean' : 'string',
+            required: sub.required,
+            trim: sub.trim
+          }))
         });
         continue;
       }
@@ -532,6 +567,9 @@ function parseNestedSchema(content: string, schemaName: string): SchemaDefinitio
           }
         }
       }
+
+      // Resume scanning after the full field body (skip nested keys).
+      fieldPattern.lastIndex = fieldEnd;
 
       const fieldContent = schemaContent.substring(fieldStart, fieldEnd);
 

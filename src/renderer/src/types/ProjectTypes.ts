@@ -33,11 +33,23 @@ export interface FieldConfig {
   includeRelation?: boolean;
   relationProperty?: string;
   relationPopulateFields?: string[];
+  relationPropertyObjectFields?: Array<{
+    name: string;
+    type: string;
+    required: boolean;
+    trim?: boolean;
+  }>;
   relationEntityName?: string;
   relationType?: 'oneToOne' | 'oneToMany' | 'manyToOne' | 'manyToMany';
   ref?: string;
   trim?: boolean;
   unique?: boolean;
+  objectFields?: Array<{
+    name: string;
+    type: string;
+    required: boolean;
+    trim?: boolean;
+  }>;
 }
 
 export interface SchemaDefinition {

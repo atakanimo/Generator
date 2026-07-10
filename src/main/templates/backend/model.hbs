@@ -17,7 +17,7 @@ export interface {{interfaceName}} extends {{interfaceExtends}} {
   updatedAt?: Date;
 {{/if}}
 {{#each modelFields}}
-  {{name}}: {{tsType}};
+  {{name}}: {{#if isObject}}{ {{#each objectFields}}{{name}}: {{tsType}};{{#unless @last}} {{/unless}}{{/each}} }{{else}}{{tsType}}{{/if}};
 {{/each}}
 }
 
@@ -26,10 +26,20 @@ export type I{{modelExportName}}Model = {{interfaceName}};
 const {{schemaName}} = new Schema<{{interfaceName}}>(
   {
 {{#each modelFields}}
+{{#if isObject}}
+    {{name}}: {
+{{#each objectFields}}
+      {{name}}: {
+        type: {{mongooseType}}{{#if required}}, required: true{{/if}}{{#if trim}}, trim: true{{/if}}
+      }{{#unless @last}},{{/unless}}
+{{/each}}
+    }{{#unless @last}},{{/unless}}
+{{else}}
     {{name}}: {
       type: {{mongooseType}}{{#if required}}, required: true{{/if}}{{#if unique}}, unique: true{{/if}}{{#if trim}}, trim: true{{/if}}{{#if ref}},
       ref: '{{ref}}'{{/if}}
     }{{#unless @last}},{{/unless}}
+{{/if}}
 {{/each}}
   },
   {
@@ -73,9 +83,7 @@ export const {{initializeFunctionName}} = async (): Promise<void> => {
       const defaultData = [
 {{#each initializeData}}
         {
-{{#each ../modelFields}}
-          {{name}}: {{#if (eq mongooseType "Number")}}{{#if (hasValue (lookup .. name))}}{{lookup .. name}}{{else}}0{{/if}}{{else if (eq mongooseType "Boolean")}}{{#if (eq (lookup .. name) false)}}false{{else if (eq (lookup .. name) true)}}true{{else}}false{{/if}}{{else if (eq mongooseType "[String]")}}[]{{else}}{{#if (hasValue (lookup .. name))}}'{{lookup .. name}}'{{else}}''{{/if}}{{/if}}{{#unless @last}},{{/unless}}
-{{/each}}
+{{{initLines}}}
         }{{#unless @last}},{{/unless}}
 {{/each}}
       ];

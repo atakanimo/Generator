@@ -2,6 +2,8 @@ import {
   emitFeCoreTextCellArrayExpr,
   emitFeCoreTextCellDateExpr,
   emitFeCoreTextCellDisplay,
+  emitFeCoreTextCellObjectExpr,
+  emitFeFormatScalarOrObjectStringExpr,
   emitFeRelationCellValueExpr,
   FE_TEXT_VARIANT,
   emitFeCoreTextJsx,
@@ -16,7 +18,24 @@ type FeTableField = {
   includeRelation?: boolean;
   relationEntityName?: string;
   relationProperty?: string;
+  relationPropertyObjectFields?: Array<{ name?: string }>;
+  objectFields?: Array<{ name?: string }>;
 };
+
+function relationPropertySubFieldNames(field: FeTableField): string[] | undefined {
+  const subs = field.relationPropertyObjectFields;
+  if (!Array.isArray(subs)) return undefined;
+  const names = subs.map(s => String(s?.name || '').trim()).filter(Boolean);
+  return names.length > 0 ? names : undefined;
+}
+
+/** Relation display label — handles object relationProperty values (e.g. displayText: { tr, en }). */
+export function emitFeRelationDisplayStringExpr(field: FeTableField, key: string): string {
+  const prop = String(field.relationProperty || '').trim();
+  if (!prop) return emitFeFormatScalarOrObjectStringExpr(key);
+  const rawExpr = emitFeRelationCellValueExpr(key, prop);
+  return emitFeFormatScalarOrObjectStringExpr(rawExpr, relationPropertySubFieldNames(field));
+}
 
 /** Field name looks like an identifier column (_id, id, userId, report_id, …). */
 export function isFeTableIdFieldName(name: string): boolean {
@@ -104,9 +123,7 @@ export function emitFeTableRelationIdCopyCellJsx(field: FeTableField, itemVar = 
   const key = `${itemVar}['${name}']`;
   const idExpr = emitFeTableIdValueExpr(key);
   const prop = String(field.relationProperty || '').trim();
-  const labelExpr = prop
-    ? `(() => {\n  const v: unknown = ${emitFeRelationCellValueExpr(key, prop)};\n  if (v == null || v === '') return '';\n  return String(v);\n})()`
-    : idExpr;
+  const labelExpr = prop ? emitFeRelationDisplayStringExpr(field, key) : idExpr;
   const placeholder = emitFeCoreTextJsx({
     variant: FE_TEXT_VARIANT.tableCell,
     sx: "{ color: 'text.disabled' }",
@@ -161,7 +178,7 @@ export function emitFeTableRowCellJsx(field: FeTableField, itemVar = 'item'): st
       if (!prop) {
         return emitFeCoreTextCellDisplay(key);
       }
-      return emitFeCoreTextCellDisplay(emitFeRelationCellValueExpr(key, prop));
+      return emitFeCoreTextCellDisplay(emitFeRelationDisplayStringExpr(field, key));
     }
     return emitFeCoreTextCellDisplay(key);
   }
@@ -178,6 +195,12 @@ export function emitFeTableRowCellJsx(field: FeTableField, itemVar = 'item'): st
   }
   if (t === 'date' || t === 'datetime') {
     return emitFeCoreTextCellDateExpr(key);
+  }
+  if (t === 'object') {
+    const subNames = Array.isArray(field.objectFields)
+      ? field.objectFields.map(s => String(s?.name || '').trim()).filter(Boolean)
+      : undefined;
+    return emitFeCoreTextCellObjectExpr(key, subNames && subNames.length > 0 ? subNames : undefined);
   }
   return emitFeCoreTextCellDisplay(key);
 }

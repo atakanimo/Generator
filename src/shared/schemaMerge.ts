@@ -26,8 +26,20 @@ export interface CodeSchemaField {
   relationEntityName?: string;
   relationProperty?: string;
   relationPopulateFields?: string[];
+  relationPropertyObjectFields?: Array<{
+    name: string;
+    type: string;
+    required: boolean;
+    trim?: boolean;
+  }>;
   trim?: boolean;
   unique?: boolean;
+  objectFields?: Array<{
+    name: string;
+    type: string;
+    required: boolean;
+    trim?: boolean;
+  }>;
 }
 
 export interface MergedFieldConfig extends CodeSchemaField {
@@ -151,12 +163,14 @@ export function enrichFieldWithUIConfig(field: CodeSchemaField): MergedFieldConf
   const suggestedArrayComponent: UIComponent = isOwnershipField ? 'Select' : 'MultiSelect';
   const isRelation = field.includeRelation === true && Boolean(field.relationEntityName) && field.type.toLowerCase() === 'schema';
 
+  const isObjectField = field.type.toLowerCase() === 'object';
+
   return {
     ...field,
     label: formatLabel(field.name),
     uiComponent: isRelation ? 'Autocomplete' : field.isArray ? suggestedArrayComponent : getComponentForType(field),
     showInTable: true,
-    isSearchable: true,
+    isSearchable: !isObjectField,
     filterType: defaultFilterType,
     defaultValue: '',
     isReadonly: isSystemReadonly,
@@ -227,6 +241,8 @@ export function mergeSchema(
           ? normalizedCodeField.relationEntityName
           : savedField.relationEntityName;
 
+      const isObjectField = String(normalizedCodeField.type).toLowerCase() === 'object';
+
       const merged: MergedFieldConfig = {
         ...savedField,
         type: normalizedCodeField.type,
@@ -239,7 +255,12 @@ export function mergeSchema(
             ? normalizedCodeField.relationProperty
             : savedField.relationProperty,
         relationPopulateFields: savedField.relationPopulateFields,
-        isSearchable: savedField.isSearchable !== undefined ? savedField.isSearchable : true,
+        relationPropertyObjectFields:
+          normalizedCodeField.relationPropertyObjectFields !== undefined
+            ? normalizedCodeField.relationPropertyObjectFields
+            : savedField.relationPropertyObjectFields,
+        // Object fields are not filterable; if a field became an object, drop stale searchable config.
+        isSearchable: isObjectField ? false : savedField.isSearchable !== undefined ? savedField.isSearchable : true,
         filterType: savedField.filterType || enrichFieldWithUIConfig(normalizedCodeField).filterType,
         defaultValue: savedField.defaultValue ?? '',
         isReadonly: savedField.isReadonly ?? enrichFieldWithUIConfig(normalizedCodeField).isReadonly,
@@ -248,7 +269,9 @@ export function mergeSchema(
         relationType: savedField.relationType,
         showInTable: savedField.showInTable !== undefined ? savedField.showInTable : true,
         trim: normalizedCodeField.trim !== undefined ? normalizedCodeField.trim : savedField.trim,
-        unique: normalizedCodeField.unique !== undefined ? normalizedCodeField.unique : savedField.unique
+        unique: normalizedCodeField.unique !== undefined ? normalizedCodeField.unique : savedField.unique,
+        // Embedded object sub-fields come from the parsed model file (source of truth); never the stale manifest.
+        objectFields: normalizedCodeField.objectFields ?? savedField.objectFields
       };
       return sanitizeFieldRelationMeta(normalizeMongoIdField(merged, sourceType));
     }

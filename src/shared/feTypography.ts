@@ -56,3 +56,37 @@ export function emitFeCoreTextCellArrayExpr(key: string): string {
   const placeholder = emitFeCoreTextPlaceholder();
   return `{(() => {\n  const v = ${key};\n  return Array.isArray(v) && v.length > 0 ? (\n    <CoreText variant='${FE_TEXT_VARIANT.tableCell}' noWrap>\n      {v.join(', ')}\n    </CoreText>\n  ) : (\n    ${placeholder}\n  );\n})()}`;
 }
+
+function emitObjectSubFieldPickExpr(subFieldNames?: string[]): string {
+  return subFieldNames && subFieldNames.length > 0
+    ? `[${subFieldNames.map(n => `o['${n.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}']`).join(', ')}]`
+    : `Object.values(o)`;
+}
+
+/**
+ * Scalar or embedded object → display string (e.g. `{ tr, en }` → `"Altın / Gold"`).
+ * When `subFieldNames` is provided, values are picked in that order; otherwise `Object.values`.
+ */
+export function emitFeFormatScalarOrObjectStringExpr(valueExpr: string, subFieldNames?: string[]): string {
+  const pick = emitObjectSubFieldPickExpr(subFieldNames);
+  return `(() => {
+  const v = ${valueExpr};
+  if (v == null || v === '') return '';
+  if (typeof v !== 'object' || Array.isArray(v)) return String(v);
+  const o = v as Record<string, unknown>;
+  const parts = ${pick}
+    .filter((x) => x != null && x !== '')
+    .map((x) => String(x));
+  return parts.length > 0 ? parts.join(' / ') : '';
+})()`;
+}
+
+/**
+ * Embedded object cell (e.g. `displayText: { tr, en }`).
+ * Rendering a raw object as a JSX child throws in React, so we join non-empty sub-values.
+ */
+export function emitFeCoreTextCellObjectExpr(key: string, subFieldNames?: string[]): string {
+  const formatted = emitFeFormatScalarOrObjectStringExpr(key, subFieldNames);
+  const placeholder = emitFeCoreTextPlaceholder();
+  return `{(() => {\n  const text = ${formatted};\n  return text ? (\n    <CoreText variant='${FE_TEXT_VARIANT.tableCell}' noWrap title={text}>\n      {text}\n    </CoreText>\n  ) : (\n    ${placeholder}\n  );\n})()}`;
+}

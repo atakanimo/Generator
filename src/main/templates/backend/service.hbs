@@ -20,12 +20,12 @@ export async function getAll(filters?: {{entityName}}ListBody) {
   return {{camelEntityName}}Crud.getAllPaginated(filtersQuery, {
     limit,
     page,
-    sort: resolveListSort(sortBy, sortOrder, { createdAt: -1, _id: -1 }){{beServicePopulateOptionLine fields}}
+    sort: resolveListSort(sortBy, sortOrder, { createdAt: -1, _id: -1 }){{beServicePopulateOptionLine fields}}{{beServiceLeanOptionLine needsMongooseDocumentLean}}
   });
 }
 
 export async function getById(id: string) {
-  return {{camelEntityName}}Crud.getById(id{{beServiceGetByIdPopulateArgs fields}});
+  return {{camelEntityName}}Crud.getById(id{{beServiceGetByIdPopulateArgs fields needsMongooseDocumentLean}});
 }
 
 export async function find<T = I{{entityName}}Model>(

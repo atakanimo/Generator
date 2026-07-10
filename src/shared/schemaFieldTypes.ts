@@ -1,5 +1,12 @@
 export type GeneratorSourceType = 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null | undefined;
 
+export type ObjectSubFieldLike = {
+  name?: string;
+  type?: string;
+  required?: boolean;
+  trim?: boolean;
+};
+
 export type SchemaFieldLike = {
   name?: string;
   type?: string;
@@ -7,7 +14,62 @@ export type SchemaFieldLike = {
   isArray?: boolean;
   hiddenFromCreate?: boolean;
   hiddenFromUpdate?: boolean;
+  objectFields?: ObjectSubFieldLike[];
 };
+
+/** Normalize a sub-field type token ('String' | 'string' | 'Number' …) to a TS primitive name. */
+export function objectSubFieldTsType(type: unknown): 'string' | 'number' | 'boolean' {
+  const t = String(type ?? '').toLowerCase();
+  if (t === 'number') return 'number';
+  if (t === 'boolean') return 'boolean';
+  return 'string';
+}
+
+/** Usable embedded-object sub-fields (named only). Returns [] when not an object field. */
+export function getObjectSubFields(field: { type?: string; objectFields?: ObjectSubFieldLike[] }): ObjectSubFieldLike[] {
+  if (String(field?.type ?? '').toLowerCase() !== 'object') return [];
+  if (!Array.isArray(field.objectFields)) return [];
+  return field.objectFields.filter(s => String(s?.name ?? '').trim() !== '');
+}
+
+/** TS inline type for an embedded object field, e.g. `{ tr: string; en: string }`. Falls back to `unknown`. */
+export function emitObjectTsLiteral(field: { type?: string; objectFields?: ObjectSubFieldLike[] }): string {
+  const subs = getObjectSubFields(field);
+  if (subs.length === 0) return 'unknown';
+  const parts = subs.map(s => {
+    const name = String(s.name).trim();
+    const optional = s.required ? '' : '?';
+    return `${name}${optional}: ${objectSubFieldTsType(s.type)}`;
+  });
+  return `{ ${parts.join('; ')} }`;
+}
+
+/** Zod schema for an embedded object field, e.g. `z.object({ tr: z.string(), en: z.string() }).strict()`. */
+export function emitObjectZodLiteral(field: { type?: string; objectFields?: ObjectSubFieldLike[] }): string {
+  const subs = getObjectSubFields(field);
+  if (subs.length === 0) return 'z.record(z.string(), z.unknown())';
+  const parts = subs.map(s => {
+    const name = String(s.name).trim();
+    const prim = objectSubFieldTsType(s.type);
+    const zod = prim === 'number' ? 'z.number()' : prim === 'boolean' ? 'z.boolean()' : 'z.string()';
+    const suffix = s.required ? '' : '.optional()';
+    return `${name}: ${zod}${suffix}`;
+  });
+  return `z.object({ ${parts.join(', ')} }).strict()`;
+}
+
+/** JS object-literal default for an embedded object field, e.g. `{ tr: '', en: '' }`. */
+export function emitObjectJsonDefault(field: { type?: string; objectFields?: ObjectSubFieldLike[] }): string {
+  const subs = getObjectSubFields(field);
+  if (subs.length === 0) return '{}';
+  const parts = subs.map(s => {
+    const name = String(s.name).trim();
+    const prim = objectSubFieldTsType(s.type);
+    const val = prim === 'number' ? '0' : prim === 'boolean' ? 'false' : "''";
+    return `${name}: ${val}`;
+  });
+  return `{ ${parts.join(', ')} }`;
+}
 
 export function isMongooseSourceType(sourceType: unknown): boolean {
   return String(sourceType ?? '') === 'nodejs-mongoose';
@@ -62,7 +124,7 @@ export function emitBackendInterfacePropLine(field: SchemaFieldLike): string {
   const name = String(field.name ?? '').trim();
   if (!name) return '';
   const optional = field.required ? '' : '?';
-  const base = schemaFieldToBackendTsType(field.type);
+  const base = String(field.type ?? '').toLowerCase() === 'object' ? emitObjectTsLiteral(field) : schemaFieldToBackendTsType(field.type);
   const ts = field.isArray ? `${base}[]` : base;
   return `  ${name}${optional}: ${ts};\n`;
 }

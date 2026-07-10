@@ -5,6 +5,9 @@ import {
   isMongooseSourceType,
   resolvePrimaryKeyFieldName,
   resolvePrimaryKeyMemberAccess,
+  emitObjectTsLiteral,
+  emitObjectJsonDefault,
+  type ObjectSubFieldLike,
 } from '../../shared/schemaFieldTypes.js';
 import {
   emitFeTableFilterFieldAttrs,
@@ -41,6 +44,7 @@ export function registerFrontendHandlebarsHelpers(): void {
     hiddenFromUpdate?: boolean;
     hiddenFromCreate?: boolean;
     isReadonly?: boolean;
+    objectFields?: ObjectSubFieldLike[];
   };
 
   const feFieldValueTsType = (field: FeField): string => {
@@ -57,6 +61,8 @@ export function registerFrontendHandlebarsHelpers(): void {
       base = 'string';
     } else if (t === 'date') {
       base = 'Date';
+    } else if (t === 'object') {
+      base = emitObjectTsLiteral(field);
     } else {
       base = String(field.type || 'string');
     }
@@ -170,6 +176,18 @@ export function registerFrontendHandlebarsHelpers(): void {
     return new Handlebars.SafeString(`delete ${v}['${key}'];`);
   });
 
+  /** Mongo: DataGrid sets row.id from _id — strip from JSON draft / save (PK is in URL, not body). */
+  Handlebars.registerHelper('feDeleteDataGridRowKeyOnVar', (varName: unknown, sourceType: unknown) => {
+    if (!isMongooseSourceType(sourceType)) return '';
+    const v = String(varName || '').trim() || 'obj';
+    return new Handlebars.SafeString(`delete ${v}.id;`);
+  });
+
+  Handlebars.registerHelper('feModalDeleteDataGridRowKeyLine', (sourceType: unknown) => {
+    if (!isMongooseSourceType(sourceType)) return '';
+    return new Handlebars.SafeString(`delete dataToSave.id;`);
+  });
+
   /**
    * Normal protected API: ownership `userId` is server-scoped — remove from JSON draft/save object.
    * Admin modals keep `userId` in the payload when present.
@@ -233,6 +251,7 @@ export function registerFrontendHandlebarsHelpers(): void {
       else if (t === 'boolean') placeholder = 'false';
       else if (t === 'date') placeholder = "''";
       else if (t === 'schema') placeholder = "''";
+      else if (t === 'object') placeholder = emitObjectJsonDefault(f as { type?: string; objectFields?: ObjectSubFieldLike[] });
 
       out += `      if (initialData['${rawName}'] === undefined) initialData['${rawName}'] = ${placeholder};\n`;
     }
@@ -336,7 +355,15 @@ export function registerFrontendHandlebarsHelpers(): void {
       '  if (row === null || typeof row !== \'object\' || Array.isArray(row)) return null;',
       '  if (typeof ArrayBuffer !== \'undefined\' && ArrayBuffer.isView(row as ArrayBufferView)) return null;',
       '  if (Object.prototype.toString.call(row) !== \'[object Object]\') return null;',
-      '  return { ...(row as Record<string, any>) };',
+      '  const clone = { ...(row as Record<string, any>) };',
+      ...(isMongoose
+        ? [
+            '  if (clone._id != null && clone._id !== \'\') {',
+            '    delete clone.id;',
+            '  }',
+          ]
+        : []),
+      '  return clone;',
       '}',
       '',
     ].join('\n');
@@ -388,6 +415,8 @@ export function registerFrontendHandlebarsHelpers(): void {
       isArray?: boolean;
       includeRelation?: boolean;
       relationEntityName?: string;
+      relationPropertyObjectFields?: Array<{ name?: string }>;
+      objectFields?: Array<{ name?: string }>;
     };
     if (!f?.name) return '';
     return new Handlebars.SafeString(emitFeTableRowCellJsx(f, 'item'));

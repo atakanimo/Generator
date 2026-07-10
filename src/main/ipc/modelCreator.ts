@@ -11,31 +11,16 @@ import { getCustomBlockMarkersPresentInSource, getDefaultCustomBlockMarkerNames 
 import {
   resolveMainMongooseSchemaName,
   extractMainSchemaRegions,
-  mainSchemaFieldsInner
+  mainSchemaFieldsInner,
+  parseMongooseEmbeddedObjectSubFields,
+  mongooseEmbeddedObjectRequired
 } from '../utils/mongooseSchemaExtract.js';
+import type { ModelData, ModelField, ModelObjectSubField } from '../../shared/modelTypes.js';
+import { normalizeModelFields } from '../../shared/modelTypes.js';
 import { SourceType } from './projectScanner.js';
 import { parseModelFile } from './schemaParser.js';
 
-export interface ModelField {
-  name: string;
-  type: 'String' | 'Number' | 'Boolean' | 'Date' | 'ObjectId' | 'Array';
-  required: boolean;
-  unique: boolean;
-  trim: boolean;
-  displayText?: string;
-  ref?: string; // Mongoose ref (e.g., "User", "Symbol") - used in schema definition
-}
-
-export interface ModelData {
-  modelName: string;
-  fields: ModelField[];
-  hasInitializeFunction: boolean;
-  initializeData?: Array<Record<string, string>>;
-  timestamps?: {
-    createdAt?: boolean;
-    updatedAt?: boolean;
-  };
-}
+export type { ModelData, ModelField, ModelObjectSubField } from '../../shared/modelTypes.js';
 
 export interface CreateModelResult {
   success: boolean;
@@ -47,6 +32,188 @@ export interface UpdateModelResult {
   success: boolean;
   filePath?: string;
   error?: string;
+}
+
+type TemplateModelField = {
+  name: string;
+  mongooseType: string;
+  tsType: string;
+  required: boolean;
+  unique: boolean;
+  trim: boolean;
+  ref?: string;
+  isObject: boolean;
+  objectFields?: Array<{
+    name: string;
+    mongooseType: string;
+    tsType: string;
+    required: boolean;
+    trim: boolean;
+  }>;
+};
+
+function mapObjectSubFieldToTemplate(sub: ModelObjectSubField) {
+  let mongooseType = 'String';
+  let tsType = 'string';
+  if (sub.type === 'Number') {
+    mongooseType = 'Number';
+    tsType = 'number';
+  } else if (sub.type === 'Boolean') {
+    mongooseType = 'Boolean';
+    tsType = 'boolean';
+  }
+  return {
+    name: sub.name,
+    mongooseType,
+    tsType,
+    required: sub.required,
+    trim: sub.trim && sub.type === 'String'
+  };
+}
+
+function buildTemplateModelFields(fields: ModelField[]): TemplateModelField[] {
+  return fields.map(field => {
+    if (field.type === 'Object') {
+      const objectFields = (field.objectFields ?? []).map(mapObjectSubFieldToTemplate);
+      return {
+        name: field.name,
+        mongooseType: '',
+        tsType: '',
+        required: field.required,
+        unique: field.unique,
+        trim: false,
+        isObject: true,
+        objectFields
+      };
+    }
+
+    let mongooseType = 'String';
+    if (field.type === 'Number') mongooseType = 'Number';
+    else if (field.type === 'Boolean') mongooseType = 'Boolean';
+    else if (field.type === 'Date') mongooseType = 'Date';
+    else if (field.type === 'ObjectId') mongooseType = 'Schema.Types.ObjectId';
+    else if (field.type === 'Array') mongooseType = '[String]';
+
+    let tsType = 'string';
+    if (field.type === 'Number') tsType = 'number';
+    else if (field.type === 'Boolean') tsType = 'boolean';
+    else if (field.type === 'Date') tsType = 'Date';
+    else if (field.type === 'ObjectId') tsType = 'mongoose.Types.ObjectId';
+    else if (field.type === 'Array') tsType = 'string[]';
+
+    return {
+      name: field.name,
+      mongooseType,
+      tsType,
+      required: field.required,
+      unique: field.unique,
+      trim: field.trim && field.type === 'String',
+      ref: field.ref,
+      isObject: false
+    };
+  });
+}
+
+function escapeJsString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function formatScalarInitLiteral(
+  type: ModelField['type'] | ModelObjectSubField['type'],
+  value: unknown,
+  trim?: boolean
+): string {
+  if (value === undefined || value === null || value === '') {
+    if (type === 'Number') return '0';
+    if (type === 'Boolean') return 'false';
+    if (type === 'Array') return '[]';
+    return "''";
+  }
+
+  if (type === 'Number') {
+    const n = typeof value === 'number' ? value : Number(value);
+    return Number.isNaN(n) ? '0' : String(n);
+  }
+
+  if (type === 'Boolean') {
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    return String(value).toLowerCase() === 'true' ? 'true' : 'false';
+  }
+
+  if (type === 'Array') return '[]';
+
+  const str = trim ? String(value).trim() : String(value);
+  return `'${escapeJsString(str)}'`;
+}
+
+function formatInitFieldLiteral(field: ModelField, value: unknown): string {
+  if (field.type === 'Object' && field.objectFields?.length) {
+    const obj =
+      value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+    const parts = field.objectFields.map(sub => {
+      return `${sub.name}: ${formatScalarInitLiteral(sub.type, obj[sub.name], sub.trim)}`;
+    });
+    return `{ ${parts.join(', ')} }`;
+  }
+
+  return formatScalarInitLiteral(field.type, value, field.trim);
+}
+
+function extractFieldInnerBlock(schemaFieldsContent: string, fieldName: string): string | null {
+  const fieldPattern = new RegExp(`(${fieldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})\\s*:\\s*\\{`, 'i');
+  const fieldMatch = schemaFieldsContent.match(fieldPattern);
+  if (!fieldMatch) return null;
+
+  const fieldStart = fieldMatch.index! + fieldMatch[0].length;
+  let braceCount = 1;
+  let inString = false;
+  let stringChar = '';
+  let fieldEnd = fieldStart;
+
+  for (let i = fieldStart; i < schemaFieldsContent.length; i++) {
+    const char = schemaFieldsContent[i];
+    const prevChar = i > 0 ? schemaFieldsContent[i - 1] : '';
+
+    if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
+      if (!inString) {
+        inString = true;
+        stringChar = char;
+      } else if (char === stringChar) {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (!inString) {
+      if (char === '{') braceCount++;
+      if (char === '}') {
+        braceCount--;
+        if (braceCount === 0) {
+          fieldEnd = i;
+          break;
+        }
+      }
+    }
+  }
+
+  return schemaFieldsContent.substring(fieldStart, fieldEnd);
+}
+
+function parseSimpleObjectLiteral(raw: string): Record<string, string> {
+  const inner = raw.trim().replace(/^\{|\}$/g, '').trim();
+  const out: Record<string, string> = {};
+  if (!inner) return out;
+
+  const pairPattern = /(\w+)\s*:\s*('(?:\\'|[^'])*'|"(?:\\"|[^"])*"|[^,}]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = pairPattern.exec(inner)) !== null) {
+    let val = match[2].trim();
+    if ((val.startsWith("'") && val.endsWith("'")) || (val.startsWith('"') && val.endsWith('"'))) {
+      val = val.slice(1, -1);
+    }
+    out[match[1]] = val;
+  }
+  return out;
 }
 
 /**
@@ -62,10 +229,9 @@ function generateMongooseModel(modelData: ModelData): string {
   const modelExportName = pascalName;
   const initializeFunctionName = `initialize${pascalName}`;
 
-  // Check if ModelType pattern exists (value and displayText fields)
   const hasValueField = fields.some(f => f.name === 'value');
-  const hasDisplayTextField = fields.some(f => f.name === 'displayText');
-  const hasModelTypePattern = hasValueField && hasDisplayTextField;
+  const displayTextField = fields.find(f => f.name === 'displayText');
+  const hasModelTypePattern = hasValueField && displayTextField?.type === 'String';
 
   // Build interface extends clause
   let interfaceExtends = 'Document';
@@ -73,73 +239,24 @@ function generateMongooseModel(modelData: ModelData): string {
     interfaceExtends = 'ModelType, Document';
   }
 
-  // Prepare fields for template with type mappings
-  const templateFields = fields.map(field => {
-    // Mongoose type mapping
-    let mongooseType = 'String';
-    if (field.type === 'Number') mongooseType = 'Number';
-    else if (field.type === 'Boolean') mongooseType = 'Boolean';
-    else if (field.type === 'Date') mongooseType = 'Date';
-    else if (field.type === 'ObjectId') mongooseType = 'Schema.Types.ObjectId';
-    else if (field.type === 'Array') mongooseType = '[String]';
-
-    // TypeScript type mapping
-    let tsType = 'string';
-    if (field.type === 'Number') tsType = 'number';
-    else if (field.type === 'Boolean') tsType = 'boolean';
-    else if (field.type === 'Date') tsType = 'Date';
-    else if (field.type === 'ObjectId') tsType = 'mongoose.Types.ObjectId';
-    else if (field.type === 'Array') tsType = 'string[]';
-
-    return {
-      name: field.name,
-      mongooseType,
-      tsType,
-      required: field.required,
-      unique: field.unique,
-      trim: field.trim && field.type === 'String',
-      ref: field.ref // Include ref if provided (for ObjectId type fields)
-    };
+  const modelFields = buildTemplateModelFields(fields).filter(f => {
+    const n = String(f.name).trim();
+    return n !== '_id' && n !== 'createdAt' && n !== 'updatedAt';
   });
 
-  // Prepare initialize data for template
+  const initFields = fields.filter(f => {
+    const n = String(f.name).trim();
+    return n !== '_id' && n !== 'createdAt' && n !== 'updatedAt';
+  });
+
   const templateInitializeData =
     hasInitializeFunction && initializeData && initializeData.length > 0
       ? initializeData.map(item => {
-          // Create object with all field values from the item, preserving types
-          const dataItem: Record<string, any> = {};
-          fields.forEach(field => {
-            const value = item[field.name];
-            // Convert value based on field type
-            if (value === undefined || value === null || value === '') {
-              // Use default based on type
-              if (field.type === 'Number') {
-                dataItem[field.name] = 0;
-              } else if (field.type === 'Boolean') {
-                dataItem[field.name] = false;
-              } else if (field.type === 'Array') {
-                dataItem[field.name] = [];
-              } else {
-                dataItem[field.name] = '';
-              }
-            } else {
-              // Convert string values to appropriate types
-              if (field.type === 'Number') {
-                dataItem[field.name] = isNaN(Number(value)) ? 0 : Number(value);
-              } else if (field.type === 'Boolean') {
-                // Handle string "true"/"false" or actual boolean
-                if (typeof value === 'string') {
-                  dataItem[field.name] = value.toLowerCase() === 'true';
-                } else {
-                  dataItem[field.name] = Boolean(value);
-                }
-              } else {
-                dataItem[field.name] = String(value);
-              }
-            }
-          });
-          log(`Prepared initialize data item: ${JSON.stringify(dataItem)}`, 'info');
-          return dataItem;
+          const initLines = initFields
+            .map(f => `          ${f.name}: ${formatInitFieldLiteral(f, item[f.name])}`)
+            .join(',\n');
+          log(`Prepared initialize data item: ${initLines}`, 'info');
+          return { initLines };
         })
       : [];
 
@@ -175,11 +292,6 @@ function generateMongooseModel(modelData: ModelData): string {
   log(`Has timestamps: ${hasTimestamps}`, 'info');
 
   // model.hbs reads `modelFields` (same as BackendGenerator); exclude audit fields from schema body
-  const modelFields = templateFields.filter(f => {
-    const n = String(f.name).trim();
-    return n !== '_id' && n !== 'createdAt' && n !== 'updatedAt';
-  });
-
   // Prepare template context
   const templateContext = {
     modelName,
@@ -278,80 +390,60 @@ export function parseModelToModelData(filePath: string, sourceType: SourceType):
     const modelFields: ModelField[] = schema.fields
       .filter(f => !['_id', 'createdAt', 'updatedAt'].includes(f.name))
       .map(field => {
-        // Map generic types to ModelField types
         let modelFieldType: ModelField['type'] = 'String';
-        if (field.type === 'number') modelFieldType = 'Number';
+        if (field.type === 'object') modelFieldType = 'Object';
+        else if (field.type === 'number') modelFieldType = 'Number';
         else if (field.type === 'boolean') modelFieldType = 'Boolean';
         else if (field.type === 'date') modelFieldType = 'Date';
         else if (field.type === 'schema' && !field.isArray) modelFieldType = 'ObjectId';
         else if (field.isArray) modelFieldType = 'Array';
 
-        // Extract ref from relationEntityName if it's a schema type
         let ref: string | undefined = undefined;
         if (field.type === 'schema' && field.relationEntityName) {
           ref = field.relationEntityName;
         }
 
-        // Parse unique and trim from the field definition in the content
         let isUnique = false;
         let hasTrim = false;
+        let objectFields: ModelObjectSubField[] | undefined;
 
         if (schemaFieldsContent) {
-          // Find the field definition: fieldName: { ... } (handle nested objects)
-          const fieldPattern = new RegExp(`(${field.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})\\s*:\\s*\\{`, 'i');
-          const fieldMatch = schemaFieldsContent.match(fieldPattern);
+          const fieldDef = extractFieldInnerBlock(schemaFieldsContent, field.name);
 
-          if (fieldMatch) {
-            const fieldStart = fieldMatch.index! + fieldMatch[0].length;
-            // Find the matching closing brace for this field definition
-            let braceCount = 1;
-            let inString = false;
-            let stringChar = '';
-            let fieldEnd = fieldStart;
-
-            for (let i = fieldStart; i < schemaFieldsContent.length; i++) {
-              const char = schemaFieldsContent[i];
-              const prevChar = i > 0 ? schemaFieldsContent[i - 1] : '';
-
-              if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
-                if (!inString) {
-                  inString = true;
-                  stringChar = char;
-                } else if (char === stringChar) {
-                  inString = false;
-                }
-                continue;
+          if (fieldDef) {
+            if (modelFieldType === 'Object') {
+              const parsedSubFields = parseMongooseEmbeddedObjectSubFields(fieldDef);
+              if (parsedSubFields) {
+                objectFields = parsedSubFields.map(sub => ({
+                  name: sub.name,
+                  type: sub.type,
+                  required: sub.required,
+                  trim: sub.trim
+                }));
               }
-
-              if (!inString) {
-                if (char === '{') braceCount++;
-                if (char === '}') {
-                  braceCount--;
-                  if (braceCount === 0) {
-                    fieldEnd = i;
-                    break;
-                  }
-                }
+              isUnique = /unique\s*:\s*(true|1)/i.test(fieldDef.replace(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g, ''));
+            } else {
+              isUnique = /unique\s*:\s*(true|1)/i.test(fieldDef);
+              if (modelFieldType === 'String') {
+                hasTrim = /trim\s*:\s*(true|1)/i.test(fieldDef);
               }
-            }
-
-            const fieldDef = schemaFieldsContent.substring(fieldStart, fieldEnd);
-            // Check for unique: true
-            const uniquePattern = /unique\s*:\s*(true|1)/i;
-            isUnique = uniquePattern.test(fieldDef);
-
-            // Check for trim: true (only for String types)
-            if (modelFieldType === 'String') {
-              const trimPattern = /trim\s*:\s*(true|1)/i;
-              hasTrim = trimPattern.test(fieldDef);
             }
           }
-        } else {
-          // Fallback: default trim to true for String fields if we can't parse
-          hasTrim = modelFieldType === 'String';
+        } else if (modelFieldType === 'String') {
+          hasTrim = true;
         }
 
-        return {
+        if (modelFieldType === 'Object' && !objectFields?.length && Array.isArray((field as { objectFields?: unknown }).objectFields)) {
+          const fromSchema = (field as { objectFields: Array<{ name: string; type: string; required: boolean; trim?: boolean }> }).objectFields;
+          objectFields = fromSchema.map(sub => ({
+            name: sub.name,
+            type: sub.type === 'number' ? 'Number' : sub.type === 'boolean' ? 'Boolean' : 'String',
+            required: sub.required,
+            trim: sub.trim ?? sub.type === 'string'
+          }));
+        }
+
+        const result: ModelField = {
           name: field.name,
           type: modelFieldType,
           required: field.required,
@@ -359,11 +451,17 @@ export function parseModelToModelData(filePath: string, sourceType: SourceType):
           trim: hasTrim,
           ref
         };
+
+        if (objectFields?.length) {
+          result.objectFields = objectFields;
+        }
+
+        return result;
       });
 
     // Parse initialize function if it exists
     let hasInitializeFunction = false;
-    let initializeData: Array<Record<string, string>> = [];
+    let initializeData: Array<Record<string, unknown>> = [];
 
     // Find initialize function pattern: export const initializeModelName = async (): Promise<void> => { ... }
     // More flexible pattern to match the entire function body
@@ -449,22 +547,25 @@ export function parseModelToModelData(filePath: string, sourceType: SourceType):
                   braceCount--;
                   if (braceCount === 0) {
                     const objectContent = dataArrayContent.substring(objectStart + 1, i);
-                    const dataItem: Record<string, string> = {};
+                    const dataItem: Record<string, unknown> = {};
 
-                    // Parse each field: fieldName: 'value' or fieldName: value
-                    const fieldPattern = /(\w+)\s*:\s*([^,}]+(?:\{[^}]*\}[^,}]*)*)/g;
+                    const fieldPattern = /(\w+)\s*:\s*(\{[^}]*\}|'(?:\\'|[^'])*'|"(?:\\"|[^"])*"|[^,}]+)/g;
                     let fieldMatch: RegExpExecArray | null;
 
                     while ((fieldMatch = fieldPattern.exec(objectContent)) !== null) {
                       const fieldName = fieldMatch[1];
                       let fieldValue = fieldMatch[2].trim();
 
-                      // Remove quotes if present (handle both single and double quotes)
-                      if ((fieldValue.startsWith("'") && fieldValue.endsWith("'")) || (fieldValue.startsWith('"') && fieldValue.endsWith('"'))) {
-                        fieldValue = fieldValue.slice(1, -1);
+                      if (fieldValue.startsWith('{')) {
+                        dataItem[fieldName] = parseSimpleObjectLiteral(fieldValue);
+                      } else if (
+                        (fieldValue.startsWith("'") && fieldValue.endsWith("'")) ||
+                        (fieldValue.startsWith('"') && fieldValue.endsWith('"'))
+                      ) {
+                        dataItem[fieldName] = fieldValue.slice(1, -1);
+                      } else {
+                        dataItem[fieldName] = fieldValue;
                       }
-
-                      dataItem[fieldName] = fieldValue;
                     }
 
                     if (Object.keys(dataItem).length > 0) {
@@ -656,7 +757,7 @@ export function parseModelToModelData(filePath: string, sourceType: SourceType):
       success: true,
       modelData: {
         modelName,
-        fields: modelFields,
+        fields: normalizeModelFields(modelFields),
         hasInitializeFunction,
         initializeData: initializeData.length > 0 ? initializeData : undefined,
         timestamps: timestampsConfig.createdAt || timestampsConfig.updatedAt ? timestampsConfig : undefined
