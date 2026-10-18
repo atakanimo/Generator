@@ -4,8 +4,9 @@
  */
 
 import { BackendGenerator, BackendGenerateOptions } from '../generators/BackendGenerator.js';
-import { SchemaDefinition } from './schemaParser.js';
-import { parseBaseUrlFromBackend } from './frontendGenerator.js';
+import type { NormalizedModel } from '../../shared/normalizedModel.js';
+import type { BackendSelectedFiles, GenerateBackendResult } from '../../shared/ipcTypes.js';
+import { parseBaseUrlFromBackend } from '../utils/backendAppFile.js';
 import { log } from '../utils/logger.js';
 
 function logInfo(message: string, context?: Record<string, unknown>): void {
@@ -16,28 +17,14 @@ function logError(message: string, context?: Record<string, unknown>): void {
   log(`${message}${context ? ` | ${JSON.stringify(context)}` : ''}`, 'error');
 }
 
-export interface GenerateBackendResult {
-  success: boolean;
-  files?: {
-    model?: string;
-    crud?: string;
-    filters?: string;
-    types?: string;
-    service?: string;
-    serviceAdmin?: string;
-    schema?: string;
-    route?: string;
-    routeAdmin?: string;
-  };
-  error?: string;
-}
+export type { GenerateBackendResult };
 
 /**
  * Generate backend code (routes, service, types) from templates
  * This function maintains backward compatibility with the old API
  */
 export function generateBackend(
-  schema: SchemaDefinition,
+  schema: NormalizedModel,
   projectPath: string,
   isProtectedRoute: boolean,
   sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
@@ -45,17 +32,7 @@ export function generateBackend(
   baseUrl?: string,
   updateExistingFiles?: boolean,
   isAdminUser?: boolean,
-  selectedFiles?: {
-    model?: boolean;
-    crud?: boolean;
-    filters?: boolean;
-    types?: boolean;
-    service?: boolean;
-    serviceAdmin?: boolean;
-    schema?: boolean;
-    route?: boolean;
-    routeAdmin?: boolean;
-  }
+  selectedFiles?: BackendSelectedFiles
 ): GenerateBackendResult {
   try {
     // Parse base URL from backend if not provided

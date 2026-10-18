@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -17,36 +17,101 @@ import {
   Checkbox,
   Divider,
   Alert,
-  Switch
+  Switch,
+  Autocomplete,
+  Chip
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
-import type { ModelData, ModelField, ModelObjectSubField } from '@shared/modelTypes';
-import { normalizeModelFields } from '@shared/modelTypes';
-
-export type { ModelData, ModelField, ModelObjectSubField } from '@shared/modelTypes';
+import type { NormalizedField, NormalizedModel, NormalizedObjectSubField } from '@shared/normalizedModel';
+import { typeTokenOf } from '@shared/fieldTypeToken';
+import {
+  EDITOR_FIELD_TYPES,
+  EDITOR_SUB_FIELD_TYPES,
+  editorSubTypeOf,
+  editorTypeHasDefault,
+  editorTypeOf,
+  isReservedFieldName,
+  newObjectSubField,
+  normalizeEditedField,
+  referenceTargetOf,
+  subReferenceOf,
+  withEditorSubType,
+  withEditorType,
+  withEnumValues,
+  withReferenceTarget,
+  withSubReference,
+  type EditorFieldType,
+  type EditorSubFieldType,
+  type ModelDraft
+} from '@shared/modelDraft';
 
 interface AddModelModalProps {
   open: boolean;
   onClose: () => void;
-  onSave: (modelData: ModelData) => Promise<void>;
+  onSave: (draft: ModelDraft) => Promise<void>;
   projectPath: string;
   sourceType: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null;
-  initialData?: ModelData | null;
+  initialData?: ModelDraft | null;
   isEditMode?: boolean;
   modelFilePath?: string;
 }
 
-const DEFAULT_FIELDS: ModelField[] = [
-  { name: 'value', type: 'String', required: true, unique: true, trim: true },
-  { name: 'displayText', type: 'String', required: true, trim: true }
+const DEFAULT_FIELDS: NormalizedField[] = [
+  { name: 'value', kind: 'string', isArray: false, required: true, unique: true, trim: true },
+  { name: 'displayText', kind: 'string', isArray: false, required: true, unique: false, trim: true }
 ];
 
-const defaultObjectSubField = (): ModelObjectSubField => ({
-  name: '',
-  type: 'String',
-  required: false,
-  trim: true
-});
+const newField = (): NormalizedField => ({ name: '', kind: 'string', isArray: false, required: false, unique: false, trim: false });
+
+/** Schema `default:` editor — typed by the field type; an enum field picks one of its values. */
+function SchemaDefaultInput({ field, onChange }: { field: NormalizedField; onChange: (value: NormalizedField['default']) => void }) {
+  const value = field.default;
+  const type = editorTypeOf(field);
+  const enumValues = field.enum?.values;
+  if (type === 'Boolean' || enumValues?.length) {
+    const options = type === 'Boolean' ? ['true', 'false'] : enumValues ?? [];
+    return (
+      <FormControl size='small' sx={{ minWidth: 140 }}>
+        <InputLabel>Default</InputLabel>
+        <Select
+          label='Default'
+          value={value === undefined || value === null ? '' : String(value)}
+          onChange={e => {
+            const raw = String(e.target.value);
+            onChange(raw === '' ? undefined : type === 'Boolean' ? raw === 'true' : raw);
+          }}
+        >
+          <MenuItem value=''>
+            <em>yok</em>
+          </MenuItem>
+          {options.map(o => (
+            <MenuItem key={o} value={o}>
+              {o}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+    );
+  }
+  return (
+    <TextField
+      label='Default'
+      size='small'
+      type={type === 'Number' ? 'number' : 'text'}
+      value={value === undefined || value === null ? '' : String(value)}
+      onChange={e => {
+        const raw = e.target.value;
+        if (raw === '') return onChange(undefined);
+        if (type === 'Number') {
+          const n = Number(raw);
+          return onChange(Number.isFinite(n) ? n : undefined);
+        }
+        onChange(raw);
+      }}
+      sx={{ width: 140 }}
+    />
+  );
+}
 
 function getObjectFieldValue(item: Record<string, unknown>, fieldName: string, subName: string): string {
   const raw = item[fieldName];
@@ -72,6 +137,10 @@ function setObjectFieldValue(
   return { ...item, [fieldName]: obj };
 }
 
+/** Sub-fields the editor shows; undefined for an object whose sub-fields the file does not declare. */
+const subFieldsOf = (field: NormalizedField): NormalizedObjectSubField[] | undefined =>
+  field.kind === 'object' ? field.object?.fields : undefined;
+
 const AddModelModal: React.FC<AddModelModalProps> = ({
   open,
   onClose,
@@ -81,23 +150,31 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
   isEditMode = false
 }) => {
   const [modelName, setModelName] = useState('');
-  const [fields, setFields] = useState<ModelField[]>(DEFAULT_FIELDS);
+  const [fields, setFields] = useState<NormalizedField[]>(DEFAULT_FIELDS);
   const [hasInitializeFunction, setHasInitializeFunction] = useState(false);
   const [initializeData, setInitializeData] = useState<Array<Record<string, unknown>>>([{}]);
   const [timestamps, setTimestamps] = useState({ createdAt: false, updatedAt: false });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Fields as loaded: an untouched field is saved exactly as parsed. */
+  const loadedFields = useRef(new Set<NormalizedField>());
 
   const isMongoose = sourceType === 'nodejs-mongoose';
 
   useEffect(() => {
     if (open && initialData) {
-      setModelName(initialData.modelName);
-      setFields(normalizeModelFields(initialData.fields.length > 0 ? initialData.fields : DEFAULT_FIELDS));
-      setHasInitializeFunction(initialData.hasInitializeFunction);
-      setInitializeData(initialData.initializeData && initialData.initializeData.length > 0 ? initialData.initializeData : [{}]);
-      setTimestamps(initialData.timestamps || { createdAt: false, updatedAt: false });
+      const loaded = initialData.model.fields.length > 0 ? initialData.model.fields : DEFAULT_FIELDS;
+      loadedFields.current = new Set(loaded);
+      setModelName(initialData.model.entityName);
+      setFields(loaded);
+      setHasInitializeFunction(Boolean(initialData.seed));
+      setInitializeData(initialData.seed?.data && initialData.seed.data.length > 0 ? initialData.seed.data : [{}]);
+      setTimestamps({
+        createdAt: initialData.model.timestamps?.createdAt ?? false,
+        updatedAt: initialData.model.timestamps?.updatedAt ?? false
+      });
     } else if (open && !initialData) {
+      loadedFields.current = new Set();
       setModelName('');
       setFields(DEFAULT_FIELDS);
       setHasInitializeFunction(false);
@@ -107,55 +184,38 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
   }, [open, initialData]);
 
   const handleAddField = () => {
-    setFields([...fields, { name: '', type: 'String', required: false, unique: false, trim: false }]);
+    setFields([...fields, newField()]);
   };
 
   const handleRemoveField = (index: number) => {
     setFields(fields.filter((_, i) => i !== index));
   };
 
-  const handleFieldChange = (index: number, patch: Partial<ModelField>) => {
-    const newFields = [...fields];
-    const current = { ...newFields[index], ...patch };
+  const updateField = (index: number, update: (field: NormalizedField) => NormalizedField) => {
+    setFields(fields.map((f, i) => (i === index ? update(f) : f)));
+  };
 
-    if (patch.type === 'Object') {
-      current.unique = false;
-      current.trim = false;
-      if (!current.objectFields?.length) {
-        current.objectFields = [defaultObjectSubField()];
-      }
-    } else if (patch.type && patch.type !== 'Object') {
-      delete current.objectFields;
-    }
+  const handleTypeChange = (index: number, type: Exclude<EditorFieldType, 'Other'>) => {
+    updateField(index, f => (editorTypeOf(f) === type ? f : withEditorType(f, type)));
+  };
 
-    newFields[index] = current;
-    setFields(newFields);
+  const updateObject = (index: number, patch: Partial<NonNullable<NormalizedField['object']>>) => {
+    updateField(index, f => ({ ...f, object: { ...f.object, ...patch } }));
   };
 
   const handleAddObjectSubField = (fieldIndex: number) => {
-    const newFields = [...fields];
-    const field = { ...newFields[fieldIndex] };
-    field.objectFields = [...(field.objectFields ?? []), defaultObjectSubField()];
-    newFields[fieldIndex] = field;
-    setFields(newFields);
+    updateField(fieldIndex, f => ({ ...f, object: { ...f.object, fields: [...(f.object?.fields ?? []), newObjectSubField()] } }));
   };
 
   const handleRemoveObjectSubField = (fieldIndex: number, subIndex: number) => {
-    const newFields = [...fields];
-    const field = { ...newFields[fieldIndex] };
-    field.objectFields = (field.objectFields ?? []).filter((_, i) => i !== subIndex);
-    newFields[fieldIndex] = field;
-    setFields(newFields);
+    updateField(fieldIndex, f => ({ ...f, object: { ...f.object, fields: (f.object?.fields ?? []).filter((_, i) => i !== subIndex) } }));
   };
 
-  const handleObjectSubFieldChange = (fieldIndex: number, subIndex: number, patch: Partial<ModelObjectSubField>) => {
-    const newFields = [...fields];
-    const field = { ...newFields[fieldIndex] };
-    const subs = [...(field.objectFields ?? [])];
-    subs[subIndex] = { ...subs[subIndex], ...patch };
-    field.objectFields = subs;
-    newFields[fieldIndex] = field;
-    setFields(newFields);
+  const updateSubField = (fieldIndex: number, subIndex: number, update: (sub: NormalizedObjectSubField) => NormalizedObjectSubField) => {
+    updateField(fieldIndex, f => ({
+      ...f,
+      object: { ...f.object, fields: (f.object?.fields ?? []).map((s, i) => (i === subIndex ? update(s) : s)) }
+    }));
   };
 
   const handleAddInitializeData = () => {
@@ -183,9 +243,16 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
   const validateFields = (): string | null => {
     for (const field of fields) {
       if (!field.name.trim()) return 'All fields must have a name';
+      if (isReservedFieldName(field.name)) {
+        return `"${field.name.trim()}" alan adı ayrılmıştır: kayıt kimliği JSON'da her zaman \`id\` (sözleşme K1).`;
+      }
+      const enumValues = field.enum?.values;
+      if (enumValues?.length && field.default != null && !enumValues.includes(String(field.default))) {
+        return `"${field.name}" varsayılanı enum değerlerinden biri olmalı.`;
+      }
 
-      if (field.type === 'Object') {
-        const subs = field.objectFields ?? [];
+      const subs = subFieldsOf(field);
+      if (subs) {
         if (subs.length === 0) return `Object field "${field.name}" must have at least one sub-field`;
         const names = new Set<string>();
         for (const sub of subs) {
@@ -205,8 +272,9 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
       for (const field of fields) {
         if (!field.required) continue;
 
-        if (field.type === 'Object') {
-          for (const sub of field.objectFields ?? []) {
+        const subs = subFieldsOf(field);
+        if (subs) {
+          for (const sub of subs) {
             if (!sub.required) continue;
             const val = getObjectFieldValue(item, field.name, sub.name);
             if (!val.trim()) {
@@ -217,7 +285,7 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
         }
 
         const raw = item[field.name];
-        if (field.type === 'Boolean') {
+        if (editorTypeOf(field) === 'Boolean') {
           if (raw === undefined || raw === null || raw === '') {
             return `Required field "${field.name}" must have a value in all initialize data items`;
           }
@@ -266,13 +334,14 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
           .map(item => {
             const completeItem: Record<string, unknown> = {};
             fields.forEach(field => {
-              if (field.type === 'Object') {
+              const subs = subFieldsOf(field);
+              if (subs) {
                 const existing = item[field.name];
                 const obj =
                   existing && typeof existing === 'object' && !Array.isArray(existing)
                     ? { ...(existing as Record<string, unknown>) }
                     : {};
-                for (const sub of field.objectFields ?? []) {
+                for (const sub of subs) {
                   obj[sub.name] = obj[sub.name] != null ? String(obj[sub.name]) : '';
                 }
                 completeItem[field.name] = obj;
@@ -285,14 +354,15 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
           })
           .filter(item =>
             fields.some(field => {
-              if (field.type === 'Object') {
+              if (subFieldsOf(field)) {
                 const obj = item[field.name];
                 if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
                 return Object.values(obj as Record<string, unknown>).some(v => String(v ?? '').trim() !== '');
               }
               const value = item[field.name];
-              if (field.type === 'Boolean') return value !== undefined && value !== null && value !== '';
-              if (field.type === 'Number') {
+              const type = editorTypeOf(field);
+              if (type === 'Boolean') return value !== undefined && value !== null && value !== '';
+              if (type === 'Number') {
                 return value !== undefined && value !== null && value !== '' && !Number.isNaN(Number(value));
               }
               return value != null && String(value).trim() !== '';
@@ -301,23 +371,22 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
 
         if (processed.length > 0) {
           resolvedInitializeData = processed;
-        } else if (isEditMode && initialData?.initializeData?.length) {
-          resolvedInitializeData = initialData.initializeData;
+        } else if (isEditMode && initialData?.seed?.data?.length) {
+          resolvedInitializeData = initialData.seed.data;
         }
       }
 
+      const base = initialData?.model;
+      const model: NormalizedModel = {
+        ...(base ?? { schemaVersion: 2 as const }),
+        entityName: modelName.trim(),
+        fields: fields.map(f => (loadedFields.current.has(f) ? f : normalizeEditedField(f)))
+      };
+      if (isMongoose && (base?.timestamps || timestamps.createdAt || timestamps.updatedAt)) model.timestamps = { ...timestamps };
+
       await onSave({
-        modelName: modelName.trim(),
-        fields: normalizeModelFields(
-          fields.map(f => ({
-            ...f,
-            name: f.name.trim(),
-            objectFields: f.type === 'Object' ? f.objectFields?.map(s => ({ ...s, name: s.name.trim() })) : undefined
-          }))
-        ),
-        hasInitializeFunction,
-        timestamps: isMongoose ? timestamps : undefined,
-        initializeData: resolvedInitializeData
+        model,
+        seed: hasInitializeFunction ? { data: resolvedInitializeData } : undefined
       });
       handleClose();
     } catch (err) {
@@ -383,7 +452,10 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
               </Button>
             </Box>
 
-            {fields.map((field, index) => (
+            {fields.map((field, index) => {
+              const type = editorTypeOf(field);
+              const subs = subFieldsOf(field);
+              return (
               <Box key={field.name || `field-${index}`} sx={{ mb: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant='subtitle2'>Field {index + 1}</Typography>
@@ -396,7 +468,7 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
                   <TextField
                     label='Field Name'
                     value={field.name}
-                    onChange={e => handleFieldChange(index, { name: e.target.value })}
+                    onChange={e => updateField(index, f => ({ ...f, name: e.target.value }))}
                     size='small'
                     sx={{ flex: 1, minWidth: 150 }}
                     required
@@ -405,31 +477,49 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
                   <FormControl size='small' sx={{ minWidth: 150 }}>
                     <InputLabel>Type</InputLabel>
                     <Select
-                      value={field.type}
+                      value={type}
                       label='Type'
-                      onChange={e => handleFieldChange(index, { type: e.target.value as ModelField['type'] })}
+                      onChange={e => {
+                        const next = e.target.value as EditorFieldType;
+                        if (next !== 'Other') handleTypeChange(index, next);
+                      }}
                     >
-                      <MenuItem value='String'>String</MenuItem>
-                      <MenuItem value='Number'>Number</MenuItem>
-                      <MenuItem value='Boolean'>Boolean</MenuItem>
-                      <MenuItem value='Date'>Date</MenuItem>
-                      <MenuItem value='ObjectId'>ObjectId</MenuItem>
-                      <MenuItem value='Array'>Array</MenuItem>
-                      <MenuItem value='Object'>Object</MenuItem>
+                      {EDITOR_FIELD_TYPES.map(t => (
+                        <MenuItem key={t} value={t}>
+                          {t}
+                        </MenuItem>
+                      ))}
+                      {type === 'Other' && (
+                        <MenuItem value='Other' disabled>
+                          {typeTokenOf(field) || field.kind} (dosyadan)
+                        </MenuItem>
+                      )}
                     </Select>
                   </FormControl>
 
                   <FormControlLabel
-                    control={<Checkbox checked={field.required} onChange={e => handleFieldChange(index, { required: e.target.checked })} />}
+                    control={<Checkbox checked={field.required} onChange={e => updateField(index, f => ({ ...f, required: e.target.checked }))} />}
                     label='Required'
                   />
 
-                  {field.type !== 'Object' && (
+                  {type === 'Object' && (
                     <FormControlLabel
                       control={
                         <Checkbox
-                          checked={field.unique}
-                          onChange={e => handleFieldChange(index, { unique: e.target.checked })}
+                          checked={field.isArray === true}
+                          onChange={e => updateField(index, f => ({ ...f, isArray: e.target.checked }))}
+                        />
+                      }
+                      label='Array of objects'
+                    />
+                  )}
+
+                  {type !== 'Object' && (
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={field.unique === true}
+                          onChange={e => updateField(index, f => ({ ...f, unique: e.target.checked }))}
                           disabled={!field.required}
                         />
                       }
@@ -437,18 +527,53 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
                     />
                   )}
 
-                  {field.type === 'String' && (
+                  {type === 'String' && (
                     <FormControlLabel
-                      control={<Checkbox checked={field.trim} onChange={e => handleFieldChange(index, { trim: e.target.checked })} />}
+                      control={<Checkbox checked={field.trim === true} onChange={e => updateField(index, f => ({ ...f, trim: e.target.checked }))} />}
                       label='Trim'
                     />
                   )}
 
-                  {field.type === 'ObjectId' && (
+                  {type === 'String' && (
+                    <Autocomplete
+                      multiple
+                      freeSolo
+                      size='small'
+                      options={[]}
+                      value={field.enum?.values ?? []}
+                      onChange={(_, values) => {
+                        const enumValues = [...new Set(values.map(v => String(v).trim()).filter(Boolean))];
+                        updateField(index, f => withEnumValues(f, enumValues.length ? enumValues : undefined));
+                      }}
+                      renderTags={(values, getTagProps) =>
+                        values.map((v, i) => <Chip size='small' label={v} {...getTagProps({ index: i })} key={v} />)
+                      }
+                      renderInput={params => (
+                        <TextField {...params} label='Enum values' placeholder='değer + Enter' helperText='Boş = serbest metin' />
+                      )}
+                      sx={{ minWidth: 260, flex: 1 }}
+                    />
+                  )}
+
+                  {editorTypeHasDefault(type) && (
+                    <SchemaDefaultInput
+                      field={field}
+                      onChange={value =>
+                        updateField(index, f => {
+                          const out = { ...f };
+                          if (value === undefined) delete out.default;
+                          else out.default = value;
+                          return out;
+                        })
+                      }
+                    />
+                  )}
+
+                  {type === 'ObjectId' && (
                     <TextField
                       label='Ref'
-                      value={field.ref || ''}
-                      onChange={e => handleFieldChange(index, { ref: e.target.value || undefined })}
+                      value={referenceTargetOf(field)}
+                      onChange={e => updateField(index, f => withReferenceTarget(f, e.target.value || undefined))}
                       size='small'
                       placeholder='e.g., User'
                       sx={{ minWidth: 150 }}
@@ -457,8 +582,28 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
                   )}
                 </Box>
 
-                {field.type === 'Object' && (
+                {type === 'Object' && (
                   <Box sx={{ mt: 2, pl: 1, borderLeft: '3px solid', borderColor: 'primary.light' }}>
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
+                      <TextField
+                        label='Nested interface name'
+                        value={field.object?.typeName || ''}
+                        onChange={e => updateObject(index, { typeName: e.target.value || undefined })}
+                        size='small'
+                        sx={{ minWidth: 180 }}
+                        placeholder='e.g., ISubscriptionLimits'
+                        helperText='Optional — empty keeps inline object'
+                      />
+                      <TextField
+                        label='Nested schema name'
+                        value={field.object?.schemaName || ''}
+                        onChange={e => updateObject(index, { schemaName: e.target.value || undefined })}
+                        size='small'
+                        sx={{ minWidth: 200 }}
+                        placeholder='e.g., SubscriptionLimitsSchema'
+                        helperText='Optional — pairs with interface name'
+                      />
+                    </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                       <Typography variant='subtitle2' color='text.secondary'>
                         Object fields
@@ -468,12 +613,20 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
                       </Button>
                     </Box>
 
-                    {(field.objectFields ?? []).map((sub, subIndex) => (
+                    {!subs && (
+                      <Typography variant='caption' color='text.secondary'>
+                        Alt alanlar dosyada tanımlı değil (serbest nesne); eklenmedikçe olduğu gibi kalır.
+                      </Typography>
+                    )}
+
+                    {(subs ?? []).map((sub, subIndex) => {
+                      const subType = editorSubTypeOf(sub);
+                      return (
                       <Box key={subIndex} sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1, alignItems: 'center' }}>
                         <TextField
                           label='Sub-field name'
                           value={sub.name}
-                          onChange={e => handleObjectSubFieldChange(index, subIndex, { name: e.target.value })}
+                          onChange={e => updateSubField(index, subIndex, s => ({ ...s, name: e.target.value }))}
                           size='small'
                           sx={{ minWidth: 140 }}
                           placeholder='e.g., tr'
@@ -481,48 +634,77 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
                         <FormControl size='small' sx={{ minWidth: 120 }}>
                           <InputLabel>Type</InputLabel>
                           <Select
-                            value={sub.type}
+                            value={subType}
                             label='Type'
-                            onChange={e =>
-                              handleObjectSubFieldChange(index, subIndex, { type: e.target.value as ModelObjectSubField['type'] })
-                            }
+                            onChange={e => {
+                              const next = e.target.value as EditorSubFieldType;
+                              updateSubField(index, subIndex, s => (editorSubTypeOf(s) === next ? s : withEditorSubType(s, next)));
+                            }}
                           >
-                            <MenuItem value='String'>String</MenuItem>
-                            <MenuItem value='Number'>Number</MenuItem>
-                            <MenuItem value='Boolean'>Boolean</MenuItem>
+                            {EDITOR_SUB_FIELD_TYPES.map(t => (
+                              <MenuItem key={t} value={t}>
+                                {t}
+                              </MenuItem>
+                            ))}
                           </Select>
                         </FormControl>
                         <FormControlLabel
                           control={
                             <Checkbox
                               checked={sub.required}
-                              onChange={e => handleObjectSubFieldChange(index, subIndex, { required: e.target.checked })}
+                              onChange={e => updateSubField(index, subIndex, s => ({ ...s, required: e.target.checked }))}
                             />
                           }
                           label='Required'
                         />
-                        {sub.type === 'String' && (
+                        {subType === 'ObjectId' && (
+                          <TextField
+                            label='Ref'
+                            value={subReferenceOf(sub)}
+                            onChange={e => updateSubField(index, subIndex, s => withSubReference(s, e.target.value || undefined))}
+                            size='small'
+                            placeholder='e.g., SymbolTypes'
+                            sx={{ minWidth: 140 }}
+                          />
+                        )}
+                        {subType === 'String' && (
                           <FormControlLabel
                             control={
-                              <Checkbox checked={sub.trim} onChange={e => handleObjectSubFieldChange(index, subIndex, { trim: e.target.checked })} />
+                              <Checkbox
+                                checked={sub.trim === true}
+                                onChange={e => updateSubField(index, subIndex, s => ({ ...s, trim: e.target.checked }))}
+                              />
                             }
                             label='Trim'
+                          />
+                        )}
+                        {subType === 'Number' && (
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={Boolean(sub.nullable)}
+                                onChange={e => updateSubField(index, subIndex, s => ({ ...s, nullable: e.target.checked }))}
+                              />
+                            }
+                            label='Nullable (null = unlimited)'
                           />
                         )}
                         <IconButton
                           size='small'
                           color='error'
                           onClick={() => handleRemoveObjectSubField(index, subIndex)}
-                          disabled={(field.objectFields?.length ?? 0) <= 1}
+                          disabled={(subs?.length ?? 0) <= 1}
                         >
                           <DeleteIcon fontSize='small' />
                         </IconButton>
                       </Box>
-                    ))}
+                      );
+                    })}
                   </Box>
                 )}
               </Box>
-            ))}
+              );
+            })}
           </Box>
 
           <Divider />
@@ -575,16 +757,18 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
                     </Box>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       {fields.map(field => {
-                        if (field.type === 'Object') {
+                        const subs = subFieldsOf(field);
+                        const type = editorTypeOf(field);
+                        if (subs) {
                           return (
                             <Box key={field.name} sx={{ pl: 1, borderLeft: '2px solid', borderColor: 'divider' }}>
                               <Typography variant='caption' color='text.secondary' sx={{ mb: 1, display: 'block' }}>
                                 {field.name}
                               </Typography>
                               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                {(field.objectFields ?? []).map(sub => (
+                                {subs.map((sub, subIndex) => (
                                   <TextField
-                                    key={sub.name || `sub-${sub.type}`}
+                                    key={sub.name || `sub-${subIndex}`}
                                     label={`${field.name}.${sub.name || '…'}`}
                                     value={getObjectFieldValue(item, field.name, sub.name)}
                                     onChange={e => handleInitializeObjectSubChange(itemIndex, field.name, sub.name, e.target.value)}
@@ -598,7 +782,7 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
                           );
                         }
 
-                        if (field.type === 'Boolean') {
+                        if (type === 'Boolean') {
                           return (
                             <FormControlLabel
                               key={field.name}
@@ -624,7 +808,7 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
                             size='small'
                             fullWidth
                             required={field.required}
-                            type={field.type === 'Number' ? 'number' : 'text'}
+                            type={type === 'Number' ? 'number' : 'text'}
                           />
                         );
                       })}

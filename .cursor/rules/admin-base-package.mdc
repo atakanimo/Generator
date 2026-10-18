@@ -1,0 +1,13 @@
+---
+description: `@atakanimo/ata-admin-base` package (React + MUI runtime for generated admin config)
+globs: packages/admin-base/**
+alwaysApply: false
+---
+
+# `@atakanimo/ata-admin-base`
+
+Source: `packages/admin-base/docs/` (architecture, resource-config, host-integration, development); summary `docs/admin-base-package.md`. Contract: `docs/api-contract.md` (§7 host interceptor).
+
+- The package never shows its own errors or toasts; the host interceptor does.
+- Reproduce bugs in the playground first (`npm run playground`), then verify in the host.
+- Gates: `npm run typecheck`, `npm test`, `npm run build` inside `packages/admin-base`.

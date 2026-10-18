@@ -2,15 +2,7 @@
 export interface WorkspaceGeneratePrefs {
   generationMode: 'frontend' | 'backend' | 'fullstack';
   isProtectedRoute: boolean;
-  isAdminUser: boolean;
-  updateExistingFrontendFiles: boolean;
   updateExistingBackendFiles: boolean;
-  selectedFrontendFiles: {
-    service: boolean;
-    thunk: boolean;
-    slice: boolean;
-    page: boolean;
-  };
   selectedBackendFiles: {
     model: boolean;
     crud: boolean;
@@ -31,15 +23,7 @@ export interface WorkspaceGeneratePrefs {
 export const DEFAULT_WORKSPACE_GENERATE_PREFS: WorkspaceGeneratePrefs = {
   generationMode: 'frontend',
   isProtectedRoute: false,
-  isAdminUser: false,
-  updateExistingFrontendFiles: false,
   updateExistingBackendFiles: false,
-  selectedFrontendFiles: {
-    service: true,
-    thunk: true,
-    slice: true,
-    page: true
-  },
   selectedBackendFiles: {
     model: true,
     crud: true,
@@ -61,10 +45,7 @@ export interface ManifestWorkspacePayload {
   frontendPath?: string;
   generationMode?: WorkspaceGeneratePrefs['generationMode'];
   isProtectedRoute?: boolean;
-  isAdminUser?: boolean;
-  updateExistingFrontendFiles?: boolean;
   updateExistingBackendFiles?: boolean;
-  selectedFrontendFiles?: Partial<WorkspaceGeneratePrefs['selectedFrontendFiles']>;
   selectedBackendFiles?: Partial<WorkspaceGeneratePrefs['selectedBackendFiles']>;
   features?: Partial<WorkspaceGeneratePrefs['features']>;
 }
@@ -77,15 +58,13 @@ export function buildManifestWorkspacePayload(
     frontendPath,
     generationMode: prefs.generationMode,
     isProtectedRoute: prefs.isProtectedRoute,
-    isAdminUser: prefs.isAdminUser,
-    updateExistingFrontendFiles: prefs.updateExistingFrontendFiles,
     updateExistingBackendFiles: prefs.updateExistingBackendFiles,
-    selectedFrontendFiles: { ...prefs.selectedFrontendFiles },
     selectedBackendFiles: { ...prefs.selectedBackendFiles },
     features: { ...prefs.features }
   };
 }
 
+/** Keys removed in plan 6 §3 (`selectedFrontendFiles`, `updateExistingFrontendFiles`, `isAdminUser`) are ignored. */
 export function hydrateWorkspaceFromManifest(
   workspace: ManifestWorkspacePayload | null | undefined
 ): { frontendPath?: string; prefs: Partial<WorkspaceGeneratePrefs> } {
@@ -93,18 +72,8 @@ export function hydrateWorkspaceFromManifest(
   const prefs: Partial<WorkspaceGeneratePrefs> = {};
   if (workspace.generationMode) prefs.generationMode = workspace.generationMode;
   if (workspace.isProtectedRoute !== undefined) prefs.isProtectedRoute = workspace.isProtectedRoute;
-  if (workspace.isAdminUser !== undefined) prefs.isAdminUser = workspace.isAdminUser;
-  if (workspace.updateExistingFrontendFiles !== undefined) {
-    prefs.updateExistingFrontendFiles = workspace.updateExistingFrontendFiles;
-  }
   if (workspace.updateExistingBackendFiles !== undefined) {
     prefs.updateExistingBackendFiles = workspace.updateExistingBackendFiles;
-  }
-  if (workspace.selectedFrontendFiles) {
-    prefs.selectedFrontendFiles = {
-      ...DEFAULT_WORKSPACE_GENERATE_PREFS.selectedFrontendFiles,
-      ...workspace.selectedFrontendFiles
-    };
   }
   if (workspace.selectedBackendFiles) {
     prefs.selectedBackendFiles = {
@@ -128,10 +97,6 @@ export function mergeWorkspaceGeneratePrefs(partial: Partial<WorkspaceGeneratePr
   return {
     ...DEFAULT_WORKSPACE_GENERATE_PREFS,
     ...partial,
-    selectedFrontendFiles: {
-      ...DEFAULT_WORKSPACE_GENERATE_PREFS.selectedFrontendFiles,
-      ...partial.selectedFrontendFiles
-    },
     selectedBackendFiles: {
       ...DEFAULT_WORKSPACE_GENERATE_PREFS.selectedBackendFiles,
       ...partial.selectedBackendFiles

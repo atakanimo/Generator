@@ -23,3 +23,6 @@ dist-electron
 *.sln
 *.sw?
 
+# Verification script output (regenerable)
+scripts/verify/out/
+

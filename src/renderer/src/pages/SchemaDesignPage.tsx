@@ -32,19 +32,26 @@ import {
 } from '@mui/material';
 import { Save as SaveIcon, Code as CodeIcon, FolderOpen } from '@mui/icons-material';
 import { useAppSelector, useAppDispatch } from '../store/hooks';
-import { updateFieldConfig, saveSchemaConfig, generateFrontend, generateBackend, setFrontendPath, patchWorkspaceGeneratePrefs, persistWorkspaceManifest, buildManifestWorkspacePayload } from '../features/project/projectSlice';
-import { FieldConfig, SchemaDefinition } from '../types/ProjectTypes';
+import { updateFieldConfig, updateModelApi, markModelApiSaved, saveSchemaConfig, generateFrontend, generateBackend, setFrontendPath, patchWorkspaceGeneratePrefs, persistWorkspaceManifest, buildManifestWorkspacePayload } from '../features/project/projectSlice';
+import type { NormalizedField, NormalizedModel, RelationType } from '@shared/normalizedModel';
 import type { RelationPropertyObjectSubField } from '@shared/relationDisplayMeta';
-import { UIComponent } from '../utils/schemaUtils';
+import { uiComponentOptionsFor, type UIComponent } from '@shared/modelMerge';
+import { FILTER_TOKENS, filterFromToken, filterTokenOf, type FilterToken } from '@shared/fieldTypeToken';
+import { fieldTypeLabel, isReferenceField, modelApiSettings } from '../features/project/modelEdits';
+import ModelApiSettingsPanel, { resolveModelApi } from '../components/ModelApiSettingsPanel';
 import { useEffect, useState } from 'react';
 import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
 
 const RELATION_FIELD_GRID_COLS = 4;
 
+/** `_id` / timestamps: never hidden or admin-only. */
+const isSystemField = (name: string) => ['_id', 'id', 'createdAt', 'updatedAt'].includes(name);
+
 type RelatedModelFieldInfo = {
   name: string;
   type: string;
+  regexSearchable?: boolean;
   objectFields?: RelationPropertyObjectSubField[];
 };
 
@@ -73,6 +80,7 @@ const SchemaDesignPage = () => {
   const {
     selectedModelSchema,
     selectedModelSourceRelativePath,
+    selectedModelApiSource,
     projectPath,
     frontendPath,
     sourceType,
@@ -90,11 +98,7 @@ const SchemaDesignPage = () => {
   } = useAppSelector(state => state.project);
   const {
     generationMode,
-    isProtectedRoute,
-    isAdminUser,
-    updateExistingFrontendFiles,
     updateExistingBackendFiles,
-    selectedFrontendFiles: selectedFiles,
     selectedBackendFiles,
     features
   } = workspaceGeneratePrefs;
@@ -174,32 +178,56 @@ const SchemaDesignPage = () => {
     );
   }
 
+  // Per-model API settings (P5): auth and admin come from the model, not from workspace prefs.
+  const apiSettings = modelApiSettings(selectedModelSchema);
+  const modelApi = resolveModelApi(apiSettings, selectedModelSchema.fields);
+  const isProtectedRoute = modelApi.requiresAuth;
+  const isAdminUser = modelApi.admin;
+  /** Schema as stored / generated: the API set exactly as the generator will apply it. */
+  const schemaWithResolvedApi = (): NormalizedModel => ({
+    ...selectedModelSchema,
+    api: {
+      ...selectedModelSchema.api,
+      normalOperations: modelApi.operations,
+      requiresAuth: modelApi.requiresAuth,
+      admin: modelApi.admin
+    }
+  });
+
   const handleLabelChange = (fieldIndex: number, newLabel: string) => {
-    dispatch(updateFieldConfig({ fieldIndex, updates: { label: newLabel } }));
+    dispatch(updateFieldConfig({ fieldIndex, updates: { ui: { label: newLabel } } }));
   };
 
   const handleUIComponentChange = (fieldIndex: number, newComponent: UIComponent) => {
-    dispatch(updateFieldConfig({ fieldIndex, updates: { uiComponent: newComponent } }));
+    dispatch(updateFieldConfig({ fieldIndex, updates: { ui: { component: newComponent } } }));
   };
 
   const handleShowInTableChange = (fieldIndex: number, showInTable: boolean) => {
-    dispatch(updateFieldConfig({ fieldIndex, updates: { showInTable } }));
+    dispatch(updateFieldConfig({ fieldIndex, updates: { ui: { list: showInTable } } }));
   };
 
   const handleIsSearchableChange = (fieldIndex: number, isSearchable: boolean) => {
-    dispatch(updateFieldConfig({ fieldIndex, updates: { isSearchable } }));
+    dispatch(updateFieldConfig({ fieldIndex, updates: { filter: { searchable: isSearchable } } }));
   };
 
-  const handleFilterTypeChange = (fieldIndex: number, filterType: FieldConfig['filterType']) => {
-    dispatch(updateFieldConfig({ fieldIndex, updates: { filterType } }));
+  const handleFilterTypeChange = (fieldIndex: number, filterType: FilterToken) => {
+    dispatch(updateFieldConfig({ fieldIndex, updates: { filter: filterFromToken(filterType) } }));
   };
 
   const handleDefaultValueChange = (fieldIndex: number, defaultValue: string) => {
-    dispatch(updateFieldConfig({ fieldIndex, updates: { defaultValue } }));
+    dispatch(updateFieldConfig({ fieldIndex, updates: { ui: { defaultValue } } }));
   };
 
   const handleReadonlyChange = (fieldIndex: number, isReadonly: boolean) => {
-    dispatch(updateFieldConfig({ fieldIndex, updates: { isReadonly } }));
+    dispatch(updateFieldConfig({ fieldIndex, updates: { access: { readonly: isReadonly } } }));
+  };
+
+  const handleHiddenChange = (fieldIndex: number, hidden: boolean) => {
+    dispatch(updateFieldConfig({ fieldIndex, updates: { access: { hidden: hidden || undefined } } }));
+  };
+
+  const handleAdminOnlyChange = (fieldIndex: number, adminOnly: boolean) => {
+    dispatch(updateFieldConfig({ fieldIndex, updates: { access: { adminOnly: adminOnly || undefined } } }));
   };
 
   // HiddenFromCreate / HiddenFromUpdate controls removed (Task 51)
@@ -208,20 +236,22 @@ const SchemaDesignPage = () => {
     dispatch(
       updateFieldConfig({
         fieldIndex,
-        updates: { relationEntityName, relationPopulateFields: undefined, relationProperty: undefined, relationPropertyObjectFields: undefined }
+        updates: {
+          reference: { target: relationEntityName, populate: undefined, display: undefined, displayObjectFields: undefined }
+        }
       })
     );
   };
 
-  const handleRelationTypeChange = (fieldIndex: number, relationType: FieldConfig['relationType']) => {
-    dispatch(updateFieldConfig({ fieldIndex, updates: { relationType } }));
+  const handleRelationTypeChange = (fieldIndex: number, relationType: RelationType) => {
+    dispatch(updateFieldConfig({ fieldIndex, updates: { reference: { relationType } } }));
   };
 
   const handleIncludeRelationChange = (fieldIndex: number, includeRelation: boolean) => {
     const field = selectedModelSchema.fields[fieldIndex];
     // Auto-detect relation entity name from field name (e.g., userId -> User, symbolId -> Symbol)
     let relationEntityName = '';
-    if (includeRelation && field.type === 'schema') {
+    if (includeRelation && isReferenceField(field)) {
       // Remove common suffixes like "Id", "Id", etc. and capitalize first letter
       const fieldName = field.name;
       if (fieldName.endsWith('Id')) {
@@ -238,12 +268,14 @@ const SchemaDesignPage = () => {
       updateFieldConfig({
         fieldIndex,
         updates: {
-          includeRelation,
-          relationEntityName: includeRelation ? relationEntityName : undefined,
-          relationProperty: includeRelation ? field.relationProperty : undefined,
-          relationPopulateFields: includeRelation ? field.relationPopulateFields : undefined,
-          relationPropertyObjectFields: includeRelation ? field.relationPropertyObjectFields : undefined,
-          relationType: includeRelation ? field.relationType || (field.isArray ? 'oneToMany' : 'manyToOne') : undefined
+          reference: {
+            include: includeRelation,
+            target: includeRelation ? relationEntityName : undefined,
+            display: includeRelation ? field.reference?.display : undefined,
+            populate: includeRelation ? field.reference?.populate : undefined,
+            displayObjectFields: includeRelation ? field.reference?.displayObjectFields : undefined,
+            relationType: includeRelation ? field.reference?.relationType || (field.isArray ? 'oneToMany' : 'manyToOne') : undefined
+          }
         }
       })
     );
@@ -251,7 +283,7 @@ const SchemaDesignPage = () => {
 
   const openRelationPopulatePicker = async (fieldIndex: number) => {
     const field = selectedModelSchema.fields[fieldIndex];
-    const entity = field.relationEntityName?.trim();
+    const entity = field.reference?.target?.trim();
     if (!entity) {
       setSnackbarMessage('Önce hedef model adını girin (ör. SymbolTypes).');
       setSnackbarSeverity('error');
@@ -291,13 +323,13 @@ const SchemaDesignPage = () => {
         return;
       }
       const fields = res.fields;
-      const initialPopulate =
-        field.relationPopulateFields && field.relationPopulateFields.length > 0 ? field.relationPopulateFields : [];
+      const populate = field.reference?.populate;
+      const initialPopulate = populate && populate.length > 0 ? populate : [];
       const selected: Record<string, boolean> = {};
       for (const f of fields) {
         selected[f.name] = initialPopulate.includes(f.name);
       }
-      let display = field.relationProperty?.trim() || '';
+      let display = field.reference?.display?.trim() || '';
       if (display && !selected[display]) {
         display = '';
       }
@@ -369,9 +401,7 @@ const SchemaDesignPage = () => {
       updateFieldConfig({
         fieldIndex: idx,
         updates: {
-          relationPopulateFields: ordered,
-          relationProperty: display,
-          relationPropertyObjectFields,
+          reference: { populate: ordered, display, displayObjectFields: relationPropertyObjectFields }
         },
       })
     );
@@ -383,19 +413,19 @@ const SchemaDesignPage = () => {
   };
 
   const handleRelationPropertyChange = (fieldIndex: number, relationProperty: string) => {
-    dispatch(updateFieldConfig({ fieldIndex, updates: { relationProperty } }));
+    dispatch(updateFieldConfig({ fieldIndex, updates: { reference: { display: relationProperty } } }));
   };
 
   const handleSave = () => {
     if (selectedModelSchema && projectPath) {
-      dispatch(saveSchemaConfig({ projectRoot: projectPath, schema: selectedModelSchema }));
+      dispatch(saveSchemaConfig({ projectRoot: projectPath, schema: schemaWithResolvedApi() }));
     }
   };
 
-  const relationDisplayValidationError = (schema: SchemaDefinition): string | null => {
+  const relationDisplayValidationError = (schema: NormalizedModel): string | null => {
     for (const f of schema.fields) {
-      if (f.type !== 'schema' || !f.includeRelation) continue;
-      if (!String(f.relationProperty || '').trim()) {
+      if (!isReferenceField(f) || !f.reference?.include) continue;
+      if (!String(f.reference.display || '').trim()) {
         return `İlişki açık olan "${f.name}" alanı için display seçin veya girin.`;
       }
     }
@@ -420,7 +450,7 @@ const SchemaDesignPage = () => {
       return;
     }
 
-    const schemaSnapshot = selectedModelSchema;
+    const schemaSnapshot = schemaWithResolvedApi();
     const relPath = selectedModelSourceRelativePath;
 
     const tasks: Array<Promise<unknown>> = [];
@@ -430,14 +460,10 @@ const SchemaDesignPage = () => {
           generateFrontend({
             schema: schemaSnapshot,
             projectPath: frontendPath!,
-            selectedFiles,
-            backendPath: generationMode === 'fullstack' ? projectPath : undefined,
+            // Backend project: the admin router mount path is read from its app file.
+            backendPath: projectPath,
             features,
-            baseUrl,
-            sourceType,
-            isProtectedRoute: generationMode === 'frontend' || generationMode === 'fullstack' ? isProtectedRoute : undefined,
-            updateExistingFiles: updateExistingFrontendFiles,
-            isAdminUser
+            baseUrl
           })
         ).unwrap()
       );
@@ -445,6 +471,7 @@ const SchemaDesignPage = () => {
     if (generationMode === 'backend' || generationMode === 'fullstack') {
       const backendSelectedFiles = {
         ...selectedBackendFiles,
+        route: true,
         serviceAdmin: isAdminUser ? selectedBackendFiles.serviceAdmin : false,
         routeAdmin: isAdminUser ? selectedBackendFiles.routeAdmin : false
       };
@@ -455,7 +482,8 @@ const SchemaDesignPage = () => {
             projectPath,
             isProtectedRoute,
             sourceType,
-            shouldAddRoute: selectedBackendFiles.route,
+            // Route file follows the normal API selection (P5 #24): the generator decides.
+            shouldAddRoute: true,
             baseUrl,
             updateExistingFiles: updateExistingBackendFiles,
             isAdminUser,
@@ -474,6 +502,7 @@ const SchemaDesignPage = () => {
     if (relPath && window.electronAPI?.project?.writeWorkspaceManifest) {
       const workspace = buildManifestWorkspacePayload(frontendPath, workspaceGeneratePrefs);
       const man = await window.electronAPI.project.writeWorkspaceManifest(projectPath, schemaSnapshot, relPath, workspace);
+      if (man.success) dispatch(markModelApiSaved());
       if (!man.success && man.error) {
         setSnackbarMessage(`Code generated; workspace manifest not updated: ${man.error}`);
         setSnackbarSeverity('error');
@@ -486,20 +515,13 @@ const SchemaDesignPage = () => {
     setSnackbarOpen(false);
   };
 
-  const uiComponentOptions: UIComponent[] = [
-    'TextField',
-    'TextArea',
-    'NumberField',
-    'Switch',
-    'Select',
-    'DatePicker',
-    'MultiSelect',
-    'ImageField',
-    'Autocomplete',
-    'AsyncSelect',
-    'Chips'
-  ];
-  const filterTypeOptions: Array<NonNullable<FieldConfig['filterType']>> = ['regex', 'exact', 'objectId', 'range', 'boolean', 'date-range'];
+  /** Kind-compatible components plus the stored one (so an old, incompatible choice is visible and changeable). */
+  const uiComponentOptions = (field: NormalizedField): UIComponent[] => {
+    const options = uiComponentOptionsFor(field);
+    const current = field.ui?.component as UIComponent | undefined;
+    return current && !options.includes(current) ? [...options, current] : options;
+  };
+  const filterTypeOptions: readonly FilterToken[] = FILTER_TOKENS;
   const defaultValueOptions = ['', 'currentDate', 'currentUserId', 'uuid'];
 
   return (
@@ -542,17 +564,14 @@ const SchemaDesignPage = () => {
           Backend Settings
         </Typography>
         <Box sx={{ mb: 2 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={isProtectedRoute}
-                onChange={e => dispatch(patchWorkspaceGeneratePrefs({ isProtectedRoute: e.target.checked }))}
-                color='primary'
-              />
-            }
-            label='Requires Authentication?'
+          <ModelApiSettingsPanel
+            api={apiSettings}
+            fields={selectedModelSchema.fields}
+            source={selectedModelApiSource}
+            onChange={patch => dispatch(updateModelApi(patch))}
           />
         </Box>
+        <Divider sx={{ my: 2 }} />
         <Box sx={{ mb: 2 }}>
           <Typography variant='subtitle1' sx={{ fontWeight: 600, mb: 1 }}>
             Generation Mode:
@@ -579,16 +598,6 @@ const SchemaDesignPage = () => {
               }
               label='Varolan dosyaları güncelle'
               sx={{ mb: 2 }}
-            />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={isAdminUser}
-                  onChange={e => dispatch(patchWorkspaceGeneratePrefs({ isAdminUser: e.target.checked }))}
-                />
-              }
-              label='Include Admin API'
-              sx={{ mb: 2, ml: 2 }}
             />
             <Typography variant='body2' gutterBottom sx={{ mb: 1 }}>
               Select Files to Generate:
@@ -684,21 +693,6 @@ const SchemaDesignPage = () => {
                 }
                 label='Schema'
               />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={selectedBackendFiles.route}
-                    onChange={e =>
-                      dispatch(
-                        patchWorkspaceGeneratePrefs({
-                          selectedBackendFiles: { ...selectedBackendFiles, route: e.target.checked }
-                        })
-                      )
-                    }
-                  />
-                }
-                label='Routes'
-              />
               {isAdminUser && (
                 <>
                   <FormControlLabel
@@ -784,92 +778,7 @@ const SchemaDesignPage = () => {
 
         {(generationMode === 'frontend' || generationMode === 'fullstack') && (
           <Box sx={{ mt: 3 }}>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={updateExistingFrontendFiles}
-                  onChange={e => dispatch(patchWorkspaceGeneratePrefs({ updateExistingFrontendFiles: e.target.checked }))}
-                />
-              }
-              label='Varolan dosyaları güncelle'
-              sx={{ mb: 2 }}
-            />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={isAdminUser}
-                  onChange={e => dispatch(patchWorkspaceGeneratePrefs({ isAdminUser: e.target.checked }))}
-                />
-              }
-              label='Include Admin API'
-              sx={{ mb: 2, ml: 2 }}
-            />
             <Typography variant='body2' gutterBottom sx={{ mb: 1 }}>
-              Select Files to Generate:
-            </Typography>
-            <FormGroup row>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={selectedFiles.service}
-                    onChange={e =>
-                      dispatch(
-                        patchWorkspaceGeneratePrefs({
-                          selectedFrontendFiles: { ...selectedFiles, service: e.target.checked }
-                        })
-                      )
-                    }
-                  />
-                }
-                label='Service'
-              />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={selectedFiles.thunk}
-                    onChange={e =>
-                      dispatch(
-                        patchWorkspaceGeneratePrefs({
-                          selectedFrontendFiles: { ...selectedFiles, thunk: e.target.checked }
-                        })
-                      )
-                    }
-                  />
-                }
-                label='Thunk'
-              />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={selectedFiles.slice}
-                    onChange={e =>
-                      dispatch(
-                        patchWorkspaceGeneratePrefs({
-                          selectedFrontendFiles: { ...selectedFiles, slice: e.target.checked }
-                        })
-                      )
-                    }
-                  />
-                }
-                label='Slice'
-              />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={selectedFiles.page}
-                    onChange={e =>
-                      dispatch(
-                        patchWorkspaceGeneratePrefs({
-                          selectedFrontendFiles: { ...selectedFiles, page: e.target.checked }
-                        })
-                      )
-                    }
-                  />
-                }
-                label='Page'
-              />
-            </FormGroup>
-            <Typography variant='body2' gutterBottom sx={{ mb: 1, mt: 2 }}>
               Table Features:
             </Typography>
             <FormGroup row>
@@ -923,7 +832,7 @@ const SchemaDesignPage = () => {
             '&::-webkit-scrollbar-thumb:hover': { backgroundColor: 'rgba(255,255,255,0.34)' }
           }}
         >
-          <Table sx={{ minWidth: 1580 }}>
+          <Table sx={{ minWidth: 1760 }}>
             <TableHead>
               <TableRow>
                 <TableCell>
@@ -953,13 +862,19 @@ const SchemaDesignPage = () => {
                 <TableCell align='center'>
                   <strong>Readonly</strong>
                 </TableCell>
+                <TableCell align='center' title='Hiçbir CRUD cevabında dönmez (admin dahil) ve filtrelenemez'>
+                  <strong>Hidden</strong>
+                </TableCell>
+                <TableCell align='center' title='Normal (mobil) API create / update gövdesine girmez; admin yazar'>
+                  <strong>Admin only</strong>
+                </TableCell>
                 <TableCell>
                   <strong>Required</strong>
                 </TableCell>
                 <TableCell>
                   <strong>Array</strong>
                 </TableCell>
-                {selectedModelSchema.fields.some(f => f.type === 'schema') && (
+                {selectedModelSchema.fields.some(isReferenceField) && (
                   <>
                     <TableCell align='center'>
                       <strong>Include Relation</strong>
@@ -975,7 +890,7 @@ const SchemaDesignPage = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {selectedModelSchema.fields.map((field: FieldConfig, index: number) => (
+              {selectedModelSchema.fields.map((field: NormalizedField, index: number) => (
                 <TableRow key={field.name} hover>
                   <TableCell>
                     <Typography variant='body2' fontWeight='medium'>
@@ -983,16 +898,24 @@ const SchemaDesignPage = () => {
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <Chip label={field.type} size='small' color='primary' variant='outlined' />
-                    {field.type === 'object' && field.objectFields && field.objectFields.length > 0 && (
+                    <Chip label={field.enum?.values.length ? 'enum' : fieldTypeLabel(field)} size='small' color='primary' variant='outlined' />
+                    {field.enum?.values.length ? (
                       <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 0.5 }}>
-                        {field.objectFields.map(sub => `${sub.name}: ${sub.type}`).join(', ')}
+                        {field.enum.values.join(' | ')}
+                      </Typography>
+                    ) : null}
+                    {fieldTypeLabel(field) === 'object' && field.object?.fields && field.object.fields.length > 0 && (
+                      <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 0.5 }}>
+                        {(field.object.schemaName
+                          ? `${field.object.typeName || ''} / ${field.object.schemaName} — `
+                          : '')}
+                        {field.object.fields.map(sub => `${sub.name}: ${fieldTypeLabel(sub)}`).join(', ')}
                       </Typography>
                     )}
                   </TableCell>
                   <TableCell sx={{ minWidth: 150 }}>
                     <TextField
-                      value={field.label}
+                      value={field.ui?.label}
                       onChange={e => handleLabelChange(index, e.target.value)}
                       size='small'
                       fullWidth
@@ -1001,9 +924,13 @@ const SchemaDesignPage = () => {
                   </TableCell>
                   <TableCell sx={{ minWidth: 150 }}>
                     <FormControl fullWidth size='small'>
-                      <Select value={field.uiComponent} onChange={e => handleUIComponentChange(index, e.target.value as UIComponent)}>
-                        {uiComponentOptions.map(option => (
-                          <MenuItem key={option} value={option}>
+                      <Select
+                        value={field.ui?.component ?? ''}
+                        disabled={uiComponentOptionsFor(field).length === 0}
+                        onChange={e => handleUIComponentChange(index, e.target.value as UIComponent)}
+                      >
+                        {uiComponentOptions(field).map(option => (
+                          <MenuItem key={option} value={option} disabled={!uiComponentOptionsFor(field).includes(option)}>
                             {option}
                           </MenuItem>
                         ))}
@@ -1011,16 +938,16 @@ const SchemaDesignPage = () => {
                     </FormControl>
                   </TableCell>
                   <TableCell align='center'>
-                    <Switch checked={field.showInTable} onChange={e => handleShowInTableChange(index, e.target.checked)} color='primary' />
+                    <Switch checked={field.ui?.list} onChange={e => handleShowInTableChange(index, e.target.checked)} color='primary' />
                   </TableCell>
                   <TableCell align='center'>
-                    <Switch checked={field.isSearchable} onChange={e => handleIsSearchableChange(index, e.target.checked)} color='primary' />
+                    <Switch checked={field.filter?.searchable} onChange={e => handleIsSearchableChange(index, e.target.checked)} color='primary' />
                   </TableCell>
                   <TableCell sx={{ minWidth: 130 }}>
                     <FormControl fullWidth size='small'>
                       <Select
-                        value={field.filterType || 'regex'}
-                        onChange={e => handleFilterTypeChange(index, e.target.value as FieldConfig['filterType'])}
+                        value={filterTokenOf(field.filter) || 'regex'}
+                        onChange={e => handleFilterTypeChange(index, e.target.value as FilterToken)}
                       >
                         {filterTypeOptions.map(option => (
                           <MenuItem key={option} value={option}>
@@ -1032,7 +959,7 @@ const SchemaDesignPage = () => {
                   </TableCell>
                   <TableCell sx={{ minWidth: 140 }}>
                     <FormControl fullWidth size='small'>
-                      <Select value={field.defaultValue || ''} onChange={e => handleDefaultValueChange(index, e.target.value)}>
+                      <Select value={field.ui?.defaultValue || ''} onChange={e => handleDefaultValueChange(index, e.target.value)}>
                         {defaultValueOptions.map(option => (
                           <MenuItem key={option || 'static-empty'} value={option}>
                             {option || 'static'}
@@ -1042,7 +969,25 @@ const SchemaDesignPage = () => {
                     </FormControl>
                   </TableCell>
                   <TableCell align='center'>
-                    <Switch checked={field.isReadonly === true} onChange={e => handleReadonlyChange(index, e.target.checked)} color='primary' />
+                    <Switch checked={field.access?.readonly === true} onChange={e => handleReadonlyChange(index, e.target.checked)} color='primary' />
+                  </TableCell>
+                  <TableCell align='center'>
+                    {isSystemField(field.name) ? (
+                      <Typography variant='body2' color='text.secondary'>
+                        -
+                      </Typography>
+                    ) : (
+                      <Switch checked={field.access?.hidden === true} onChange={e => handleHiddenChange(index, e.target.checked)} color='warning' />
+                    )}
+                  </TableCell>
+                  <TableCell align='center'>
+                    {isSystemField(field.name) ? (
+                      <Typography variant='body2' color='text.secondary'>
+                        -
+                      </Typography>
+                    ) : (
+                      <Switch checked={field.access?.adminOnly === true} onChange={e => handleAdminOnlyChange(index, e.target.checked)} color='warning' />
+                    )}
                   </TableCell>
                   <TableCell>
                     {field.required ? <Chip label='Yes' color='success' size='small' /> : <Chip label='No' color='default' size='small' />}
@@ -1050,12 +995,12 @@ const SchemaDesignPage = () => {
                   <TableCell>
                     {field.isArray ? <Chip label='Yes' color='primary' size='small' /> : <Chip label='No' color='default' size='small' />}
                   </TableCell>
-                  {selectedModelSchema.fields.some(f => f.type === 'schema') && (
+                  {selectedModelSchema.fields.some(isReferenceField) && (
                     <>
                       <TableCell align='center'>
-                        {field.type === 'schema' ? (
+                        {isReferenceField(field) ? (
                           <Switch
-                            checked={field.includeRelation || false}
+                            checked={field.reference?.include || false}
                             onChange={e => handleIncludeRelationChange(index, e.target.checked)}
                             color='primary'
                           />
@@ -1066,7 +1011,7 @@ const SchemaDesignPage = () => {
                         )}
                       </TableCell>
                       <TableCell>
-                        {field.type === 'schema' && field.includeRelation ? (
+                        {isReferenceField(field) && field.reference?.include ? (
                           <Box
                             sx={{
                               display: 'flex',
@@ -1079,7 +1024,7 @@ const SchemaDesignPage = () => {
                           >
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, flex: '0 1 auto' }}>
                               <TextField
-                                value={field.relationEntityName || ''}
+                                value={field.reference?.target || ''}
                                 onChange={e => handleRelationEntityChange(index, e.target.value)}
                                 size='small'
                                 placeholder='Target model'
@@ -1089,8 +1034,8 @@ const SchemaDesignPage = () => {
                               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
                                 <FormControl size='small' sx={{ minWidth: 130 }}>
                                   <Select
-                                    value={field.relationType || (field.isArray ? 'oneToMany' : 'manyToOne')}
-                                    onChange={e => handleRelationTypeChange(index, e.target.value as FieldConfig['relationType'])}
+                                    value={field.reference?.relationType || (field.isArray ? 'oneToMany' : 'manyToOne')}
+                                    onChange={e => handleRelationTypeChange(index, e.target.value as RelationType)}
                                   >
                                     <MenuItem value='oneToOne'>oneToOne</MenuItem>
                                     <MenuItem value='oneToMany'>oneToMany</MenuItem>
@@ -1113,7 +1058,7 @@ const SchemaDesignPage = () => {
                                 pt: 0.25
                               }}
                             >
-                              {(field.relationPopulateFields ?? []).map(name => (
+                              {(field.reference?.populate ?? []).map(name => (
                                 <Chip
                                   key={name}
                                   label={name}
@@ -1141,14 +1086,14 @@ const SchemaDesignPage = () => {
                         )}
                       </TableCell>
                       <TableCell sx={{ minWidth: 200, width: 200, verticalAlign: 'top' }}>
-                        {field.type === 'schema' && field.includeRelation ? (
-                          field.relationPopulateFields?.length ? (
+                        {isReferenceField(field) && field.reference?.include ? (
+                          field.reference.populate?.length ? (
                             <Typography variant='body2' fontWeight={600} sx={{ wordBreak: 'break-word' }}>
-                              {field.relationProperty?.trim() ? field.relationProperty : '—'}
+                              {field.reference.display?.trim() ? field.reference.display : '—'}
                             </Typography>
                           ) : (
                             <TextField
-                              value={field.relationProperty ?? ''}
+                              value={field.reference.display ?? ''}
                               onChange={e => handleRelationPropertyChange(index, e.target.value)}
                               size='small'
                               placeholder='Display'
@@ -1207,7 +1152,7 @@ const SchemaDesignPage = () => {
                           </Typography>
                         </TableCell>
                         <TableCell>
-                          <Chip label={field.type} size='small' color='primary' variant='outlined' />
+                          <Chip label={fieldTypeLabel(field)} size='small' color='primary' variant='outlined' />
                         </TableCell>
                         <TableCell>
                           {field.required ? <Chip label='Yes' color='success' size='small' /> : <Chip label='No' color='default' size='small' />}
@@ -1292,6 +1237,15 @@ const SchemaDesignPage = () => {
                     ))}
                 </Box>
               </RadioGroup>
+              {(() => {
+                const display = relationPicker.candidates.find(f => f.name === relationPicker.displayField);
+                return display && display.regexSearchable !== true ? (
+                  <Alert severity='warning' sx={{ mt: 2 }}>
+                    "{display.name}" hedef modelde regex filtreli aranabilir değil; admin panelde ilişki autocomplete'i bu alanda arama
+                    yapamaz (sözleşme K3). Hedef modelin şema ayarında alanı Searchable + regex yapın.
+                  </Alert>
+                ) : null;
+              })()}
             </>
           ) : null}
         </DialogContent>

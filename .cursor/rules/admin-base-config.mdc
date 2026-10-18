@@ -1,0 +1,14 @@
+---
+description: Admin FE output — `@atakanimo/ata-admin-base` resource config only (no page / table / modal code)
+globs: src/main/generators/AdminConfigGenerator.ts,src/main/generators/adminResourceConfig.ts,src/main/ipc/frontendGenerator.ts,src/main/utils/backendAppFile.ts
+alwaysApply: false
+---
+
+# Admin FE config generation
+
+Source: `docs/frontend/admin-base-config.md`.
+
+- Output is config only: `modules/<m>/<m>.generated.config.ts` (rewritten), `<m>.generated.ts` (created once, user-owned), `modules/resources.generated.ts`. No pages, slices, services, route or reducer injection.
+- Mapping stays in the pure `adminResourceConfig.ts`. `_id` and `access.hidden` fields are never emitted.
+- Endpoint is read from the BE app file (`findAdminMountPath`), never derived.
+- Gate: `node scripts/verify/admin-config-check.mjs`.

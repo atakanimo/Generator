@@ -1,7 +1,7 @@
 /**
  * Shared merge helpers for generated files with // <marker> ... // </marker> regions.
  * Marker names: see `customBlockMarkers.ts` (`DEFAULT_CUSTOM_BLOCK_MARKER_NAMES`).
- * Used by BackendGenerator and FrontendGenerator on update (same marker set).
+ * Used by BackendGenerator and model saving on update (same marker set).
  */
 
 export type CustomBlockMergeResult = { merged: string } | { merged: null; error: string };
@@ -107,11 +107,6 @@ export interface ApplyCustomBlockMergeParams {
   existingContent: string;
   renderedContent: string;
   markerNames: string[];
-  /**
-   * @deprecated Prefix replacement removed — custom-imports body merges like other markers
-   * so rendered standard imports above the marker are kept on update.
-   */
-  customImportsPrecedence?: boolean;
 }
 
 /**

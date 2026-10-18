@@ -6,6 +6,7 @@
 import { existsSync, statSync } from 'fs';
 import { resolve, normalize, isAbsolute } from 'path';
 import { log } from './logger.js';
+import { typeTokenOf } from '../../shared/fieldTypeToken.js';
 
 export type SourceType = 'nodejs-mongoose' | 'nodejs-typeorm' | 'dotnet-ef';
 
@@ -278,7 +279,7 @@ export function validateSchema(schema: any): ValidationResult {
       };
     }
 
-    if (!field.type) {
+    if (typeof field.kind !== 'string' || !typeTokenOf(field)) {
       return {
         valid: false,
         error: `Field "${field.name}" must have a type`

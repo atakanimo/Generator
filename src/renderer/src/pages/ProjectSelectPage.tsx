@@ -16,10 +16,11 @@ import {
 } from '@mui/material';
 import { FolderOpen, Add as AddIcon, Edit as EditIcon } from '@mui/icons-material';
 import { useAppSelector, useAppDispatch } from '../store/hooks';
-import { setProjectPath, scanProjectFiles, parseModelFile, createModel, updateModel, parseModelToModelData } from '../features/project/projectSlice';
+import { setProjectPath, scanProjectFiles, parseModelFile, createModel, updateModel, loadModelDraft } from '../features/project/projectSlice';
 import { IconButton } from '@mui/material';
 import SchemaDesignPage from './SchemaDesignPage';
-import AddModelModal, { ModelData } from '../components/AddModelModal';
+import AddModelModal from '../components/AddModelModal';
+import type { ModelDraft } from '@shared/modelDraft';
 import { useState, useEffect } from 'react';
 
 const ProjectSelectPage = () => {
@@ -41,7 +42,7 @@ const ProjectSelectPage = () => {
     lastUpdatedModelPath
   } = useAppSelector(state => state.project);
   const [addModelModalOpen, setAddModelModalOpen] = useState(false);
-  const [editModelData, setEditModelData] = useState<ModelData | null>(null);
+  const [editModelDraft, setEditModelDraft] = useState<ModelDraft | null>(null);
   const [editModelFilePath, setEditModelFilePath] = useState<string | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -108,7 +109,7 @@ const ProjectSelectPage = () => {
       setSnackbarSeverity('success');
       setSnackbarOpen(true);
       setAddModelModalOpen(false);
-      setEditModelData(null);
+      setEditModelDraft(null);
       setEditModelFilePath(null);
       if (projectPath) {
         dispatch(scanProjectFiles({ path: projectPath }));
@@ -120,18 +121,18 @@ const ProjectSelectPage = () => {
     }
   }, [updatingModelStatus, updatingModelError, lastUpdatedModelPath, projectPath, sourceType, dispatch]);
 
-  const handleAddModel = async (modelData: ModelData) => {
+  const handleAddModel = async (draft: ModelDraft) => {
     if (projectPath && sourceType) {
-      await dispatch(createModel({ projectPath, sourceType, modelData }));
+      await dispatch(createModel({ projectPath, sourceType, draft }));
     }
   };
 
   const handleEditModel = async (modelPath: string) => {
     if (sourceType) {
       try {
-        const result = await dispatch(parseModelToModelData({ filePath: modelPath, sourceType }));
-        if (parseModelToModelData.fulfilled.match(result)) {
-          setEditModelData(result.payload);
+        const result = await dispatch(loadModelDraft({ filePath: modelPath, sourceType }));
+        if (loadModelDraft.fulfilled.match(result)) {
+          setEditModelDraft(result.payload);
           setEditModelFilePath(modelPath);
           setAddModelModalOpen(true);
         } else {
@@ -149,9 +150,9 @@ const ProjectSelectPage = () => {
     }
   };
 
-  const handleUpdateModel = async (modelData: ModelData) => {
+  const handleUpdateModel = async (draft: ModelDraft) => {
     if (editModelFilePath && sourceType) {
-      await dispatch(updateModel({ filePath: editModelFilePath, projectPath: projectPath ?? undefined, sourceType, modelData }));
+      await dispatch(updateModel({ filePath: editModelFilePath, projectPath: projectPath ?? undefined, sourceType, draft }));
     }
   };
 
@@ -310,14 +311,14 @@ const ProjectSelectPage = () => {
         open={addModelModalOpen}
         onClose={() => {
           setAddModelModalOpen(false);
-          setEditModelData(null);
+          setEditModelDraft(null);
           setEditModelFilePath(null);
         }}
-        onSave={editModelData ? handleUpdateModel : handleAddModel}
+        onSave={editModelDraft ? handleUpdateModel : handleAddModel}
         projectPath={projectPath}
         sourceType={sourceType}
-        initialData={editModelData}
-        isEditMode={!!editModelData}
+        initialData={editModelDraft}
+        isEditMode={!!editModelDraft}
         modelFilePath={editModelFilePath || undefined}
       />
 

@@ -1,0 +1,11 @@
+---
+description: Stack-agnostic HTTP API contract (envelope, endpoints, list body, row shape, writes, host interceptor)
+globs: src/generator-assets/core/**,src/main/templates/backend/**,packages/admin-base/src/contract/**,packages/admin-base/src/data/**
+alwaysApply: false
+---
+
+# API contract
+
+Source: `docs/api-contract.md`. Every BE stack gives the same HTTP behaviour; `@atakanimo/ata-admin-base` and mobile know only this.
+
+Key points: envelope `{ isSuccess, data, uiMessage, errorData }`; `POST get-all` with nested `{ filters, page, limit, sortBy, sortOrder }` (strict, unknown key → 400); JSON identity is `id` only (no `_id`); `decimal` is a string; references accept ids only; `hidden` fields never returned; normal API exposes only `api.normalOperations`, writes only with ownership. `skipLoading` / `skipSuccessToast` are axios config fields handled by the host interceptor.

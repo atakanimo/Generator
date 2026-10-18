@@ -1,0 +1,544 @@
+/**
+ * Varlik360 BE regenerate harness (plan 5 §1.3 / §4).
+ *
+ * Copies the Varlik360 backend into `scripts/verify/out/regen/<label>/` (gitignored), regenerates the
+ * 15 golden-set modules in update mode with the same calls the app makes, reports drift against the
+ * real Varlik360 files and runs `tsc --noEmit` inside the copy.
+ *
+ * Model settings come from `scripts/verify/fixtures/varlik360.manifest.v3.json` (Varlik360's own manifest is still v2,
+ * which the Generator no longer reads); the copy gets it as `.generator/manifest.json`.
+ *
+ * Run:  node scripts/verify/regen-varlik360.mjs [label]          (default label: reference)
+ *       node scripts/verify/regen-varlik360.mjs --resave-models [label]   (model editor path; default: reference-models)
+ *       node scripts/verify/regen-varlik360.mjs [label] --planned          (P4: per-model API settings from plan 5 §5 — see PLANNED)
+ *       node scripts/verify/regen-varlik360.mjs [label] --core-overlay     (copy CORE_OVERLAY assets into the copy first, §5 #1)
+ *       node scripts/verify/regen-varlik360.mjs --manifest                 (v3 store round trip; an old manifest is ignored + backed up)
+ *       node scripts/verify/regen-varlik360.mjs --core-assets <label> [assetsDir]  (Varlik360 + core assets overwritten → tsc)
+ *       node scripts/verify/regen-varlik360.mjs --p5                       (P5: manifest api round trip, detection, new-model route, enum / default)
+ *       node scripts/verify/regen-varlik360.mjs --compare reference p1
+ */
+import { build } from 'esbuild';
+import { spawnSync } from 'child_process';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'fs';
+import { dirname, join, relative } from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
+const varlik = '/Users/atakanatabey/Projects/VarlikALL/Varlik360';
+const regenDir = join(root, 'scripts/verify/out/regen');
+const manifestFixture = join(root, 'scripts/verify/fixtures/varlik360.manifest.v3.json');
+
+const MODULES = [
+  'app-version-configs',
+  'audit-log',
+  'daily-fx-rates',
+  'daily-portfolio',
+  'fund-daily-metrics',
+  'ip-blacklist',
+  'notifications',
+  'subscriptions',
+  'symbol-types',
+  'symbols',
+  'transactions',
+  'user-asset-categories',
+  'user-subscriptions',
+  'user-watch-list',
+  'users'
+];
+
+const ALL_OPS = ['list', 'getOne', 'create', 'update', 'delete'];
+
+/**
+ * Per-model settings the Generator UI will store (P5) — plan 5 §5.2 normal operations, §5 #3 hidden fields,
+ * G5 `users` self ownership + adminOnly fields. Applied to the merged schema like the UI / manifest would.
+ */
+const PLANNED = {
+  'app-version-configs': { normalOperations: ['list'] },
+  'audit-log': { normalOperations: [] },
+  'daily-fx-rates': { normalOperations: [] },
+  'daily-portfolio': { normalOperations: [] },
+  'fund-daily-metrics': { normalOperations: [] },
+  'ip-blacklist': { normalOperations: [] },
+  notifications: { normalOperations: ALL_OPS },
+  subscriptions: { normalOperations: [] },
+  'symbol-types': { normalOperations: ['list', 'getOne'] },
+  symbols: { normalOperations: ['list', 'getOne'] },
+  transactions: { normalOperations: ['list', 'getOne', 'update', 'delete'] },
+  'user-asset-categories': { normalOperations: [] },
+  'user-subscriptions': { normalOperations: [] },
+  'user-watch-list': { normalOperations: ALL_OPS },
+  users: {
+    normalOperations: [],
+    ownershipKind: 'self',
+    hidden: ['password', 'otpCode', 'otpExpiresAt'],
+    adminOnly: ['email', 'password', 'googleId', 'appleId', 'isVerified', 'otpCode', 'otpExpiresAt']
+  }
+};
+
+function applyPlanned(mod, model) {
+  const planned = PLANNED[mod];
+  if (!planned) return model;
+  const flag = (list, name) => (list?.includes(name) ? true : undefined);
+  return {
+    ...model,
+    api: { normalOperations: planned.normalOperations },
+    ownership: planned.ownershipKind ? { kind: planned.ownershipKind } : undefined,
+    fields: model.fields.map(f => {
+      const access = { ...f.access, ...(flag(planned.hidden, f.name) ? { hidden: true } : {}), ...(flag(planned.adminOnly, f.name) ? { adminOnly: true } : {}) };
+      return Object.keys(access).length ? { ...f, access } : f;
+    })
+  };
+}
+
+/** Core assets the P4 templates need (`CrudAuthScope`, hidden fields) — §5 #1 merges them into Varlik360 by hand. */
+const CORE_OVERLAY = ['services/base-crud.service.ts', 'services/crud-projection.ts', 'services/crud-scope.ts'];
+
+/** `selectedFiles` key → file suffix under `src/modules/<module>/<module>.<suffix>.ts`. */
+const ARTIFACTS = {
+  model: 'model',
+  crud: 'crud',
+  filters: 'filters',
+  types: 'types',
+  service: 'service',
+  serviceAdmin: 'service.admin',
+  schema: 'schema',
+  route: 'routes',
+  routeAdmin: 'routes.admin'
+};
+
+const HEADER = /^\/\/ Auto Generated By Generator - .*$/gm;
+const normalize = text => text.replace(HEADER, '// Auto Generated By Generator - <date>');
+
+async function loadBundle() {
+  // The bundle must live inside the Generator tree: `getGeneratorRoot()` walks up from it to find package.json.
+  const outfile = join(root, 'scripts/verify/out/.harness/regen-bundle.mjs');
+  mkdirSync(dirname(outfile), { recursive: true });
+  await build({
+    entryPoints: [join(root, 'scripts/verify/_regen-entry.ts')],
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    outfile,
+    plugins: [
+      {
+        name: 'stub-electron',
+        setup(api) {
+          api.onResolve({ filter: /^electron$/ }, () => ({ path: 'electron', namespace: 'stub-electron' }));
+          api.onLoad({ filter: /.*/, namespace: 'stub-electron' }, () => ({
+            contents: 'export const app = { getAppPath: () => process.cwd(), isPackaged: false };',
+            loader: 'js'
+          }));
+        }
+      }
+    ],
+    logLevel: 'silent'
+  });
+  return import(pathToFileURL(outfile).href);
+}
+
+function prepareCopy(out) {
+  rmSync(out, { recursive: true, force: true });
+  mkdirSync(out, { recursive: true });
+  for (const entry of ['src', '.generator', 'tsconfig.json', 'package.json']) {
+    cpSync(join(varlik, entry), join(out, entry), { recursive: true });
+  }
+  symlinkSync(join(varlik, 'node_modules'), join(out, 'node_modules'));
+  cpSync(manifestFixture, join(out, '.generator/manifest.json'));
+}
+
+/** Generation options as the app would have them for this module, inferred from the files Varlik360 has today. */
+function optionsFor(mod) {
+  const dir = join(varlik, 'src/modules', mod);
+  const has = key => existsSync(join(dir, `${mod}.${ARTIFACTS[key]}.ts`));
+  const selectedFiles = Object.fromEntries(Object.keys(ARTIFACTS).map(key => [key, has(key)]));
+  const routes = has('route') ? readFileSync(join(dir, `${mod}.routes.ts`), 'utf8') : '';
+  const crud = has('crud') ? readFileSync(join(dir, `${mod}.crud.ts`), 'utf8') : '';
+  return {
+    selectedFiles,
+    isAdminUser: selectedFiles.serviceAdmin || selectedFiles.routeAdmin,
+    isProtectedRoute: routes ? routes.includes('authMiddleware') : /Crud\(\s*true/.test(crud),
+    shouldAddRoute: true // as the Generator UI (SchemaDesignPage); also gates the admin route file
+  };
+}
+
+function walk(dir) {
+  if (!existsSync(dir)) return [];
+  if (!statSync(dir).isDirectory()) return [dir];
+  return readdirSync(dir).flatMap(name => {
+    const path = join(dir, name);
+    return statSync(path).isDirectory() ? walk(path) : [path];
+  });
+}
+
+/** Normalized (date header stripped) file-by-file diff between two trees; returns changed paths + a unified patch. */
+function diffTrees(leftRoot, rightRoot, subdirs) {
+  const changed = [];
+  let patch = '';
+  const tmp = join(regenDir, '.diff-tmp');
+  mkdirSync(tmp, { recursive: true });
+  for (const sub of subdirs) {
+    const files = new Set([
+      ...walk(join(leftRoot, sub)).map(p => relative(leftRoot, p)),
+      ...walk(join(rightRoot, sub)).map(p => relative(rightRoot, p))
+    ]);
+    for (const rel of [...files].sort()) {
+      const a = existsSync(join(leftRoot, rel)) ? normalize(readFileSync(join(leftRoot, rel), 'utf8')) : '';
+      const b = existsSync(join(rightRoot, rel)) ? normalize(readFileSync(join(rightRoot, rel), 'utf8')) : '';
+      if (a === b) continue;
+      changed.push(rel);
+      writeFileSync(join(tmp, 'a'), a);
+      writeFileSync(join(tmp, 'b'), b);
+      const d = spawnSync('diff', ['-u', '--label', `a/${rel}`, '--label', `b/${rel}`, join(tmp, 'a'), join(tmp, 'b')], { encoding: 'utf8' });
+      patch += d.stdout;
+    }
+  }
+  rmSync(tmp, { recursive: true, force: true });
+  return { changed, patch };
+}
+
+function typecheck(out) {
+  const r = spawnSync('npx', ['tsc', '--noEmit', '-p', 'tsconfig.json'], { cwd: out, encoding: 'utf8' });
+  const lines = `${r.stdout}${r.stderr}`.split('\n').filter(l => l.includes('error TS'));
+  return { errors: lines.length, sample: lines.slice(0, 15), all: [...lines].sort() };
+}
+
+async function regenerate(label, { planned = false, coreOverlay = false } = {}) {
+  const out = join(regenDir, label);
+  prepareCopy(out);
+  if (coreOverlay) {
+    for (const rel of CORE_OVERLAY) cpSync(join(root, 'src/generator-assets/core', rel), join(out, 'src/core', rel));
+  }
+  const { parseNormalizedModel, findManifestModelByRelativePath, mergeModel, generateBackend } = await loadBundle();
+
+  const cwd = process.cwd();
+  process.chdir(out); // generator logs land in the copy, not in the repo
+  const modules = [];
+  for (const mod of MODULES) {
+    const modelRel = `src/modules/${mod}/${mod}.model.ts`;
+    const options = optionsFor(mod);
+    const parsed = parseNormalizedModel(join(out, modelRel), 'nodejs-mongoose');
+    if (!parsed.success || !parsed.model) {
+      modules.push({ mod, ok: false, error: parsed.error || 'parse failed' });
+      continue;
+    }
+    const row = findManifestModelByRelativePath(out, modelRel);
+    const merged = mergeModel(parsed.model, row, 'nodejs-mongoose');
+    const schema = planned ? applyPlanned(mod, merged) : merged;
+    const result = generateBackend(
+      schema,
+      out,
+      options.isProtectedRoute,
+      'nodejs-mongoose',
+      options.shouldAddRoute,
+      undefined,
+      true,
+      options.isAdminUser,
+      options.selectedFiles
+    );
+    modules.push({ mod, ok: result.success, error: result.error, manifest: Boolean(row), options });
+  }
+  process.chdir(cwd);
+
+  const drift = diffTrees(varlik, out, ['src/modules', 'src/app.ts', 'src/core']);
+  writeFileSync(join(regenDir, `${label}.drift.patch`), drift.patch);
+  const tsc = typecheck(out);
+  const report = { label, generatedAt: new Date().toISOString(), planned, coreOverlay, modules, drift: drift.changed, tsc };
+  writeFileSync(join(regenDir, `${label}.report.json`), JSON.stringify(report, null, 2));
+  writeFileSync(join(regenDir, `${label}.tsc.txt`), tsc.all.join('\n'));
+
+  console.log(`[regen] ${label}: ${modules.filter(m => m.ok).length}/${modules.length} modules generated${planned ? ' (planned settings)' : ''}${coreOverlay ? ' (core overlay)' : ''}`);
+  for (const m of modules.filter(m => !m.ok)) console.log(`  x ${m.mod}: ${m.error}`);
+  console.log(`[regen] drift vs Varlik360: ${drift.changed.length} files (patch: scripts/verify/out/regen/${label}.drift.patch)`);
+  console.log(`[regen] tsc in copy: ${tsc.errors} errors`);
+  for (const line of tsc.sample) console.log(`  ${line}`);
+  return report;
+}
+
+/** Model-creation path: what "open model in AddModelModal → save unchanged" writes for each golden-set model. */
+async function resaveModels(label) {
+  const out = join(regenDir, label);
+  prepareCopy(out);
+  const { loadModelDraft, updateModel } = await loadBundle();
+  const cwd = process.cwd();
+  process.chdir(out);
+  const modules = [];
+  for (const mod of MODULES) {
+    const path = join(out, `src/modules/${mod}/${mod}.model.ts`);
+    const loaded = loadModelDraft(path, 'nodejs-mongoose');
+    if (!loaded.success || !loaded.draft) {
+      modules.push({ mod, ok: false, error: loaded.error || 'loadModelDraft failed' });
+      continue;
+    }
+    const result = await updateModel(path, 'nodejs-mongoose', loaded.draft);
+    // P3.0: user-owned (header-less) model files are refused on purpose — not a failure.
+    const userOwned = !result.success && /Generator başlığı yok/.test(String(result.error));
+    modules.push({ mod, ok: result.success || userOwned, skipped: userOwned || undefined, error: userOwned ? undefined : result.error });
+  }
+  process.chdir(cwd);
+
+  const drift = diffTrees(varlik, out, MODULES.map(mod => `src/modules/${mod}/${mod}.model.ts`));
+  writeFileSync(join(regenDir, `${label}.drift.patch`), drift.patch);
+  const tsc = typecheck(out);
+  const report = { label, mode: 'resave-models', generatedAt: new Date().toISOString(), modules, drift: drift.changed, tsc };
+  writeFileSync(join(regenDir, `${label}.report.json`), JSON.stringify(report, null, 2));
+
+  const skipped = modules.filter(m => m.skipped).map(m => m.mod);
+  console.log(`[regen] ${label}: ${modules.filter(m => m.ok && !m.skipped).length}/${modules.length} models re-saved, ${skipped.length} user-owned skipped${skipped.length ? ` (${skipped.join(', ')})` : ''}`);
+  for (const m of modules.filter(m => !m.ok)) console.log(`  x ${m.mod}: ${m.error}`);
+  console.log(`[regen] drift vs Varlik360: ${drift.changed.length} model files`);
+  console.log(`[regen] tsc in copy: ${tsc.errors} errors`);
+  for (const line of tsc.sample) console.log(`  ${line}`);
+  return report;
+}
+
+/** JSON-canonical form: `undefined` / missing keys equal, key order ignored. */
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value)
+        .filter(k => value[k] !== undefined)
+        .sort()
+        .map(k => [k, canonical(value[k])])
+    );
+  }
+  return value;
+}
+
+function firstDifference(a, b, path = '') {
+  if (JSON.stringify(a) === JSON.stringify(b)) return null;
+  if (a && b && typeof a === 'object' && typeof b === 'object') {
+    for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+      const d = firstDifference(a[key], b[key], `${path}/${key}`);
+      if (d) return d;
+    }
+  }
+  return { path: path || '/', expected: a, actual: b };
+}
+
+/**
+ * Manifest gate: the v3 store round-trips every model row, workspace prefs and timestamps; an older manifest
+ * (Varlik360's v2 file) is not read — its rows are ignored, workspace prefs kept, the file backed up once.
+ */
+async function manifestCheck() {
+  const { readWorkspaceManifest, writeWorkspaceManifestUpdate, canonicalModel, manifestBackupFileName } = await loadBundle();
+  const problems = [];
+  const rows = m => m.models.map(r => ({ sourceRelativePath: r.sourceRelativePath, model: canonicalModel(r.model) }));
+
+  // 1) v3: read → write → read keeps every row.
+  const dir3 = join(regenDir, 'manifest-v3');
+  rmSync(dir3, { recursive: true, force: true });
+  mkdirSync(join(dir3, '.generator'), { recursive: true });
+  cpSync(manifestFixture, join(dir3, '.generator/manifest.json'));
+  const fixture = JSON.parse(readFileSync(manifestFixture, 'utf8'));
+  const first = readWorkspaceManifest(dir3);
+  let diff = firstDifference(canonical(fixture.models), canonical(rows(first)));
+  if (diff) problems.push(`v3 read ${diff.path}: expected ${JSON.stringify(diff.expected)} got ${JSON.stringify(diff.actual)}`);
+  const w = writeWorkspaceManifestUpdate(dir3, { event: 'workspace', workspace: {} });
+  if (!w.success) problems.push(`v3 write failed: ${w.error}`);
+  const stored = JSON.parse(readFileSync(join(dir3, '.generator/manifest.json'), 'utf8'));
+  diff = firstDifference(canonical(fixture.models), canonical(stored.models));
+  if (diff) problems.push(`v3 write ${diff.path} changed`);
+  for (const key of ['workspace', 'lastSavedAt', 'lastGeneratedAt']) {
+    const expected = key === 'workspace' ? withoutLegacyWorkspaceKeys(fixture[key]) : fixture[key];
+    const d = firstDifference(canonical(expected), canonical(stored[key]));
+    if (d) problems.push(`v3 ${key}${d.path} changed`);
+  }
+  if (existsSync(join(dir3, '.generator', manifestBackupFileName(3)))) problems.push('v3 manifest backed up');
+
+  // 2) Old manifest: rows ignored, prefs kept, backup once.
+  const dir2 = join(regenDir, 'manifest-old');
+  rmSync(dir2, { recursive: true, force: true });
+  mkdirSync(join(dir2, '.generator'), { recursive: true });
+  // Varlik360's v2 manifest: its backup since the first v3 write (16.10.2026), else the live file.
+  const v2Backup = join(varlik, '.generator', manifestBackupFileName(2));
+  cpSync(existsSync(v2Backup) ? v2Backup : join(varlik, '.generator/manifest.json'), join(dir2, '.generator/manifest.json'));
+  const oldPath = join(dir2, '.generator/manifest.json');
+  const oldText = readFileSync(oldPath, 'utf8');
+  const old = JSON.parse(oldText);
+  const backupPath = join(dir2, '.generator', manifestBackupFileName(old.manifestVersion ?? 0));
+  if ((old.manifestVersion ?? 0) >= 3) problems.push(`Varlik360 manifest is already v${old.manifestVersion}`);
+  if (readWorkspaceManifest(dir2).models.length !== 0) problems.push('old manifest rows were read');
+  writeWorkspaceManifestUpdate(dir2, { event: 'workspace', workspace: {} });
+  const migrated = JSON.parse(readFileSync(oldPath, 'utf8'));
+  if (migrated.manifestVersion !== 3 || migrated.models.length !== 0) problems.push('old manifest not replaced by an empty v3 store');
+  if (firstDifference(canonical(withoutLegacyWorkspaceKeys(old.workspace)), canonical(migrated.workspace))) problems.push('workspace prefs lost');
+  if (LEGACY_WORKSPACE_KEYS.some(k => migrated.workspace && k in migrated.workspace)) problems.push('removed FE workspace keys kept');
+  if (!existsSync(backupPath) || readFileSync(backupPath, 'utf8') !== oldText) problems.push('old manifest backup missing or different');
+  writeWorkspaceManifestUpdate(dir2, { event: 'workspace', workspace: {} });
+  if (readFileSync(backupPath, 'utf8') !== oldText) problems.push('backup overwritten by second write');
+
+  console.log(`[manifest] v3 ${fixture.models.length} rows round trip, old v${old.manifestVersion} ignored + backed up: ${problems.length ? 'FAIL' : 'ok'}`);
+  for (const p of problems) console.log(`  x ${p}`);
+  return problems.length;
+}
+
+/** FE generate options removed in plan 6 §3: dropped from `workspace` on the next write. */
+const LEGACY_WORKSPACE_KEYS = ['selectedFrontendFiles', 'updateExistingFrontendFiles', 'isAdminUser'];
+function withoutLegacyWorkspaceKeys(workspace) {
+  if (!workspace) return workspace;
+  const out = { ...workspace };
+  for (const k of LEGACY_WORKSPACE_KEYS) delete out[k];
+  return out;
+}
+
+/**
+ * Core asset type gate (P2): Varlik360 copy with `src/core/**` overwritten by the Generator's core assets
+ * (default: current `src/generator-assets/core`), then `tsc`. Run once with pre-change assets and once with the
+ * new ones; errors present in both come from host additions, the difference belongs to the change.
+ */
+async function coreAssets(label, assetsDir = join(root, 'src/generator-assets/core')) {
+  const out = join(regenDir, label);
+  prepareCopy(out);
+  const files = walk(assetsDir).map(p => relative(assetsDir, p));
+  for (const rel of files) {
+    mkdirSync(dirname(join(out, 'src/core', rel)), { recursive: true });
+    cpSync(join(assetsDir, rel), join(out, 'src/core', rel));
+  }
+  const r = spawnSync('npx', ['tsc', '--noEmit', '-p', 'tsconfig.json'], { cwd: out, encoding: 'utf8' });
+  const errors = `${r.stdout}${r.stderr}`
+    .split('\n')
+    .filter(l => l.includes('error TS'))
+    .sort();
+  writeFileSync(join(regenDir, `${label}.tsc.txt`), errors.join('\n'));
+  console.log(`[core-assets] ${label}: ${files.length} asset files → tsc ${errors.length} errors (scripts/verify/out/regen/${label}.tsc.txt)`);
+  return errors.length;
+}
+
+/**
+ * P5 gate: per-model API settings survive the manifest; unsaved modules read their API from files (R5);
+ * a new model with no normal operation gets no route file / index route; the model modal writes enum + default.
+ */
+async function p5Checks() {
+  const b = await loadBundle();
+  const problems = [];
+  const check = (ok, msg) => {
+    if (!ok) problems.push(msg);
+  };
+
+  // 1) Manifest: api + adminOnly / hidden round trip (Varlik360 manifest copy).
+  const dir = join(regenDir, 'p5-check');
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  mkdirSync(join(dir, '.generator'), { recursive: true });
+  cpSync(manifestFixture, join(dir, '.generator/manifest.json'));
+  const rel = 'src/modules/users/users.model.ts';
+  const parsed = b.parseNormalizedModel(join(varlik, rel), 'nodejs-mongoose');
+  const row = b.findManifestModelByRelativePath(dir, rel);
+  const merged = b.mergeModel(parsed.model, row, 'nodejs-mongoose');
+  const api = { normalOperations: ['getOne', 'update'], ownership: 'self', requiresAuth: true, admin: true };
+  const apiOf = model => ({ ...model.api, ownership: model.ownership?.kind });
+  const apiKey = v => JSON.stringify([v.normalOperations, v.ownership, v.requiresAuth, v.admin]);
+  const withAccess = (f, access) => ({ ...f, access: { ...f.access, ...access } });
+  const edited = {
+    ...merged,
+    api: { normalOperations: api.normalOperations, requiresAuth: api.requiresAuth, admin: api.admin },
+    ownership: { kind: api.ownership },
+    fields: merged.fields.map(f =>
+      f.name === 'password' ? withAccess(f, { hidden: true, adminOnly: true }) : f.name === 'email' ? withAccess(f, { adminOnly: true }) : f
+    )
+  };
+  const w = b.writeWorkspaceManifestUpdate(dir, { event: 'save', model: { schema: edited, sourceRelativePath: rel } });
+  check(w.success, `manifest write: ${w.error}`);
+  const back = b.findManifestModelByRelativePath(dir, rel);
+  check(apiKey(apiOf(back)) === apiKey(api), `api round trip: ${JSON.stringify(apiOf(back))}`);
+  const pw = back.fields.find(f => f.name === 'password');
+  check(pw.access?.hidden === true && pw.access?.adminOnly === true, 'password hidden / adminOnly lost');
+  const remerged = b.mergeModel(parsed.model, back, 'nodejs-mongoose');
+  check(apiKey(apiOf(remerged)) === apiKey(api), 'api lost in mergeModel');
+  check(remerged.fields.find(f => f.name === 'email').access?.adminOnly === true, 'adminOnly lost in mergeModel');
+
+  // 2) Detection from Varlik360 files (no stored api yet).
+  const expectDetected = {
+    Symbols: { normalOperations: ['list', 'getOne', 'create', 'update', 'delete'], requiresAuth: true, admin: true },
+    AppVersionConfigs: { normalOperations: ['list', 'getOne', 'create', 'update', 'delete'], requiresAuth: false, admin: true },
+    DailyFxRates: { normalOperations: [], requiresAuth: true, admin: false },
+    AuditLog: { normalOperations: [], requiresAuth: true, admin: false }
+  };
+  for (const [entity, expected] of Object.entries(expectDetected)) {
+    const d = b.detectModuleApi(varlik, entity);
+    check(d.source === 'files' && JSON.stringify(d.api) === JSON.stringify(expected), `detect ${entity}: ${JSON.stringify(d)}`);
+  }
+  const fresh = b.detectModuleApi(varlik, 'BrandNewThing');
+  check(fresh.source === 'new' && fresh.api.normalOperations.length === 0, `detect new: ${JSON.stringify(fresh)}`);
+
+  // 3) New model: modal create (enum + default) → generate with no normal operation → no routes file, no index route.
+  const proj = join(regenDir, 'p5-new');
+  rmSync(proj, { recursive: true, force: true });
+  mkdirSync(join(proj, 'src'), { recursive: true });
+  writeFileSync(join(proj, 'package.json'), '{"name":"p5-new"}');
+  writeFileSync(join(proj, 'src/index.ts'), "import express from 'express';\nconst app = express();\napp.use('/api/x', xRoute);\n");
+  const cwd = process.cwd();
+  process.chdir(proj);
+  const created = await b.createModel(proj, 'nodejs-mongoose', {
+    model: {
+      schemaVersion: 2,
+      entityName: 'Coupons',
+      timestamps: { createdAt: true, updatedAt: true },
+      fields: [
+        { name: 'code', kind: 'string', isArray: false, required: true, unique: true, trim: true },
+        { name: 'kind', kind: 'enum', isArray: false, required: true, unique: false, trim: true, enum: { values: ['percent', 'fixed'] }, default: 'percent' },
+        { name: 'amount', kind: 'number', isArray: false, required: false, unique: false, trim: false, default: 0 }
+      ]
+    }
+  });
+  check(created.success, `createModel: ${created.error}`);
+  const reserved = await b.createModel(proj, 'nodejs-mongoose', {
+    model: { schemaVersion: 2, entityName: 'Bad', fields: [{ name: '_id', kind: 'string', isArray: false, required: true, unique: false, trim: false }] }
+  });
+  check(!reserved.success, '_id field name accepted');
+  const modelText = readFileSync(join(proj, 'src/modules/coupons/coupons.model.ts'), 'utf8');
+  check(/enum: \['percent', 'fixed'\]/.test(modelText) && /default: 'percent'/.test(modelText), 'enum / default not written for kind');
+  check(/default: 0/.test(modelText), 'default 0 not written for amount');
+
+  const couponSchema = b.mergeModel(b.parseNormalizedModel(join(proj, 'src/modules/coupons/coupons.model.ts'), 'nodejs-mongoose').model, null, 'nodejs-mongoose');
+  const gen = (normalOperations, isProtectedRoute) =>
+    b.generateBackend({ ...couponSchema, api: { normalOperations } }, proj, isProtectedRoute, 'nodejs-mongoose', true, '/api', true, true, undefined);
+  const g1 = gen([], true);
+  check(g1.success, `generate (no ops): ${g1.error}`);
+  check(!existsSync(join(proj, 'src/modules/coupons/coupons.routes.ts')), 'routes file created without normal operations');
+  check(!readFileSync(join(proj, 'src/index.ts'), 'utf8').includes("'/api/coupons'"), 'normal route injected without normal operations');
+  check(existsSync(join(proj, 'src/modules/coupons/coupons.routes.admin.ts')), 'admin routes missing');
+  const schemaText = readFileSync(join(proj, 'src/modules/coupons/coupons.schema.ts'), 'utf8');
+  check(schemaText.includes("z.enum(['percent', 'fixed'])"), 'z.enum missing in schema');
+  const g2 = gen(['list', 'getOne', 'create'], true);
+  check(g2.success, `generate (list/getOne/create): ${g2.error}`);
+  const routes = existsSync(join(proj, 'src/modules/coupons/coupons.routes.ts')) ? readFileSync(join(proj, 'src/modules/coupons/coupons.routes.ts'), 'utf8') : '';
+  check(routes.includes("'/get-all'") && routes.includes("router.get('/:id'"), 'read routes missing');
+  check(!routes.includes("'/create'"), 'create generated on a model without ownership');
+  check(readFileSync(join(proj, 'src/index.ts'), 'utf8').includes("'/api/coupons'"), 'normal route not injected');
+  process.chdir(cwd);
+
+  console.log(`[p5] ${problems.length ? 'FAIL' : 'ok'}`);
+  for (const p of problems) console.log(`  x ${p}`);
+  return problems.length;
+}
+
+function compare(left, right) {
+  const { changed, patch } = diffTrees(join(regenDir, left), join(regenDir, right), ['src']);
+  writeFileSync(join(regenDir, `${left}..${right}.patch`), patch);
+  console.log(`[regen] ${left} vs ${right}: ${changed.length} differing files`);
+  for (const rel of changed) console.log(`  ~ ${rel}`);
+  return changed.length;
+}
+
+const args = process.argv.slice(2);
+if (args[0] === '--compare') {
+  process.exit(compare(args[1] ?? 'reference', args[2]) > 0 ? 1 : 0);
+} else if (args[0] === '--core-assets') {
+  await coreAssets(args[1] ?? 'core-assets', args[2]);
+} else if (args[0] === '--p5') {
+  process.exit((await p5Checks()) > 0 ? 1 : 0);
+} else if (args[0] === '--manifest') {
+  process.exit((await manifestCheck()) > 0 ? 1 : 0);
+} else if (args[0] === '--resave-models') {
+  const report = await resaveModels(args[1] ?? 'reference-models');
+  process.exit(report.modules.every(m => m.ok) ? 0 : 1);
+} else {
+  const label = args.find(a => !a.startsWith('--')) ?? 'reference';
+  const report = await regenerate(label, {
+    planned: args.includes('--planned'),
+    coreOverlay: args.includes('--core-overlay')
+  });
+  process.exit(report.modules.every(m => m.ok) ? 0 : 1);
+}

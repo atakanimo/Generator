@@ -13,8 +13,7 @@ export const ErrorCodes = {
   TOO_MANY_REQUESTS: 429,
   REQUEST_TIMEOUT: 408,
   SERVICE_UNAVAILABLE: 503,
-  EMAIL_NOT_VERIFIED: 463,
-  FUND_CRITICAL_ERROR: 502
+  EMAIL_NOT_VERIFIED: 463
 } as const;
 
 export type ErrorCodeKey = keyof typeof ErrorCodes;

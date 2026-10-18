@@ -8,29 +8,41 @@ import { ListPaginationBodySchema } from '@core/schema/list-pagination.schema';
 // <custom-schema>
 // </custom-schema>
 
+/** Mongo ObjectId (24 hex): a malformed id is a 400, not a CastError 500. */
+const objectIdString = z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid id');
+
 const {{entityName}}GetAllFilterSchema = z
   .object({
-    _id: z.string().optional(),
+    id: objectIdString.optional(),
 {{#each fields}}{{zodFieldScoped this "filter" ../normalizedModel.ownership.field false}}{{/each}}
+    // <custom-filter-fields>
+    // </custom-filter-fields>
   })
   .strict();
 
-export const {{entityName}}GetAllBodySchema = {{entityName}}GetAllFilterSchema.merge(ListPaginationBodySchema);
+/** List body: pagination + nested `filters` (contract K2). */
+export const {{entityName}}GetAllBodySchema = ListPaginationBodySchema.extend({
+  filters: {{entityName}}GetAllFilterSchema.optional()
+}).strict();
 
-{{#if (and isAdminUser normalizedModel.ownership.field)}}
+{{#if adminSchemaVariant}}
 const {{entityName}}GetAllFilterAdminSchema = z
   .object({
-    _id: z.string().optional(),
+    id: objectIdString.optional(),
 {{#each fields}}{{zodFieldScoped this "filter" ../normalizedModel.ownership.field true}}{{/each}}
+    // <custom-filter-fields-admin>
+    // </custom-filter-fields-admin>
   })
   .strict();
 
-export const {{entityName}}GetAllBodyAdminSchema = {{entityName}}GetAllFilterAdminSchema.merge(ListPaginationBodySchema);
+export const {{entityName}}GetAllBodyAdminSchema = ListPaginationBodySchema.extend({
+  filters: {{entityName}}GetAllFilterAdminSchema.optional()
+}).strict();
 {{/if}}
 
-export const {{entityName}}MongoIdParamSchema = z
+export const {{entityName}}IdParamSchema = z
   .object({
-    id: z.string().min(1)
+    id: objectIdString
   })
   .strict();
 
@@ -40,7 +52,7 @@ export const {{entityName}}CreateBodySchema = z
   })
   .strict();
 
-{{#if (and isAdminUser normalizedModel.ownership.field)}}
+{{#if adminSchemaVariant}}
 export const {{entityName}}CreateBodyAdminSchema = z
   .object({
 {{#each fields}}{{zodFieldScoped this "create" ../normalizedModel.ownership.field true}}{{/each}}
@@ -54,7 +66,7 @@ export const {{entityName}}UpdateBodySchema = z
   })
   .strict();
 
-{{#if (and isAdminUser normalizedModel.ownership.field)}}
+{{#if adminSchemaVariant}}
 export const {{entityName}}UpdateBodyAdminSchema = z
   .object({
 {{#each fields}}{{zodFieldScoped this "update" ../normalizedModel.ownership.field true}}{{/each}}

@@ -1,0 +1,14 @@
+---
+description: Generator Electron UI — Schema Designer, model editor, IPC
+globs: src/renderer/**,src/preload/**,src/main/index.ts,src/main/ipc/**,src/shared/ipcTypes.ts
+alwaysApply: false
+---
+
+# Generator UI
+
+Source: `docs/generator-ui.md`.
+
+- IPC types only from `src/shared/ipcTypes.ts`; no local copies. IPC is a bridge; logic lives in generators / `shared`.
+- Model editor edits v2 fields in place (`ModelDraft`); untouched fields are saved as parsed.
+- UI Component options from `uiComponentOptionsFor`. Reject `id` / `_id` field names.
+- Check UI changes in Electron / browser last, after the cheap gates.

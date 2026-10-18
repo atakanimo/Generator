@@ -1,0 +1,19 @@
+---
+description: Generator code rules — NormalizedModel v2 only, no legacy, generated files, verification order, commit policy
+alwaysApply: true
+---
+
+# Generator core rules
+
+Full text: `docs/coding-rules.md`. Index: `docs/README.md`.
+
+- **One model type:** NormalizedModel v2 (`src/shared/normalizedModel.ts`, `docs/normalized-model.md`). No parallel model types, bridges or adapters. Stack names only under `native`.
+- **No legacy / fallback code:** no compatibility branches for old shapes; old data is migrated once or ignored. Delete unused code.
+- **Generated files:** never write code outside custom blocks in a file with the Generator header; business rules go to the service hook (`<m>.hooks.ts`), extra endpoints / methods / schema keys to the matching custom block. Header-less files are user-owned.
+- **Templates:** no business logic in `.hbs`; decisions in helpers / emitters.
+- **Contract:** every BE stack follows `docs/api-contract.md`. `id` / `_id` are reserved field names.
+- **Verification gates:** run the gates for what you changed (`docs/verification.md`). Generator `npx tsc --noEmit -p tsconfig.json` error count outside `src/generator-assets` must not grow.
+- **Order:** cheap checks first (tsc, unit tests, smoke), then regen / config gates, browser / Electron checks last and batched. Run long scripts in the background.
+- **Never write into the real Varlik360 folder** for verification; the scripts use copies.
+- **Commit:** no commit, push or git index change unless the user asks.
+- Docs are Turkish, code identifiers English. Docs describe how things work, not history (history: `docs/history/`).

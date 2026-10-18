@@ -1,49 +1,31 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
-import { parseModelFile, type SchemaDefinition } from '../ipc/schemaParser.js';
-import { mergeSchema, sanitizeFieldRelationMeta, type MergedFieldConfig } from '../../shared/schemaMerge.js';
+import { parseNormalizedModel } from '../ipc/schemaParser.js';
+import { mergeModel, sanitizeFieldRelationMeta } from '../../shared/modelMerge.js';
+import { NORMALIZED_MODEL_VERSION, canonicalModel, type NormalizedModel } from '../../shared/normalizedModel.js';
+import type { ManifestWorkspacePrefs } from '../../shared/ipcTypes.js';
 import { log } from './logger.js';
 import { getGeneratorRoot } from './templateHelpers.js';
 
-export const MANIFEST_VERSION = 2;
+/**
+ * 3: models stored as NormalizedModel v2 (`{ sourceRelativePath, model }`). Older manifests are not read: their
+ * model rows are ignored (models are saved again from the files) and the file is backed up before the first write.
+ */
+export const MANIFEST_VERSION = 3;
+
+/** Backup name for an older manifest replaced by the first v3 write, e.g. `manifest.v2.backup.json`. */
+export function manifestBackupFileName(version: number): string {
+  return `manifest.v${version}.backup.json`;
+}
 export const WORKSPACE_GENERATOR_DIR = '.generator';
 export const MANIFEST_FILE_NAME = 'manifest.json';
 
-export interface ManifestWorkspacePrefs {
-  frontendPath?: string;
-  generationMode?: 'frontend' | 'backend' | 'fullstack';
-  isProtectedRoute?: boolean;
-  isAdminUser?: boolean;
-  updateExistingFrontendFiles?: boolean;
-  updateExistingBackendFiles?: boolean;
-  selectedFrontendFiles?: {
-    service?: boolean;
-    thunk?: boolean;
-    slice?: boolean;
-    page?: boolean;
-  };
-  selectedBackendFiles?: {
-    model?: boolean;
-    crud?: boolean;
-    filters?: boolean;
-    types?: boolean;
-    service?: boolean;
-    schema?: boolean;
-    route?: boolean;
-    serviceAdmin?: boolean;
-    routeAdmin?: boolean;
-  };
-  features?: {
-    deletable?: boolean;
-    updatable?: boolean;
-  };
-}
+export type { ManifestWorkspacePrefs };
 
-export interface ManifestModelEntry {
+/** Stored manifest row (v3). */
+export interface ManifestModelRecord {
   sourceRelativePath: string;
-  entityName: string;
-  fields: SchemaDefinition['fields'];
-  nestedSchemas?: SchemaDefinition['nestedSchemas'];
+  model: NormalizedModel;
 }
 
 export interface WorkspaceManifest {
@@ -52,13 +34,13 @@ export interface WorkspaceManifest {
   lastGeneratedAt?: string;
   generatorVersion?: string;
   workspace?: ManifestWorkspacePrefs;
-  models: ManifestModelEntry[];
+  models: ManifestModelRecord[];
 }
 
 export type ManifestWriteEvent = 'save' | 'generate' | 'stash' | 'workspace' | 'reconcile';
 
 export interface ManifestWriteRequest {
-  model?: { schema: SchemaDefinition; sourceRelativePath: string };
+  model?: { schema: NormalizedModel; sourceRelativePath: string };
   workspace?: ManifestWorkspacePrefs;
   event: ManifestWriteEvent;
 }
@@ -92,29 +74,39 @@ function readGeneratorVersion(): string {
   }
 }
 
-function normalizeManifest(raw: WorkspaceManifest | null): WorkspaceManifest {
+function normalizeManifest(raw: unknown): WorkspaceManifest {
   const base: WorkspaceManifest = {
     manifestVersion: MANIFEST_VERSION,
     models: [],
     generatorVersion: readGeneratorVersion()
   };
   if (!raw || typeof raw !== 'object') return base;
+  const stored = raw as Omit<WorkspaceManifest, 'models'> & { models?: unknown[] };
+  const storedVersion = typeof stored.manifestVersion === 'number' ? stored.manifestVersion : 0;
+  const rows = Array.isArray(stored.models) ? stored.models : [];
   return {
     ...base,
-    ...raw,
+    ...stored,
     manifestVersion: MANIFEST_VERSION,
-    models: Array.isArray(raw.models) ? raw.models : [],
-    workspace: raw.workspace && typeof raw.workspace === 'object' ? raw.workspace : undefined,
-    lastSavedAt: raw.lastSavedAt,
-    lastGeneratedAt: raw.lastGeneratedAt
+    models: storedVersion >= MANIFEST_VERSION ? (rows as ManifestModelRecord[]) : [],
+    workspace: stored.workspace && typeof stored.workspace === 'object' ? stored.workspace : undefined,
+    lastSavedAt: stored.lastSavedAt,
+    lastGeneratedAt: stored.lastGeneratedAt
   };
 }
+
+const warnedOldManifests = new Set<string>();
 
 export function readWorkspaceManifest(workspaceRoot: string): WorkspaceManifest | null {
   const p = getWorkspaceManifestPath(workspaceRoot);
   if (!existsSync(p)) return null;
   try {
-    const raw = JSON.parse(readFileSync(p, 'utf-8')) as WorkspaceManifest;
+    const raw = JSON.parse(readFileSync(p, 'utf-8')) as { manifestVersion?: unknown };
+    const version = typeof raw?.manifestVersion === 'number' ? raw.manifestVersion : 0;
+    if (version < MANIFEST_VERSION && !warnedOldManifests.has(p)) {
+      warnedOldManifests.add(p);
+      log(`Manifest v${version} is not supported; its model rows are ignored (models are read from the files) | ${JSON.stringify({ manifestPath: p })}`, 'warn');
+    }
     return normalizeManifest(raw);
   } catch {
     return null;
@@ -153,38 +145,43 @@ export function resolveWorkspaceRootForModelFile(
   return hint || dirname(absoluteFilePath);
 }
 
-/** Match manifest row by `sourceRelativePath` (POSIX); returns null if workspace has no manifest or no row. */
-export function findManifestModelByRelativePath(workspaceRoot: string, sourceRelativePath: string): ManifestModelEntry | null {
+/** Manifest row matched by `sourceRelativePath` (POSIX); null if workspace has no manifest or no row. */
+export function findManifestModelByRelativePath(workspaceRoot: string, sourceRelativePath: string): NormalizedModel | null {
   const man = readWorkspaceManifest(workspaceRoot);
-  if (!man?.models?.length) return null;
   const key = normalizeRelPath(sourceRelativePath);
-  return man.models.find(m => normalizeRelPath(m.sourceRelativePath) === key) ?? null;
+  return man?.models.find(m => normalizeRelPath(m.sourceRelativePath) === key)?.model ?? null;
 }
 
-function upsertModels(models: ManifestModelEntry[], entry: ManifestModelEntry): ManifestModelEntry[] {
-  const key = normalizeRelPath(entry.sourceRelativePath);
-  const normalizedEntry: ManifestModelEntry = { ...entry, sourceRelativePath: key };
+function upsertModels(models: ManifestModelRecord[], record: ManifestModelRecord): ManifestModelRecord[] {
+  const key = normalizeRelPath(record.sourceRelativePath);
+  const normalizedRecord: ManifestModelRecord = { ...record, sourceRelativePath: key };
   const withoutStale = models.filter(m => {
     const mKey = normalizeRelPath(m.sourceRelativePath);
     if (mKey === key) return false;
-    if (m.entityName === entry.entityName) return false;
+    if (m.model.entityName === record.model.entityName) return false;
     return true;
   });
-  return [...withoutStale, normalizedEntry];
+  return [...withoutStale, normalizedRecord];
+}
+
+/** FE generate options removed in plan 6 §3; old manifests may still carry them. */
+const LEGACY_WORKSPACE_KEYS = ['selectedFrontendFiles', 'updateExistingFrontendFiles', 'isAdminUser'] as const;
+
+function withoutLegacyWorkspaceKeys(prefs: ManifestWorkspacePrefs): ManifestWorkspacePrefs {
+  const out: Record<string, unknown> = { ...prefs };
+  for (const k of LEGACY_WORKSPACE_KEYS) delete out[k];
+  return out as ManifestWorkspacePrefs;
 }
 
 function mergeWorkspacePrefs(
   prev: ManifestWorkspacePrefs | undefined,
   next: ManifestWorkspacePrefs | undefined
 ): ManifestWorkspacePrefs | undefined {
-  if (!next) return prev;
-  if (!prev) return { ...next };
+  if (!next) return prev ? withoutLegacyWorkspaceKeys(prev) : prev;
+  if (!prev) return withoutLegacyWorkspaceKeys({ ...next });
   return {
-    ...prev,
-    ...next,
-    selectedFrontendFiles: next.selectedFrontendFiles
-      ? { ...prev.selectedFrontendFiles, ...next.selectedFrontendFiles }
-      : prev.selectedFrontendFiles,
+    ...withoutLegacyWorkspaceKeys(prev),
+    ...withoutLegacyWorkspaceKeys(next),
     selectedBackendFiles: next.selectedBackendFiles
       ? { ...prev.selectedBackendFiles, ...next.selectedBackendFiles }
       : prev.selectedBackendFiles,
@@ -198,16 +195,17 @@ export function applyManifestWrite(prev: WorkspaceManifest | null, request: Mani
 
   if (request.model) {
     const rel = normalizeRelPath(request.model.sourceRelativePath.trim());
-    const entry: ManifestModelEntry = {
-      sourceRelativePath: rel,
-      entityName: request.model.schema.entityName,
-      fields: request.model.schema.fields.map(f => sanitizeFieldRelationMeta(f as MergedFieldConfig)),
-      nestedSchemas: request.model.schema.nestedSchemas?.map(ns => ({
-        ...ns,
-        fields: ns.fields.map(f => sanitizeFieldRelationMeta(f as MergedFieldConfig))
-      }))
-    };
-    manifest.models = upsertModels(manifest.models, entry);
+    const { schema } = request.model;
+    // Stored: fields + UI / API settings; timestamps and the mongoose model name always come from the file.
+    const model = canonicalModel({
+      schemaVersion: NORMALIZED_MODEL_VERSION,
+      entityName: schema.entityName,
+      fields: schema.fields.map(sanitizeFieldRelationMeta),
+      nestedSchemas: schema.nestedSchemas?.map(ns => ({ ...ns, fields: ns.fields.map(sanitizeFieldRelationMeta) })),
+      ownership: schema.ownership,
+      api: schema.api
+    });
+    manifest.models = upsertModels(manifest.models, { sourceRelativePath: rel, model });
   }
 
   if (request.workspace) {
@@ -242,6 +240,20 @@ function writeManifestAtomic(workspaceRoot: string, manifest: WorkspaceManifest)
   }
 }
 
+/** Before the first v3 write over an older manifest, keep that file next to it; never overwritten afterwards. */
+function backupOldManifestOnce(workspaceRoot: string): void {
+  const dir = join(workspaceRoot, WORKSPACE_GENERATOR_DIR);
+  const current = join(dir, MANIFEST_FILE_NAME);
+  if (!existsSync(current)) return;
+  try {
+    const version = (JSON.parse(readFileSync(current, 'utf-8')) as { manifestVersion?: number }).manifestVersion ?? 0;
+    const backup = join(dir, manifestBackupFileName(version));
+    if (version < MANIFEST_VERSION && !existsSync(backup)) copyFileSync(current, backup);
+  } catch (error) {
+    log(`Old manifest backup failed | ${JSON.stringify({ workspaceRoot, error: error instanceof Error ? error.message : 'Unknown error' })}`, 'warn');
+  }
+}
+
 export function writeWorkspaceManifestUpdate(
   workspaceRoot: string,
   request: ManifestWriteRequest
@@ -259,6 +271,7 @@ export function writeWorkspaceManifestUpdate(
 
   const prev = readWorkspaceManifest(root);
   const manifest = applyManifestWrite(prev, request);
+  backupOldManifestOnce(root);
   const out = writeManifestAtomic(root, manifest);
   if (!out.success) {
     log(`Workspace manifest write failed | ${JSON.stringify({ root, error: out.error })}`, 'warn');
@@ -271,7 +284,7 @@ export function writeWorkspaceManifestUpdate(
  */
 export function recordWorkspaceManifestUpsert(
   workspaceRoot: string,
-  schema: SchemaDefinition,
+  schema: NormalizedModel,
   sourceRelativePath: string,
   event: 'save' | 'generate',
   workspace?: ManifestWorkspacePrefs
@@ -286,7 +299,7 @@ export function recordWorkspaceManifestUpsert(
 /** Stash current model fields without updating save/generate timestamps. */
 export function stashModelInManifest(
   workspaceRoot: string,
-  schema: SchemaDefinition,
+  schema: NormalizedModel,
   sourceRelativePath: string,
   workspace?: ManifestWorkspacePrefs
 ): { success: boolean; error?: string; manifestPath?: string } {
@@ -317,27 +330,18 @@ export function reconcileModelFromDisk(
   success: boolean;
   error?: string;
   manifestPath?: string;
-  schema?: SchemaDefinition;
+  schema?: NormalizedModel;
   sourceRelativePath?: string;
 } {
   const root = resolveWorkspaceRootForModelFile(workspaceRoot, absoluteFilePath);
 
-  const parseResult = parseModelFile(absoluteFilePath, sourceType);
-  if (!parseResult.success || !parseResult.schema) {
+  const parseResult = parseNormalizedModel(absoluteFilePath, sourceType);
+  if (!parseResult.success || !parseResult.model) {
     return { success: false, error: parseResult.error ?? 'Failed to parse model file' };
   }
 
   const rel = normalizeRelPath(toProjectRelativePath(root, absoluteFilePath));
-  const manifestRow = findManifestModelByRelativePath(root, rel);
-  const savedSchema = manifestRow
-    ? {
-        entityName: manifestRow.entityName,
-        fields: manifestRow.fields,
-        nestedSchemas: manifestRow.nestedSchemas
-      }
-    : null;
-
-  const merged = mergeSchema(parseResult.schema, savedSchema, sourceType) as SchemaDefinition;
+  const merged = mergeModel(parseResult.model, findManifestModelByRelativePath(root, rel), sourceType);
 
   const out = writeWorkspaceManifestUpdate(root, {
     event: 'reconcile',

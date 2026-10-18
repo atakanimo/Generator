@@ -3,15 +3,17 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { scanProject } from './ipc/projectScanner.js';
 import type { SourceType } from './ipc/projectScanner.js';
-import { parseModelFile } from './ipc/schemaParser.js';
-import type { SchemaDefinition } from './ipc/schemaParser.js';
-import { loadSchemaConfig, saveSchemaConfig } from './ipc/configManager.js';
-import { recordWorkspaceManifestUpsert, findManifestModelByRelativePath, toProjectRelativePath, getWorkspacePreferences, stashModelInManifest, updateWorkspacePreferencesInManifest, reconcileModelFromDisk } from './utils/manifestSnapshot.js';
-import type { ManifestWorkspacePrefs } from './utils/manifestSnapshot.js';
-import { generateCode } from './ipc/codeGenerator.js';
+import type { NormalizedModel } from '../shared/normalizedModel.js';
+import type { ManifestWorkspacePrefs } from '../shared/ipcTypes.js';
+import { loadModelForEditor } from './ipc/modelEditor.js';
+import { saveSchemaConfig } from './ipc/configManager.js';
+import { recordWorkspaceManifestUpsert, getWorkspacePreferences, stashModelInManifest, updateWorkspacePreferencesInManifest, reconcileModelFromDisk } from './utils/manifestSnapshot.js';
 import { generateBackend } from './ipc/backendGenerator.js';
-import { generateFrontend, parseBaseUrlFromBackend } from './ipc/frontendGenerator.js';
-import { createModel, parseModelToModelData, updateModel } from './ipc/modelCreator.js';
+import { existsSync, readFileSync } from 'fs';
+import { modelSourceHash, staleModelSourceError } from './utils/modelSourceHash.js';
+import { generateFrontend } from './ipc/frontendGenerator.js';
+import { parseBaseUrlFromBackend } from './utils/backendAppFile.js';
+import { createModel, loadModelDraft, updateModel } from './ipc/modelCreator.js';
 import { getRelatedModelFieldNames } from './ipc/relatedModelFields.js';
 import { log } from './utils/logger.js';
 
@@ -71,35 +73,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('project:parseModel', async (_, { filePath, projectRoot, sourceType }) => {
     try {
-      // Step 1: Parse the actual file
-      const parseResult = parseModelFile(filePath, sourceType);
-
-      if (!parseResult.success || !parseResult.schema) {
-        return parseResult;
-      }
-
-      const root = String(projectRoot || '').trim();
-      const rel = root ? toProjectRelativePath(root, filePath) : '';
-      const manifestRow = root && rel ? findManifestModelByRelativePath(root, rel) : null;
-
-      let savedSchema: SchemaDefinition | null = null;
-      if (manifestRow) {
-        savedSchema = {
-          entityName: manifestRow.entityName,
-          fields: manifestRow.fields,
-          nestedSchemas: manifestRow.nestedSchemas
-        };
-      } else {
-        const savedConfig = loadSchemaConfig(projectRoot, parseResult.schema.entityName);
-        savedSchema = savedConfig.success && savedConfig.schema ? savedConfig.schema : null;
-      }
-
-      return {
-        success: true,
-        codeSchema: parseResult.schema,
-        savedSchema,
-        hasSavedConfig: Boolean(savedSchema)
-      };
+      return loadModelForEditor(filePath, projectRoot, sourceType);
     } catch (error) {
       log(`Error parsing model file: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
       return {
@@ -178,7 +152,7 @@ app.whenReady().then(() => {
         if (!projectRoot?.trim() || !sourceRelativePath?.trim()) {
           return { success: false, error: 'projectRoot and sourceRelativePath are required' };
         }
-        const sch = schema as SchemaDefinition;
+        const sch = schema as NormalizedModel;
         if (!sch?.entityName) {
           return { success: false, error: 'schema.entityName is required' };
         }
@@ -205,7 +179,7 @@ app.whenReady().then(() => {
         if (!projectRoot?.trim() || !sourceRelativePath?.trim()) {
           return { success: false, error: 'projectRoot and sourceRelativePath are required' };
         }
-        const sch = schema as SchemaDefinition;
+        const sch = schema as NormalizedModel;
         if (!sch?.entityName) {
           return { success: false, error: 'schema.entityName is required' };
         }
@@ -226,24 +200,13 @@ app.whenReady().then(() => {
     }
   );
 
-  ipcMain.handle('project:generateCode', async (_, { templateName, schema, outputPath, outputFileName }) => {
-    try {
-      const result = generateCode(templateName, schema, outputPath, outputFileName);
-      return result;
-    } catch (error) {
-      log(`Error generating code: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
-  });
-
   ipcMain.handle(
     'project:generateBackend',
-    async (_, { schema, projectPath, isProtectedRoute, sourceType, shouldAddRoute, baseUrl, updateExistingFiles, isAdminUser, selectedFiles }) => {
+    async (_, { schema, projectPath, isProtectedRoute, sourceType, shouldAddRoute, baseUrl, updateExistingFiles, isAdminUser, selectedFiles, sourceCheck }) => {
       try {
-        const result = generateBackend(
+        const stale = staleModelSourceError(sourceCheck);
+        if (stale) return { success: false, error: stale };
+        const generated = generateBackend(
           schema,
           projectPath,
           isProtectedRoute,
@@ -254,6 +217,11 @@ app.whenReady().then(() => {
           isAdminUser,
           selectedFiles
         );
+        // Generation may rewrite the model file: hand its new hash back so the next generate is not refused.
+        const result =
+          generated.success && sourceCheck?.filePath && existsSync(sourceCheck.filePath)
+            ? { ...generated, sourceHash: modelSourceHash(readFileSync(sourceCheck.filePath, 'utf8')) }
+            : generated;
         return result;
       } catch (error) {
         log(`Error generating backend code: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
@@ -280,24 +248,9 @@ app.whenReady().then(() => {
 
   ipcMain.handle(
     'project:generateFrontend',
-    async (
-      _,
-      { schema, projectPath, selectedFiles, backendPath, features, baseUrl, sourceType, isProtectedRoute, updateExistingFiles, isAdminUser }
-    ) => {
+    async (_, { schema, projectPath, backendPath, features, baseUrl }) => {
       try {
-        const result = generateFrontend(
-          schema,
-          projectPath,
-          selectedFiles,
-          backendPath,
-          features,
-          baseUrl,
-          sourceType,
-          isProtectedRoute,
-          updateExistingFiles,
-          isAdminUser
-        );
-        return result;
+        return generateFrontend(schema, projectPath, backendPath, features, baseUrl);
       } catch (error) {
         log(`Error generating frontend code: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
         return {
@@ -308,9 +261,9 @@ app.whenReady().then(() => {
     }
   );
 
-  ipcMain.handle('project:createModel', async (_, { projectPath, sourceType, modelData }) => {
+  ipcMain.handle('project:createModel', async (_, { projectPath, sourceType, draft }) => {
     try {
-      const result = await createModel(projectPath, sourceType, modelData);
+      const result = await createModel(projectPath, sourceType, draft);
       if (result.success && result.filePath) {
         const reconciled = reconcileModelFromDisk(projectPath?.trim(), result.filePath, sourceType);
         if (!reconciled.success) {
@@ -321,7 +274,8 @@ app.whenReady().then(() => {
           schema: reconciled.schema,
           sourceRelativePath: reconciled.sourceRelativePath,
           manifestPath: reconciled.manifestPath,
-          manifestUpdated: reconciled.success
+          manifestUpdated: reconciled.success,
+          sourceHash: modelSourceHash(readFileSync(result.filePath, 'utf8'))
         };
       }
       return result;
@@ -334,12 +288,11 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('project:parseModelToModelData', async (_, { filePath, sourceType }) => {
+  ipcMain.handle('project:loadModelDraft', async (_, { filePath, sourceType }) => {
     try {
-      const result = parseModelToModelData(filePath, sourceType);
-      return result;
+      return loadModelDraft(filePath, sourceType);
     } catch (error) {
-      log(`Error parsing model to ModelData: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+      log(`Error loading model draft: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -347,9 +300,9 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('project:updateModel', async (_, { filePath, projectPath, sourceType, modelData }) => {
+  ipcMain.handle('project:updateModel', async (_, { filePath, projectPath, sourceType, draft }) => {
     try {
-      const result = await updateModel(filePath, sourceType, modelData);
+      const result = await updateModel(filePath, sourceType, draft);
       if (result.success && result.filePath) {
         const reconciled = reconcileModelFromDisk(projectPath?.trim(), result.filePath, sourceType);
         if (!reconciled.success) {
@@ -360,7 +313,8 @@ app.whenReady().then(() => {
           schema: reconciled.schema,
           sourceRelativePath: reconciled.sourceRelativePath,
           manifestPath: reconciled.manifestPath,
-          manifestUpdated: reconciled.success
+          manifestUpdated: reconciled.success,
+          sourceHash: modelSourceHash(readFileSync(result.filePath, 'utf8'))
         };
       }
       return result;

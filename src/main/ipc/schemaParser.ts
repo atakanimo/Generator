@@ -1,59 +1,170 @@
 import { readFileSync } from 'fs';
 import {
+  canonicalModel,
+  type NativeType,
+  type NormalizedField,
+  type NormalizedModel,
+  type NormalizedNestedSchema,
+  type NormalizedObjectSubField
+} from '../../shared/normalizedModel.js';
+import { kindFromTypeToken, nativeTypeFor, templateScalarToken, typeTokenOf } from '../../shared/fieldTypeToken.js';
+import {
   entityNameFromModelFileName,
   resolveMainMongooseSchemaName,
   extractMainSchemaRegions,
   parseSchemaOptionsMeta,
   parseMongooseFieldModifiers,
   parseMongooseEmbeddedObjectSubFields,
-  mongooseEmbeddedObjectRequired
+  mongooseEmbeddedObjectRequired,
+  type ParsedEmbeddedObjectSubField,
+  parseNamedNestedSchemaRef,
+  parseMongooseFieldExtras,
+  parseSchemaTimestamps,
+  parseInterfaceProperties,
+  scanBalancedDelimiters
 } from '../utils/mongooseSchemaExtract.js';
 
 export { entityNameFromModelFileName };
 
-export interface SchemaField {
-  name: string;
-  type: string;
-  required: boolean;
-  isArray: boolean;
-  includeRelation?: boolean;
-  relationEntityName?: string;
-  relationProperty?: string;
-  relationPopulateFields?: string[];
-  relationPropertyObjectFields?: Array<{
-    name: string;
-    type: string;
-    required: boolean;
-    trim?: boolean;
-  }>;
-  uiComponent?: string;
-  showInTable?: boolean;
-  isSearchable?: boolean;
-  filterType?: string;
-  isReadonly?: boolean;
-  hiddenFromCreate?: boolean;
-  hiddenFromUpdate?: boolean;
-  label?: string;
-  trim?: boolean;
-  unique?: boolean;
-  objectFields?: Array<{
-    name: string;
-    type: string;
-    required: boolean;
-    trim?: boolean;
-  }>;
+type SourceTypeArg = 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null;
+
+// --- Field construction ---------------------------------------------------------------------------------
+// The parser reads Mongoose / TS type names as parser tokens (`string`, `schema`, `schema.types.decimal128`, …);
+// `kind` + `native.type` store them (`fieldTypeToken.ts`).
+
+function withNative(field: NormalizedField, native: NativeType): NormalizedField {
+  const merged: NativeType = { ...field.native, ...native };
+  return Object.keys(merged).length > 0 ? { ...field, native: merged } : field;
 }
 
-export interface SchemaDefinition {
-  entityName: string;
-  fields: SchemaField[];
-  nestedSchemas?: SchemaDefinition[];
+/** Set `kind` / `native.type` from a parser token (an enum field stays `enum`). */
+function withTypeToken(field: NormalizedField, token: string): NormalizedField {
+  const kind = field.enum ? 'enum' : kindFromTypeToken(token);
+  const { type: _type, ...restNative } = field.native ?? {};
+  const native = { ...nativeTypeFor(kind, token), ...restNative };
+  const out: NormalizedField = { ...field, kind };
+  if (Object.keys(native).length > 0) out.native = native;
+  else delete out.native;
+  return out;
 }
 
-export interface ParseResult {
-  success: boolean;
-  schema?: SchemaDefinition;
-  error?: string;
+function scalarField(name: string, token: string, required: boolean, isArray: boolean): NormalizedField {
+  return withTypeToken({ name, kind: 'unknown', isArray, required }, token);
+}
+
+/** `trim` / `unique` from a Mongoose field block. */
+function withModifiers(field: NormalizedField, fieldContent: string, token: string): NormalizedField {
+  const { trim, unique } = parseMongooseFieldModifiers(fieldContent, token);
+  const out = { ...field };
+  if (unique !== undefined) out.unique = unique;
+  if (trim !== undefined) out.trim = trim;
+  return out;
+}
+
+/** Attach enum / default / select / verbatim options parsed from a Mongoose field block (P3). */
+function withFieldExtras(fieldContent: string, field: NormalizedField): NormalizedField {
+  const extras = parseMongooseFieldExtras(fieldContent);
+  let out: NormalizedField = { ...field };
+  if (extras.enumValues) {
+    const token = typeTokenOf(field);
+    out.enum = { values: extras.enumValues };
+    out = withTypeToken(out, token);
+  }
+  if (extras.schemaDefault !== undefined) out.default = extras.schemaDefault;
+  if (extras.hidden) out.access = { ...out.access, hidden: true };
+  if (extras.nativeOptions) out = withNative(out, { options: extras.nativeOptions });
+  return out;
+}
+
+/** `ref: 'symbol-types'` → `SymbolTypes`. */
+function relationTargetFromRef(fieldContent: string): string | undefined {
+  const refMatch = /ref\s*:\s*['"]([^'"]+)['"]/.exec(fieldContent);
+  return refMatch?.[1] ? relationTargetFromRefName(refMatch[1]) : undefined;
+}
+
+function relationTargetFromRefName(refName: string): string {
+  if (refName.includes('-') || refName.includes('_') || refName.includes(' ')) {
+    return refName
+      .split(/[-_\s]/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join('');
+  }
+  return refName.charAt(0).toUpperCase() + refName.slice(1);
+}
+
+/** `field: { type: Schema.Types.ObjectId, ref: '…' }` (or an array of them). */
+function referenceField(fieldName: string, fieldContent: string): NormalizedField {
+  const isArrayField = fieldContent.includes('type: [Schema.Types.ObjectId]') || fieldContent.includes('type:[Schema.Types.ObjectId]');
+  const target = relationTargetFromRef(fieldContent);
+  const field = scalarField(fieldName, 'schema', isRequiredBlock(fieldContent), isArrayField);
+  field.reference = target !== undefined ? { include: true, target } : { include: true };
+  return withModifiers(field, fieldContent, 'schema');
+}
+
+function isRequiredBlock(fieldContent: string): boolean {
+  return /required\s*:\s*(true|1)/i.test(fieldContent);
+}
+
+function isArrayTypeBlock(fieldContent: string): boolean {
+  return fieldContent.includes('type: [') || fieldContent.includes('type:[');
+}
+
+const MONGOOSE_TYPE_PATTERN = /type\s*:\s*\[?\s*(\w+(?:\.\w+)*)\s*\]?/;
+
+/**
+ * Top-level `name: { … }` blocks of a schema body. Scanning resumes after each full body so nested keys
+ * (e.g. embedded object sub-fields like `tr` / `en`) are not mistaken for fields.
+ */
+function scanFieldBlocks(schemaContent: string): Array<{ name: string; content: string }> {
+  const blocks: Array<{ name: string; content: string }> = [];
+  const fieldPattern = /(\w+)\s*:\s*\{/g;
+  let fieldMatch: RegExpExecArray | null;
+  while ((fieldMatch = fieldPattern.exec(schemaContent)) !== null) {
+    const fieldStart = fieldMatch.index;
+    const end = scanBalancedDelimiters(schemaContent, fieldStart + fieldMatch[0].length - 1);
+    const fieldEnd = end < 0 ? fieldStart + fieldMatch[0].length : end;
+    fieldPattern.lastIndex = fieldEnd;
+    blocks.push({ name: fieldMatch[1], content: schemaContent.substring(fieldStart, fieldEnd) });
+  }
+  return blocks;
+}
+
+/** Sub-field of an inline object; an ObjectId sub-field has the same shape as one bound from a named schema. */
+function embeddedSubField(sub: ParsedEmbeddedObjectSubField): NormalizedObjectSubField {
+  if (sub.type === 'ObjectId') {
+    const out: NormalizedObjectSubField = { name: sub.name, kind: 'reference', required: sub.required, trim: sub.trim };
+    const target = sub.ref ? relationTargetFromRefName(sub.ref) : undefined;
+    out.reference = target ? { include: true, target, ref: target } : { include: true };
+    out.native = { type: 'objectId' };
+    return out;
+  }
+  const kind =
+    sub.type === 'Number'
+      ? 'number'
+      : sub.type === 'Decimal128'
+        ? 'decimal'
+        : sub.type === 'Boolean'
+          ? 'boolean'
+          : sub.type === 'Date'
+            ? 'date'
+            : 'string';
+  const out: NormalizedObjectSubField = { name: sub.name, kind, required: sub.required };
+  if (sub.nullable !== undefined) out.nullable = sub.nullable;
+  out.trim = sub.trim;
+  return out;
+}
+
+/** Synthetic field the Generator adds for Mongoose models (`_id`, timestamps). */
+function syntheticTimestampField(name: 'createdAt' | 'updatedAt', label: string): NormalizedField {
+  return {
+    name,
+    kind: 'date',
+    isArray: false,
+    required: false,
+    filter: { searchable: true, type: 'date-range' },
+    access: { readonly: true, hiddenFromCreate: true, hiddenFromUpdate: true },
+    ui: { label, list: true }
+  };
 }
 
 /**
@@ -113,20 +224,24 @@ export interface ParseModelFileOptions {
   preferredMongooseModelName?: string;
 }
 
+export interface ParseNormalizedModelResult {
+  success: boolean;
+  model?: NormalizedModel;
+  error?: string;
+}
+
 /**
- * Parse a TypeScript/JavaScript model file and extract schema information
- * Supports both Mongoose schemas and TypeScript interfaces/classes
+ * Parse a Mongoose (or plain TypeScript interface / class) model file into NormalizedModel v2.
  */
-export function parseModelFile(
+export function parseNormalizedModel(
   filePath: string,
-  sourceType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null,
+  sourceType?: SourceTypeArg,
   options?: ParseModelFileOptions | null
-): ParseResult {
+): ParseNormalizedModelResult {
   try {
     const content = readFileSync(filePath, 'utf-8');
     const fileName = filePath.split(/[/\\]/).pop() || '';
 
-    // Check if this is actually a model file
     const modelCheck = isModelFile(content, fileName);
     if (!modelCheck.isValid) {
       return {
@@ -142,7 +257,9 @@ export function parseModelFile(
 
     let schemaContent = content;
     let hasTimestamps = false;
+    let timestamps: { createdAt: boolean; updatedAt: boolean } | undefined;
     let deletedInToJSON: string[] = [];
+    let collection: string | undefined;
 
     if (mainSchemaName) {
       const regions = extractMainSchemaRegions(content, mainSchemaName);
@@ -150,275 +267,125 @@ export function parseModelFile(
         schemaContent = regions.fieldsBlock;
         const meta = parseSchemaOptionsMeta(regions.optionsBlock);
         hasTimestamps = meta.hasTimestamps;
+        timestamps = parseSchemaTimestamps(regions.optionsBlock);
+        collection = regions.optionsBlock ? /\bcollection\s*:\s*['"]([^'"]+)['"]/.exec(regions.optionsBlock)?.[1] : undefined;
         deletedInToJSON = meta.deletedInToJSON;
       }
     }
 
-    const fields: SchemaField[] = [];
+    const fields: NormalizedField[] = [];
 
-    // Strategy 1: Parse Mongoose Schema
-    // First, find all field definitions: fieldName: { ... }
-    const fieldPattern = /(\w+)\s*:\s*\{/g;
-    let fieldMatch: RegExpExecArray | null;
-    let hasMongooseSchema = false;
+    // Strategy 1: Mongoose schema fields (`fieldName: { ... }`)
+    const blocks = scanFieldBlocks(schemaContent);
+    const hasMongooseSchema = blocks.length > 0;
 
-    while ((fieldMatch = fieldPattern.exec(schemaContent)) !== null) {
-      const fieldName = fieldMatch[1];
-      const fieldStart = fieldMatch.index;
-
-      // Find the end of this field definition (matching closing brace)
-      let braceCount = 1;
-      let inString = false;
-      let stringChar = '';
-      let fieldEnd = fieldStart + fieldMatch[0].length;
-
-      for (let i = fieldStart + fieldMatch[0].length; i < schemaContent.length; i++) {
-        const char = schemaContent[i];
-        const prevChar = i > 0 ? schemaContent[i - 1] : '';
-
-        if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
-          if (!inString) {
-            inString = true;
-            stringChar = char;
-          } else if (char === stringChar) {
-            inString = false;
-          }
-          continue;
-        }
-
-        if (!inString) {
-          if (char === '{') braceCount++;
-          if (char === '}') {
-            braceCount--;
-            if (braceCount === 0) {
-              fieldEnd = i + 1;
-              break;
-            }
-          }
-        }
-      }
-
-      // Resume scanning AFTER this field's full body so nested keys (e.g. embedded object
-      // sub-fields like `tr`/`en`) are not mistaken for top-level fields.
-      fieldPattern.lastIndex = fieldEnd;
-
-      const fieldContent = schemaContent.substring(fieldStart, fieldEnd);
-      hasMongooseSchema = true;
-
-      // Check if this is a nested schema array (e.g., items: { type: [PortfolioSnapshotItemSchema], required: true })
-      const nestedSchemaArrayPattern = /type\s*:\s*\[\s*(\w+Schema)\s*\]/;
-      const nestedSchemaArrayMatch = fieldContent.match(nestedSchemaArrayPattern);
-
+    for (const { name: fieldName, content: fieldContent } of blocks) {
+      // Array of named nested schema, e.g. `items: { type: [PortfolioSnapshotItemSchema] }` — sub-fields bound in linkNamedNestedObjectFields
+      const nestedSchemaArrayMatch = fieldContent.match(/type\s*:\s*\[\s*(\w+Schema)\s*\]/);
       if (nestedSchemaArrayMatch) {
-        // This is an array of nested schema
-        // More robust required check
-        const requiredPattern = /required\s*:\s*(true|1)/i;
-        const requiredMatch = fieldContent.match(requiredPattern);
-        const isRequired = requiredMatch !== null;
-
-        fields.push({
-          name: fieldName,
-          type: 'schema',
-          required: isRequired,
-          isArray: true
-        });
+        const schemaName = nestedSchemaArrayMatch[1];
+        const field = scalarField(fieldName, 'object', isRequiredBlock(fieldContent), true);
+        field.object = { typeName: `I${schemaName.replace(/Schema$/, '')}`, schemaName };
+        fields.push(withFieldExtras(fieldContent, field));
         continue;
       }
 
-      // Check if this field references a nested schema (e.g., Schema.Types.ObjectId with ref)
-      if (fieldContent.includes('Schema.Types.ObjectId') && fieldContent.includes('ref:')) {
-        const isArrayField = fieldContent.includes('type: [Schema.Types.ObjectId]') || fieldContent.includes('type:[Schema.Types.ObjectId]');
-        // More robust required check: required: true, required:true, required: true, or just required (without value)
-        const requiredPattern = /required\s*:\s*(true|1)/i;
-        const requiredMatch = fieldContent.match(requiredPattern);
-        const isRequired = requiredMatch !== null;
-
-        // Extract entity name from ref: 'EntityName' or ref: "EntityName"
-        const refPattern = /ref\s*:\s*['"]([^'"]+)['"]/;
-        const refMatch = fieldContent.match(refPattern);
-        let relationEntityName: string | undefined = undefined;
-        if (refMatch && refMatch[1]) {
-          // Convert ref name to PascalCase entity name
-          // e.g., "SymbolTypes" -> "SymbolTypes", "symbol-types" -> "SymbolTypes"
-          const refName = refMatch[1];
-          // If it contains dashes/underscores, split and convert each word
-          if (refName.includes('-') || refName.includes('_') || refName.includes(' ')) {
-            relationEntityName = refName
-              .split(/[-_\s]/)
-              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-              .join('');
-          } else {
-            // Already in PascalCase or camelCase, just capitalize first letter
-            relationEntityName = refName.charAt(0).toUpperCase() + refName.slice(1);
-          }
-        }
-
-        fields.push({
-          name: fieldName,
-          type: 'schema',
-          required: isRequired,
-          isArray: isArrayField,
-          includeRelation: true,
-          relationEntityName,
-          ...parseMongooseFieldModifiers(fieldContent, 'schema')
-        });
-        continue;
-      }
-
+      // Inline object (`displayText: { tr: { … }, en: { … } }`): no `type:` at depth 0. Checked before the
+      // reference branch — an ObjectId sub-field must not turn the whole object into a reference.
       const embeddedSubFields = parseMongooseEmbeddedObjectSubFields(fieldContent);
       if (embeddedSubFields) {
-        fields.push({
-          name: fieldName,
-          type: 'object',
-          required: mongooseEmbeddedObjectRequired(fieldContent),
-          isArray: false,
-          objectFields: embeddedSubFields.map(sub => ({
-            name: sub.name,
-            type: sub.type === 'Number' ? 'number' : sub.type === 'Boolean' ? 'boolean' : 'string',
-            required: sub.required,
-            trim: sub.trim
-          }))
-        });
+        const field = scalarField(fieldName, 'object', mongooseEmbeddedObjectRequired(fieldContent), false);
+        field.object = { fields: embeddedSubFields.map(embeddedSubField) };
+        fields.push(field);
         continue;
       }
 
-      // Parse standard Mongoose types (String, Number, Date, etc.)
-      // Support both: type: String and type: [String]
-      const mongooseTypePattern = /type\s*:\s*\[?\s*(\w+(?:\.\w+)*)\s*\]?/;
-      const mongooseTypeMatch = fieldContent.match(mongooseTypePattern);
+      if (fieldContent.includes('Schema.Types.ObjectId') && fieldContent.includes('ref:')) {
+        fields.push(withFieldExtras(fieldContent, referenceField(fieldName, fieldContent)));
+        continue;
+      }
 
+      // Named nested schema ref: `type: SubscriptionLimitsSchema` (resolved after nestedSchemas parse)
+      const namedNestedRef = parseNamedNestedSchemaRef(fieldContent);
+      if (namedNestedRef) {
+        const field = scalarField(fieldName, 'object', isRequiredBlock(fieldContent), false);
+        field.object = { typeName: `I${namedNestedRef.replace(/Schema$/, '')}`, schemaName: namedNestedRef };
+        fields.push(withFieldExtras(fieldContent, field));
+        continue;
+      }
+
+      // Standard Mongoose types: `type: String` / `type: [String]`
+      const mongooseTypeMatch = fieldContent.match(MONGOOSE_TYPE_PATTERN);
       if (mongooseTypeMatch) {
-        const mongooseType = mongooseTypeMatch[1];
-        // More robust required check
-        const requiredPattern = /required\s*:\s*(true|1)/i;
-        const requiredMatch = fieldContent.match(requiredPattern);
-        const isRequired = requiredMatch !== null;
-
-        // Check if it's an array: type: [String] or type:[String]
-        const isArray = fieldContent.includes('type: [') || fieldContent.includes('type:[');
-
-        const mapped = mapMongooseTypeToGeneric(mongooseType);
-        fields.push({
-          name: fieldName,
-          type: fieldName === '_id' ? 'schema' : mapped,
-          required: isRequired,
-          isArray,
-          ...parseMongooseFieldModifiers(fieldContent, fieldName === '_id' ? 'schema' : mapped)
-        });
+        const mapped = mapMongooseTypeToGeneric(mongooseTypeMatch[1]);
+        const token = fieldName === '_id' ? 'schema' : mapped;
+        const field = scalarField(fieldName, token, isRequiredBlock(fieldContent), isArrayTypeBlock(fieldContent));
+        fields.push(withFieldExtras(fieldContent, withModifiers(field, fieldContent, token)));
       }
     }
 
-    // Strategy 2: Parse TypeScript Interface/Class (e.g., name: string; or name?: string;)
+    // Strategy 2: TypeScript interface / class properties (`name: string;`, `name?: string[];`)
     if (!hasMongooseSchema) {
-      // Match property declarations: "name: string;" or "name?: string;" or "name: string[];"
       const tsInterfacePattern = /(?:public\s+|private\s+|protected\s+)?(\w+)(\??)\s*:\s*(\w+)(\[\])?(\s*;|\s*=|)/g;
       let match: RegExpExecArray | null;
 
       while ((match = tsInterfacePattern.exec(schemaContent)) !== null) {
         const fieldName = match[1];
-        const optional = match[2] === '?';
-        const tsType = match[3];
-        const isArray = match[4] === '[]';
-
-        // Skip if it's a method or constructor
         const matchIndex = match.index ?? 0;
+        // Skip methods / constructors
         if (
           ['constructor', 'function', 'async'].some(keyword => schemaContent.substring(Math.max(0, matchIndex - 20), matchIndex).includes(keyword))
         ) {
           continue;
         }
-
-        const mappedTs = mapTypeScriptTypeToGeneric(tsType);
-        fields.push({
-          name: fieldName,
-          type: fieldName === '_id' ? 'schema' : mappedTs,
-          required: !optional,
-          isArray
-        });
+        const token = fieldName === '_id' ? 'schema' : mapTypeScriptTypeToGeneric(match[3]);
+        fields.push(scalarField(fieldName, token, match[2] !== '?', match[4] === '[]'));
       }
 
-      // Also try simpler pattern for interface properties
+      // Simpler pattern for interface properties
       if (fields.length === 0) {
         const simplePattern = /(\w+)(\??)\s*:\s*(\w+)(\[\])?/g;
-        let match: RegExpExecArray | null;
         while ((match = simplePattern.exec(schemaContent)) !== null) {
           // Skip if inside a function or method
           const beforeMatch = schemaContent.substring(Math.max(0, match.index! - 50), match.index!);
           if (beforeMatch.includes('(') && !beforeMatch.includes(')')) {
             continue;
           }
-
           const fieldName = match[1];
-          const optional = match[2] === '?';
-          const tsType = match[3];
-          const isArray = match[4] === '[]';
-
-          // Avoid duplicates
           if (!fields.some(f => f.name === fieldName)) {
-            const mappedTs = mapTypeScriptTypeToGeneric(tsType);
-            fields.push({
-              name: fieldName,
-              type: fieldName === '_id' ? 'schema' : mappedTs,
-              required: !optional,
-              isArray
-            });
+            const token = fieldName === '_id' ? 'schema' : mapTypeScriptTypeToGeneric(match[3]);
+            fields.push(scalarField(fieldName, token, match[2] !== '?', match[4] === '[]'));
           }
         }
       }
     }
 
-    // Add _id field if sourceType is nodejs-mongoose and not already present (at the beginning)
-    if (sourceType === 'nodejs-mongoose' && !fields.some(f => f.name === '_id')) {
-      fields.unshift({
-        name: '_id',
-        type: 'schema',
-        required: true,
-        isArray: false,
-        showInTable: true,
-        isSearchable: true,
-        label: 'ID'
-      });
-    }
-
     if (sourceType === 'nodejs-mongoose') {
+      // `_id` first; always a required single id
+      if (!fields.some(f => f.name === '_id')) {
+        fields.unshift({
+          name: '_id',
+          kind: 'reference',
+          isArray: false,
+          required: true,
+          filter: { searchable: true },
+          ui: { label: 'ID', list: true }
+        });
+      }
       for (let i = 0; i < fields.length; i++) {
         if (fields[i].name === '_id') {
-          fields[i] = { ...fields[i], type: 'schema', required: true, isArray: false };
+          fields[i] = withTypeToken({ ...fields[i], required: true, isArray: false }, 'schema');
         }
       }
     }
 
-    // Add createdAt and updatedAt if timestamps is enabled and not deleted in toJSON
+    // createdAt / updatedAt when timestamps are on and not deleted in toJSON
     if (hasTimestamps) {
-      if (!deletedInToJSON.includes('createdAt') && !fields.some(f => f.name === 'createdAt')) {
-        fields.push({
-          name: 'createdAt',
-          type: 'date',
-          required: false,
-          isArray: false,
-          showInTable: true,
-          isSearchable: true,
-          filterType: 'date-range',
-          label: 'Created At',
-          isReadonly: true,
-          hiddenFromCreate: true,
-          hiddenFromUpdate: true
-        });
+      if ((timestamps?.createdAt ?? true) && !deletedInToJSON.includes('createdAt') && !fields.some(f => f.name === 'createdAt')) {
+        fields.push(syntheticTimestampField('createdAt', 'Created At'));
       }
-      if (!deletedInToJSON.includes('updatedAt') && !fields.some(f => f.name === 'updatedAt')) {
-        fields.push({
-          name: 'updatedAt',
-          type: 'date',
-          required: false,
-          isArray: false,
-          showInTable: true,
-          isSearchable: true,
-          filterType: 'date-range',
-          label: 'Updated At',
-          isReadonly: true,
-          hiddenFromCreate: true,
-          hiddenFromUpdate: true
-        });
+      if ((timestamps?.updatedAt ?? true) && !deletedInToJSON.includes('updatedAt') && !fields.some(f => f.name === 'updatedAt')) {
+        fields.push(syntheticTimestampField('updatedAt', 'Updated At'));
       }
     }
 
@@ -429,40 +396,28 @@ export function parseModelFile(
       };
     }
 
-    // Parse nested schemas (schemas that are not the main one)
-    const nestedSchemas: SchemaDefinition[] = [];
+    // Sibling schemas (`const FooSchema = new Schema(...)`) other than the main one
+    const nestedSchemas: NormalizedNestedSchema[] = [];
     if (mainSchemaName) {
-      // Find all schema definitions except the main one
-      const allSchemaPattern = /const\s+(\w+Schema)\s*=\s*new\s+Schema\s*<[^>]*>\s*\(/gi;
-      const allSchemaMatches: Array<{ name: string; index: number }> = [];
+      const allSchemaPattern = /const\s+(\w+Schema)\s*=\s*new\s+Schema\s*(?:<[^>]*>)?\s*\(/gi;
       let schemaMatch: RegExpExecArray | null;
-
       while ((schemaMatch = allSchemaPattern.exec(content)) !== null) {
-        if (schemaMatch[1] !== mainSchemaName) {
-          allSchemaMatches.push({
-            name: schemaMatch[1],
-            index: schemaMatch.index
-          });
-        }
-      }
-
-      // Parse each nested schema
-      for (const nestedSchemaMatch of allSchemaMatches) {
-        const nestedSchemaResult = parseNestedSchema(content, nestedSchemaMatch.name);
-        if (nestedSchemaResult) {
-          nestedSchemas.push(nestedSchemaResult);
-        }
+        if (schemaMatch[1] === mainSchemaName) continue;
+        const nested = parseNestedSchema(content, schemaMatch[1]);
+        if (nested) nestedSchemas.push(nested);
       }
     }
 
-    return {
-      success: true,
-      schema: {
-        entityName: fileEntityName,
-        fields,
-        nestedSchemas: nestedSchemas.length > 0 ? nestedSchemas : undefined
-      }
-    };
+    const modelName = mainSchemaName
+      ? new RegExp(`mongoose\\.model\\s*(?:<[^>]*>)?\\s*\\(\\s*['"]([^'"]+)['"]\\s*,\\s*${mainSchemaName}\\b`).exec(content)?.[1]
+      : undefined;
+    const linkedFields = attachInterfaceTypes(content, mainSchemaName, linkNamedNestedObjectFields(fields, nestedSchemas));
+
+    const model: NormalizedModel = { schemaVersion: 2, entityName: fileEntityName, fields: linkedFields };
+    if (nestedSchemas.length > 0) model.nestedSchemas = nestedSchemas;
+    if (timestamps) model.timestamps = timestamps;
+    if (modelName || collection) model.native = { modelName, collection };
+    return { success: true, model: canonicalModel(model) };
   } catch (error) {
     return {
       success: false,
@@ -471,171 +426,127 @@ export function parseModelFile(
   }
 }
 
-/**
- * Parse a nested schema definition
- */
-function parseNestedSchema(content: string, schemaName: string): SchemaDefinition | null {
-  try {
-    // Find the schema definition: const SchemaName = new Schema<...>({...})
-    const schemaPattern = new RegExp(`const\\s+${schemaName}\\s*=\\s*new\\s+Schema\\s*<[^>]*>\\s*\\(\\s*\\{`, 'i');
-    const schemaMatch = schemaPattern.exec(content);
+/** Declared TS type / `?` / JSDoc of each field from the main model interface (`new Schema<IFoo>`), P3. */
+function attachInterfaceTypes(content: string, mainSchemaName: string | null, fields: NormalizedField[]): NormalizedField[] {
+  if (!mainSchemaName) return fields;
+  const generic = new RegExp(`const\\s+${mainSchemaName}\\s*=\\s*new\\s+Schema\\s*<\\s*(\\w+)\\s*>`).exec(content);
+  if (!generic) return fields;
+  const props = parseInterfaceProperties(content, generic[1]);
+  return fields.map(field => {
+    const prop = props.get(field.name);
+    if (!prop || field.name === '_id' || field.name === 'createdAt' || field.name === 'updatedAt') return field;
+    const native: NativeType = { tsType: prop.tsType, tsOptional: prop.optional };
+    if (prop.doc) native.doc = prop.doc;
+    return withNative(field, native);
+  });
+}
 
+/**
+ * Attach sub-fields (and nested type names) for fields that reference a sibling `*Schema`.
+ */
+function linkNamedNestedObjectFields(fields: NormalizedField[], nestedSchemas: NormalizedNestedSchema[]): NormalizedField[] {
+  if (nestedSchemas.length === 0) return fields;
+
+  const bySchemaName = new Map<string, NormalizedNestedSchema>();
+  for (const nested of nestedSchemas) {
+    bySchemaName.set(`${nested.entityName}Schema`.toLowerCase(), nested);
+  }
+
+  return fields.map(field => {
+    const schemaName = String(field.object?.schemaName || '').trim();
+    if (!schemaName) {
+      // Opaque type that still looks like a *Schema token
+      const typeToken = typeTokenOf(field).trim();
+      if (field.kind === 'object' && field.object?.fields?.length) return field;
+      if (!/schema$/i.test(typeToken) || typeToken.toLowerCase() === 'schema') return field;
+      const nested = bySchemaName.get(typeToken.toLowerCase());
+      if (!nested) return field;
+      return bindNestedSchemaToField(field, nested, `${nested.entityName}Schema`);
+    }
+
+    const nested = bySchemaName.get(schemaName.toLowerCase());
+    if (!nested) return field;
+    return bindNestedSchemaToField(field, nested, schemaName);
+  });
+}
+
+/** Sibling-schema fields that become sub-fields of the object that references the schema. */
+const BINDABLE_SUB_FIELD_KINDS = new Set<NormalizedField['kind']>(['string', 'number', 'decimal', 'boolean', 'date', 'reference']);
+
+function bindNestedSchemaToField(field: NormalizedField, nested: NormalizedNestedSchema, schemaName: string): NormalizedField {
+  const subFields = nested.fields
+    .filter(f => !f.isArray && BINDABLE_SUB_FIELD_KINDS.has(f.kind))
+    .map(f => {
+      const scalar = templateScalarToken(f.kind);
+      const token = scalar === 'schema' ? 'objectId' : scalar;
+      // `templateScalarToken` folds decimal into number; keep the field's own kind (contract K5: decimal is a string).
+      const kind = f.kind === 'decimal' ? 'decimal' : kindFromTypeToken(token);
+      const out: NormalizedObjectSubField = { name: f.name, kind, required: f.required };
+      if (f.nullable === true) out.nullable = true;
+      if (f.trim !== undefined) out.trim = f.trim;
+      const include = f.reference?.include === true ? true : undefined;
+      const target = f.reference?.target;
+      if (include !== undefined || target !== undefined) {
+        out.reference = {};
+        if (include !== undefined) out.reference.include = include;
+        if (target !== undefined) {
+          out.reference.target = target;
+          out.reference.ref = target;
+        }
+      }
+      const native = nativeTypeFor(kind, token);
+      if (native) out.native = native;
+      return out;
+    });
+
+  const typeName = String(field.object?.typeName || nested.nestedTypeName || '').trim() || `I${nested.entityName}`;
+  const fieldsOut = subFields.length > 0 ? subFields : field.object?.fields;
+
+  const out = withTypeToken({ ...field, isArray: Boolean(field.isArray) }, 'object');
+  out.object = { ...(fieldsOut ? { fields: fieldsOut } : {}), typeName, schemaName };
+  return out;
+}
+
+/**
+ * Parse a sibling schema definition (`const FooSchema = new Schema<IFoo>({ ... })`).
+ */
+function parseNestedSchema(content: string, schemaName: string): NormalizedNestedSchema | null {
+  try {
+    const schemaPattern = new RegExp(`const\\s+${schemaName}\\s*=\\s*new\\s+Schema\\s*(?:<([^>]*)>)?\\s*\\(\\s*\\{`, 'i');
+    const schemaMatch = schemaPattern.exec(content);
     if (!schemaMatch) {
       return null;
     }
 
-    // Extract entity name from schema name (e.g., "PortfolioSnapshotItemSchema" -> "PortfolioSnapshotItem")
+    const genericParam = String(schemaMatch[1] || '')
+      .trim()
+      .split(',')[0]
+      ?.trim();
+    const nestedTypeName = genericParam && /^I?\w+$/.test(genericParam) ? genericParam : undefined;
+
+    // "PortfolioSnapshotItemSchema" -> "PortfolioSnapshotItem"
     const entityName = schemaName.replace(/Schema$/, '');
 
-    // Find the opening brace of the schema object
-    const objectStart = schemaMatch.index + schemaMatch[0].length - 1; // -1 to include the {
+    const objectStart = schemaMatch.index + schemaMatch[0].length - 1;
+    const end = scanBalancedDelimiters(content, objectStart);
+    const objectEnd = end < 0 ? objectStart + 1 : end;
 
-    // Find the matching closing brace for the schema object (first level)
-    let braceCount = 1;
-    let inString = false;
-    let stringChar = '';
-    let objectEnd = objectStart + 1;
-
-    for (let i = objectStart + 1; i < content.length; i++) {
-      const char = content[i];
-      const prevChar = i > 0 ? content[i - 1] : '';
-
-      // Handle string literals
-      if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
-        if (!inString) {
-          inString = true;
-          stringChar = char;
-        } else if (char === stringChar) {
-          inString = false;
-        }
-        continue;
-      }
-
-      if (!inString) {
-        if (char === '{') braceCount++;
-        if (char === '}') {
-          braceCount--;
-          if (braceCount === 0) {
-            objectEnd = i + 1;
-            break;
-          }
-        }
-      }
-    }
-
-    // Extract the schema object content
     const schemaContent = content.substring(objectStart, objectEnd);
+    const fields: NormalizedField[] = [];
 
-    const fields: SchemaField[] = [];
-
-    // Parse fields similar to main schema parsing
-    const fieldPattern = /(\w+)\s*:\s*\{/g;
-    let fieldMatch: RegExpExecArray | null;
-
-    while ((fieldMatch = fieldPattern.exec(schemaContent)) !== null) {
-      const fieldName = fieldMatch[1];
-      const fieldStart = fieldMatch.index;
-
-      // Find the end of this field definition
-      let braceCount = 1;
-      let inString = false;
-      let stringChar = '';
-      let fieldEnd = fieldStart + fieldMatch[0].length;
-
-      for (let i = fieldStart + fieldMatch[0].length; i < schemaContent.length; i++) {
-        const char = schemaContent[i];
-        const prevChar = i > 0 ? schemaContent[i - 1] : '';
-
-        if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
-          if (!inString) {
-            inString = true;
-            stringChar = char;
-          } else if (char === stringChar) {
-            inString = false;
-          }
-          continue;
-        }
-
-        if (!inString) {
-          if (char === '{') braceCount++;
-          if (char === '}') {
-            braceCount--;
-            if (braceCount === 0) {
-              fieldEnd = i + 1;
-              break;
-            }
-          }
-        }
-      }
-
-      // Resume scanning after the full field body (skip nested keys).
-      fieldPattern.lastIndex = fieldEnd;
-
-      const fieldContent = schemaContent.substring(fieldStart, fieldEnd);
-
-      // Check if this field references a nested schema (e.g., Schema.Types.ObjectId with ref)
+    for (const { name: fieldName, content: fieldContent } of scanFieldBlocks(schemaContent)) {
       if (fieldContent.includes('Schema.Types.ObjectId') && fieldContent.includes('ref:')) {
-        const isArrayField = fieldContent.includes('type: [Schema.Types.ObjectId]') || fieldContent.includes('type:[Schema.Types.ObjectId]');
-        // More robust required check
-        const requiredPattern = /required\s*:\s*(true|1)/i;
-        const requiredMatch = fieldContent.match(requiredPattern);
-        const isRequired = requiredMatch !== null;
-
-        // Extract entity name from ref: 'EntityName' or ref: "EntityName"
-        const refPattern = /ref\s*:\s*['"]([^'"]+)['"]/;
-        const refMatch = fieldContent.match(refPattern);
-        let relationEntityName: string | undefined = undefined;
-        if (refMatch && refMatch[1]) {
-          // Convert ref name to PascalCase entity name
-          // e.g., "SymbolTypes" -> "SymbolTypes", "symbol-types" -> "SymbolTypes"
-          const refName = refMatch[1];
-          // If it contains dashes/underscores, split and convert each word
-          if (refName.includes('-') || refName.includes('_') || refName.includes(' ')) {
-            relationEntityName = refName
-              .split(/[-_\s]/)
-              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-              .join('');
-          } else {
-            // Already in PascalCase or camelCase, just capitalize first letter
-            relationEntityName = refName.charAt(0).toUpperCase() + refName.slice(1);
-          }
-        }
-
-        fields.push({
-          name: fieldName,
-          type: 'schema',
-          required: isRequired,
-          isArray: isArrayField,
-          includeRelation: true,
-          relationEntityName,
-          ...parseMongooseFieldModifiers(fieldContent, 'schema')
-        });
+        fields.push(referenceField(fieldName, fieldContent));
         continue;
       }
 
-      // Parse standard Mongoose types
-      // Support both: type: String and type: [String]
-      const mongooseTypePattern = /type\s*:\s*\[?\s*(\w+(?:\.\w+)*)\s*\]?/;
-      const mongooseTypeMatch = fieldContent.match(mongooseTypePattern);
-
+      const mongooseTypeMatch = fieldContent.match(MONGOOSE_TYPE_PATTERN);
       if (mongooseTypeMatch) {
-        const mongooseType = mongooseTypeMatch[1];
-        // More robust required check
-        const requiredPattern = /required\s*:\s*(true|1)/i;
-        const requiredMatch = fieldContent.match(requiredPattern);
-        const isRequired = requiredMatch !== null;
-
-        // Check if it's an array: type: [String] or type:[String]
-        const isArray = fieldContent.includes('type: [') || fieldContent.includes('type:[');
-
-        const mapped = mapMongooseTypeToGeneric(mongooseType);
-        fields.push({
-          name: fieldName,
-          type: fieldName === '_id' ? 'schema' : mapped,
-          required: isRequired,
-          isArray,
-          ...parseMongooseFieldModifiers(fieldContent, fieldName === '_id' ? 'schema' : mapped)
-        });
+        const mapped = mapMongooseTypeToGeneric(mongooseTypeMatch[1]);
+        const token = fieldName === '_id' ? 'schema' : mapped;
+        const field = scalarField(fieldName, token, isRequiredBlock(fieldContent), isArrayTypeBlock(fieldContent));
+        if (mapped === 'number' && /default\s*:\s*null\b/i.test(fieldContent)) field.nullable = true;
+        fields.push(withModifiers(field, fieldContent, token));
       }
     }
 
@@ -643,11 +554,10 @@ function parseNestedSchema(content: string, schemaName: string): SchemaDefinitio
       return null;
     }
 
-    return {
-      entityName,
-      fields
-    };
-  } catch (error) {
+    const nested: NormalizedNestedSchema = { entityName, fields };
+    if (nestedTypeName) nested.nestedTypeName = nestedTypeName;
+    return nested;
+  } catch {
     return null;
   }
 }
@@ -661,6 +571,9 @@ function mapMongooseTypeToGeneric(mongooseType: string): string {
   if (/objectid$/i.test(trimmed) || /types\.objectid$/i.test(trimmed)) {
     return 'schema';
   }
+  if (/^map$/i.test(trimmed) || /types\.map$/i.test(trimmed)) {
+    return 'map';
+  }
   const typeMap: Record<string, string> = {
     String: 'string',
     Number: 'number',
@@ -668,6 +581,7 @@ function mapMongooseTypeToGeneric(mongooseType: string): string {
     Date: 'date',
     ObjectId: 'schema',
     Object: 'object',
+    Map: 'map',
     Array: 'array',
     Buffer: 'buffer',
     Mixed: 'mixed'

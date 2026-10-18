@@ -92,7 +92,7 @@ export abstract class BaseGenerator {
    */
   protected async renderAndWriteTemplate(
     templateName: string,
-    templateType: 'backend' | 'frontend' | 'react',
+    templateType: 'backend',
     outputPath: string,
     outputFileName: string,
     data: any = {}
@@ -158,7 +158,7 @@ export abstract class BaseGenerator {
   protected async generateFilesParallel(
     fileConfigs: Array<{
       templateName: string;
-      templateType: 'backend' | 'frontend' | 'react';
+      templateType: 'backend';
       outputPath: string;
       outputFileName: string;
       data?: any;

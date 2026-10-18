@@ -17,36 +17,50 @@ const router: Router = express.Router();
 router.use(authMiddleware);
 {{/if}}
 
+// Custom routes come before the generated `/:id` routes so static paths are not captured by `:id`.
+// <custom-routes>
+// </custom-routes>
+
+{{#if hasNormalOps}}
+// Normal API: only the selected operations (contract §2.1); writes need auth + ownership.
+{{/if}}
+{{#if normalOps.list}}
 router.post('/get-all', validate({ body: TSchema.{{entityName}}GetAllBodySchema }), async (req, res) => {
   const result = await {{entityNameLower}}Service.getAll(req.body);
   AtaResponse(res, result);
 });
 
-router.get('/:id', validate({ params: TSchema.{{entityName}}MongoIdParamSchema }), async (req, res) => {
+{{/if}}
+{{#if normalOps.getOne}}
+router.get('/:id', validate({ params: TSchema.{{entityName}}IdParamSchema }), async (req, res) => {
   const result = await {{entityNameLower}}Service.getById(req.params.id);
   AtaResponse(res, result);
 });
 
+{{/if}}
+{{#if normalOps.create}}
 router.post('/create', validate({ body: TSchema.{{entityName}}CreateBodySchema }), async (req, res) => {
   const result = await {{entityNameLower}}Service.create(req.body);
   AtaResponse(res, result);
 });
 
+{{/if}}
+{{#if normalOps.update}}
 router.post(
   '/update/:id',
-  validate({ params: TSchema.{{entityName}}MongoIdParamSchema, body: TSchema.{{entityName}}UpdateBodySchema }),
+  validate({ params: TSchema.{{entityName}}IdParamSchema, body: TSchema.{{entityName}}UpdateBodySchema }),
   async (req, res) => {
     const result = await {{entityNameLower}}Service.update(req.params.id, req.body);
     AtaResponse(res, result);
   }
 );
 
-router.delete('/:id', validate({ params: TSchema.{{entityName}}MongoIdParamSchema }), async (req, res) => {
+{{/if}}
+{{#if normalOps.delete}}
+router.delete('/:id', validate({ params: TSchema.{{entityName}}IdParamSchema }), async (req, res) => {
   const result = await {{entityNameLower}}Service.delete{{entityName}}(req.params.id);
   AtaResponse(res, result);
 });
 
-// <custom-routes>
-// </custom-routes>
-
+{{/if}}
 export default router;

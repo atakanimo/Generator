@@ -4,6 +4,8 @@ import { SuccessResponse, ErrorResponse } from '@core/response/response.helper';
 import { HandleServiceError } from '@core/errors/error.helper';
 import { clampListLimit, listOffsetFromPage, paginatedListMeta, type PaginatedList } from '@core/pagination/pagination.helper';
 import { getCurrentUserId } from '@utils/requestContext';
+import { resolveCrudProjection, stripHiddenFields } from '@core/services/crud-projection';
+import { applyAuthScope, type CrudAuthScope } from '@core/services/crud-scope';
 import { t } from '@helpers';
 
 type CrudDefaultMessages = {
@@ -34,11 +36,19 @@ export type CrudFindErrorMessages = {
   findFailed?: string;
 };
 
+export type { CrudAuthScope };
+
 export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date }> {
+  /**
+   * @param requireAuthUserIdScope Kayıt kapsamı: `true` → auth kullanıcının `userId` kayıtları, `'self'` → kullanıcının
+   *   kendi kaydı (`{ _id: authUserId }`, G5), `false` → kapsam yok.
+   * @param hiddenFields Hiçbir CRUD cevabında dönmeyen alanlar (ör. `password`, `otpCode`) — sözleşme §2.1, G2.
+   */
   constructor(
     protected readonly model: Model<TDoc>,
     private readonly defaultMessages: CrudDefaultMessages = {},
-    private readonly requireAuthUserIdScope: boolean = false
+    private readonly requireAuthUserIdScope: CrudAuthScope = false,
+    private readonly hiddenFields: readonly string[] = []
   ) {}
 
   protected augmentListQuery(q: any): any {
@@ -66,10 +76,7 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
     if (!uid) {
       return { ...filter } as FilterQuery<TDoc>;
     }
-    return {
-      ...filter,
-      userId: new mongoose.Types.ObjectId(uid)
-    } as FilterQuery<TDoc>;
+    return applyAuthScope(filter, this.requireAuthUserIdScope, new mongoose.Types.ObjectId(uid)) as FilterQuery<TDoc>;
   }
 
   private unauthorizedMessage(): string {
@@ -85,14 +92,15 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
       }
 
       const payloadWithScope = { ...payload };
-      if (uid) {
+      if (uid && this.requireAuthUserIdScope === true) {
         payloadWithScope.userId = new mongoose.Types.ObjectId(uid);
       }
 
       const prepared = this.transformCreatePayload(payloadWithScope);
       const created = await this.model.create(prepared as Parameters<Model<TDoc>['create']>[0]);
       const doc = Array.isArray(created) ? created[0]! : created;
-      return SuccessResponse(doc);
+      if (this.hiddenFields.length === 0) return SuccessResponse(doc);
+      return SuccessResponse(stripHiddenFields(doc.toObject(), this.hiddenFields));
     } catch (error) {
       return HandleServiceError(error, { fallbackMessage: createFailed, context: 'BaseCrudService.create' });
     }
@@ -125,8 +133,9 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
 
       const sort = options.sort ?? { createdAt: -1, _id: -1 };
       let q: any = this.model.find(mergedFilter).sort(sort);
-      if (options.projection) {
-        q = q.select(options.projection);
+      const projection = resolveCrudProjection(options.projection, this.hiddenFields);
+      if (projection) {
+        q = q.select(projection);
       }
       if (options.populate) {
         q = q.populate(options.populate as any);
@@ -138,7 +147,7 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
       const docs = useLean ? await q.skip(skip).limit(fetchLimit).lean().exec() : await q.skip(skip).limit(fetchLimit).exec();
 
       const hasMore = docs.length > limit;
-      const items = hasMore ? docs.slice(0, limit) : docs;
+      const items = stripHiddenFields(hasMore ? docs.slice(0, limit) : docs, this.hiddenFields);
 
       return SuccessResponse<PaginatedList<unknown>>({
         items,
@@ -166,8 +175,9 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
       const mergedFilter = this.withAuthScope(baseFilter, uid);
       const sort = options?.sort ?? { createdAt: -1, _id: -1 };
       let q: any = this.model.find(mergedFilter).sort(sort);
-      if (options?.projection) {
-        q = q.select(options.projection);
+      const projection = resolveCrudProjection(options?.projection, this.hiddenFields);
+      if (projection) {
+        q = q.select(projection);
       }
       if (options?.populate) {
         q = q.populate(options.populate as any);
@@ -180,7 +190,7 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
       const lean = options?.lean !== false;
       const docs = lean ? await q.lean().exec() : await q.exec();
 
-      return SuccessResponse(docs);
+      return SuccessResponse(stripHiddenFields(docs, this.hiddenFields));
     } catch (error) {
       return HandleServiceError<unknown[]>(error, { fallbackMessage: findFailed, context: 'BaseCrudService.find' });
     }
@@ -205,8 +215,9 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
 
       const mergedFilter = this.withAuthScope(baseFilter, uid);
       let q: any = this.model.findOne(mergedFilter);
-      if (options?.projection) {
-        q = q.select(options.projection);
+      const projection = resolveCrudProjection(options?.projection, this.hiddenFields);
+      if (projection) {
+        q = q.select(projection);
       }
       if (options?.populate) {
         q = q.populate(options.populate as any);
@@ -218,7 +229,7 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
       if (!doc) {
         return ErrorResponse({ message: notFoundMsg, code: 'NOT_FOUND' });
       }
-      return SuccessResponse(doc);
+      return SuccessResponse(stripHiddenFields(doc, this.hiddenFields));
     } catch (error) {
       return HandleServiceError(error, { fallbackMessage: findFailed, context: 'BaseCrudService.findOne' });
     }
@@ -244,8 +255,9 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
 
       const scopedFilter = this.withAuthScope(extraFilter, uid);
       let q: any = this.model.findOne({ _id: id, ...scopedFilter } as FilterQuery<TDoc>);
-      if (options?.projection) {
-        q = q.select(options.projection);
+      const projection = resolveCrudProjection(options?.projection, this.hiddenFields);
+      if (projection) {
+        q = q.select(projection);
       }
       if (options?.populate) {
         q = q.populate(options.populate as any);
@@ -256,7 +268,7 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
       if (!doc) {
         return ErrorResponse({ message: notFoundMsg, code: 'NOT_FOUND' });
       }
-      return SuccessResponse(doc);
+      return SuccessResponse(stripHiddenFields(doc, this.hiddenFields));
     } catch (error) {
       return HandleServiceError(error, { fallbackMessage: getByIdFailed, context: 'BaseCrudService.getById' });
     }
@@ -285,17 +297,22 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
         delete sanitized.userId;
       }
       const scopedFilter = this.withAuthScope(extraFilter, uid);
-      const updated = await this.model
-        .findOneAndUpdate({ _id: id, ...scopedFilter } as FilterQuery<TDoc>, { $set: sanitized } as UpdateQuery<TDoc>, {
-          new: true,
-          runValidators: true
-        })
-        .lean()
-        .exec();
+      let q: any = this.model.findOneAndUpdate({ _id: id, ...scopedFilter } as FilterQuery<TDoc>, { $set: sanitized } as UpdateQuery<TDoc>, {
+        new: true,
+        runValidators: true
+      });
+      const projection = resolveCrudProjection(undefined, this.hiddenFields);
+      if (projection) {
+        q = q.select(projection);
+      }
+      const updated = await q.lean().exec();
       if (!updated) {
         return ErrorResponse({ message: notFoundMsg, code: 'NOT_FOUND' });
       }
-      return SuccessResponse(updated, errorMessages?.successUiMessage ?? this.defaultMessages.successUiMessage);
+      return SuccessResponse(
+        stripHiddenFields(updated, this.hiddenFields),
+        errorMessages?.successUiMessage ?? this.defaultMessages.successUiMessage
+      );
     } catch (error) {
       return HandleServiceError(error, { fallbackMessage: updateFailed, context: 'BaseCrudService.updateById' });
     }

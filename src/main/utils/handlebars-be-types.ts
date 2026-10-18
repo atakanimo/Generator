@@ -1,10 +1,11 @@
 import Handlebars from 'handlebars';
 import {
   emitBackendEntitySyntheticPrimaryKeyLine,
+  emitBackendFilterPropLines,
   emitBackendInputPropLines,
   emitBackendInterfacePropLine,
   needsMongooseImportForTypes,
-  type SchemaFieldLike,
+  type TemplateField,
 } from '../../shared/schemaFieldTypes.js';
 
 /** BE `types.hbs` Handlebars kayıtları — mantık `shared/schemaFieldTypes.ts`. */
@@ -15,13 +16,18 @@ export function registerBeTypesHelpers(): void {
   });
 
   Handlebars.registerHelper('beTypesEntityPropLine', (field: unknown) => {
-    const line = emitBackendInterfacePropLine(field as SchemaFieldLike);
+    const line = emitBackendInterfacePropLine(field as TemplateField);
     return line ? new Handlebars.SafeString(line) : '';
   });
 
   Handlebars.registerHelper('beTypesEntitySyntheticPrimaryKeyLine', (sourceType: unknown, fields: unknown) => {
     const line = emitBackendEntitySyntheticPrimaryKeyLine(sourceType, fields);
     return line ? new Handlebars.SafeString(line) : '';
+  });
+
+  Handlebars.registerHelper('beTypesFilterPropLines', (fields: unknown) => {
+    const lines = emitBackendFilterPropLines(fields);
+    return lines ? new Handlebars.SafeString(lines) : '';
   });
 
   Handlebars.registerHelper(

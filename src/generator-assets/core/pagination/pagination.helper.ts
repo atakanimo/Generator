@@ -36,15 +36,14 @@ export function listOffsetFromPage(page: number | undefined, limit: number): num
   return (p - 1) * lim;
 }
 
-/** POST `get-all` gövdesindeki sayfalama alanları (filtre dışı). */
+/** POST `get-all` gövdesi (sözleşme K2): filtreler `filters` altında, sayfalama üst seviyede. */
 export type ListPaginationBody = {
+  filters?: Record<string, unknown>;
   limit?: number;
   page?: number;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 };
-
-const LIST_PAGINATION_KEYS = new Set(['limit', 'page', 'sortBy', 'sortOrder']);
 
 export function normalizeSortOrder(raw: unknown): 1 | -1 | undefined {
   if (raw === 'asc') return 1;
@@ -56,6 +55,7 @@ export function normalizeSortOrder(raw: unknown): 1 | -1 | undefined {
  * Güvenli liste sıralama resolver:
  * - `sortBy` boş/uygunsuzsa `fallbackSort` döner
  * - `sortOrder` yoksa `fallbackSort`'taki ilk alan yönü kullanılır (yoksa `desc`)
+ * - JSON'daki kimlik alanı `id`'dir (sözleşme K1); Mongo'da `_id`'ye çevrilir
  */
 export function resolveListSort(
   sortBy: string | undefined,
@@ -73,11 +73,12 @@ export function resolveListSort(
   const normalized = normalizeSortOrder(sortOrder);
   const fallbackFirstDirection = Object.values(fallbackSort)[0] ?? -1;
   const direction = normalized ?? fallbackFirstDirection;
-  return { [trimmed]: direction };
+  return { [trimmed === 'id' ? '_id' : trimmed]: direction };
 }
 
 /**
- * Gövdeden filtre vs sayfalama ayırır (tüm `POST .../get-all` şemaları).
+ * `POST .../get-all` gövdesini filtre ve sayfalama olarak ayırır (sözleşme K2: `{ filters?, page?, limit?, sortBy?, sortOrder? }`).
+ * Düz gövde (filtreler üst seviyede) artık desteklenmez (sert geçiş, plan 5 G1).
  */
 export function extractListPagination(body: Record<string, unknown> | undefined): {
   filters: Record<string, unknown>;
@@ -89,20 +90,15 @@ export function extractListPagination(body: Record<string, unknown> | undefined)
   if (!body) {
     return { filters: {} };
   }
-  const filters: Record<string, unknown> = {};
-  let limit: number | undefined;
-  let page: number | undefined;
-  let sortBy: string | undefined;
-  let sortOrder: 'asc' | 'desc' | undefined;
-  for (const [k, v] of Object.entries(body)) {
-    if (!LIST_PAGINATION_KEYS.has(k)) {
-      filters[k] = v;
-      continue;
-    }
-    if (k === 'limit' && typeof v === 'number' && !Number.isNaN(v)) limit = v;
-    else if (k === 'page' && typeof v === 'number' && !Number.isNaN(v)) page = v;
-    else if (k === 'sortBy' && typeof v === 'string' && v.trim().length > 0) sortBy = v.trim();
-    else if (k === 'sortOrder' && (v === 'asc' || v === 'desc')) sortOrder = v;
-  }
-  return { filters, limit, page, sortBy, sortOrder };
+  const raw = body.filters;
+  const filters: Record<string, unknown> =
+    raw && typeof raw === 'object' && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {};
+  const { limit, page, sortBy, sortOrder } = body;
+  return {
+    filters,
+    limit: typeof limit === 'number' && !Number.isNaN(limit) ? limit : undefined,
+    page: typeof page === 'number' && !Number.isNaN(page) ? page : undefined,
+    sortBy: typeof sortBy === 'string' && sortBy.trim().length > 0 ? sortBy.trim() : undefined,
+    sortOrder: sortOrder === 'asc' || sortOrder === 'desc' ? sortOrder : undefined
+  };
 }

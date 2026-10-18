@@ -14,36 +14,37 @@ const router: Router = express.Router();
 router.use(authMiddleware);
 router.use(adminAuthMiddleware);
 
-router.post('/get-all', validate({ body: {{schemaRef entityName "GetAllBody" true normalizedModel.ownership.field}} }), async (req, res) => {
+// Custom routes come before the generated `/:id` routes so static paths are not captured by `:id`.
+// <custom-routes>
+// </custom-routes>
+
+router.post('/get-all', validate({ body: {{schemaRef entityName "GetAllBody" true adminSchemaVariant}} }), async (req, res) => {
   const result = await {{entityNameLower}}ServiceAdmin.getAll(req.body);
   AtaResponse(res, result);
 });
 
-router.get('/:id', validate({ params: TSchema.{{entityName}}MongoIdParamSchema }), async (req, res) => {
+router.get('/:id', validate({ params: TSchema.{{entityName}}IdParamSchema }), async (req, res) => {
   const result = await {{entityNameLower}}ServiceAdmin.getById(req.params.id);
   AtaResponse(res, result);
 });
 
-router.post('/create', validate({ body: {{schemaRef entityName "CreateBody" true normalizedModel.ownership.field}} }), async (req, res) => {
+router.post('/create', validate({ body: {{schemaRef entityName "CreateBody" true adminSchemaVariant}} }), async (req, res) => {
   const result = await {{entityNameLower}}ServiceAdmin.create(req.body);
   AtaResponse(res, result);
 });
 
 router.post(
   '/update/:id',
-  validate({ params: TSchema.{{entityName}}MongoIdParamSchema, body: {{schemaRef entityName "UpdateBody" true normalizedModel.ownership.field}} }),
+  validate({ params: TSchema.{{entityName}}IdParamSchema, body: {{schemaRef entityName "UpdateBody" true adminSchemaVariant}} }),
   async (req, res) => {
     const result = await {{entityNameLower}}ServiceAdmin.update(req.params.id, req.body);
     AtaResponse(res, result);
   }
 );
 
-router.delete('/:id', validate({ params: TSchema.{{entityName}}MongoIdParamSchema }), async (req, res) => {
+router.delete('/:id', validate({ params: TSchema.{{entityName}}IdParamSchema }), async (req, res) => {
   const result = await {{entityNameLower}}ServiceAdmin.delete{{entityName}}(req.params.id);
   AtaResponse(res, result);
 });
-
-// <custom-routes>
-// </custom-routes>
 
 export default router;

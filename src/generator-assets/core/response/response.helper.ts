@@ -5,6 +5,7 @@ import { applyRequestIdToResponse, getRequestContext } from '@utils/requestConte
 import { getAppLogger } from '@core/logging/logger';
 import { HandleServiceError } from '@core/errors/error.helper';
 import { ErrorCodes, type ErrorCodeKey } from '@core/errors/error-codes';
+import { toWire } from '@core/response/wire';
 
 export { ErrorCodes, type ErrorCodeKey } from '@core/errors/error-codes';
 export { HandleServiceError } from '@core/errors/error.helper';
@@ -13,6 +14,7 @@ type ErrorData = Omit<IErrorData, 'code'> & { code?: ErrorCodeKey };
 
 /**
  * JSON API yanıtı — süre / `X-Request-Id` / yapılandırılmış log (tasks §10).
+ * `data` her cevapta `toWire`'dan geçer: `_id` → `id`, `Decimal128` → string (sözleşme K1, K5).
  */
 export const AtaResponse = <T>(res: Response, response: IApiResponse<T>) => {
   applyRequestIdToResponse(res);
@@ -32,7 +34,7 @@ export const AtaResponse = <T>(res: Response, response: IApiResponse<T>) => {
     errorCode: response.errorData?.code ?? null,
     durationMs
   });
-  res.status(statusCode).json(response);
+  res.status(statusCode).json({ ...response, data: toWire(response.data) });
 };
 
 export const SuccessResponse = <T>(data: T, uiMessage?: string): IApiResponse<T> => {

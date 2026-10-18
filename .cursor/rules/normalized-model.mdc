@@ -1,0 +1,15 @@
+---
+description: NormalizedModel v2, parser, manifest v3, model merge, model editor
+globs: src/shared/**,src/main/ipc/schemaParser.ts,src/main/ipc/modelCreator.ts,src/main/ipc/modelEditor.ts,src/main/utils/mongooseSchemaExtract.ts,src/main/utils/mongooseModelContext.ts,src/main/utils/manifestSnapshot.ts
+alwaysApply: false
+---
+
+# NormalizedModel v2
+
+Source: `docs/normalized-model.md`.
+
+- Single type everywhere; optional properties mirror the source (lossless round trip). Write manifest rows through `canonicalModel`.
+- Use `fieldTypeToken.ts` for kind / filter token mapping; no ad-hoc string maps.
+- The parser must keep enum, literal default, `select: false` (→ `access.hidden`), unmodelled options, TS type, `?`, JSDoc, timestamps, `mongoose.model` name and `collection`. Model files are regenerated every run; losing any of these is a regression.
+- BE generate and model save share `buildMongooseModelContext`.
+- Gates after a change here: smoke, `--manifest`, `--p5`, `--resave-models` + `--compare` (`docs/verification.md`).

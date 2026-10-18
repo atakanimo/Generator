@@ -1,0 +1,2976 @@
+{
+  "manifestVersion": 3,
+  "models": [
+    {
+      "sourceRelativePath": "src/modules/daily-portfolio/daily-portfolio.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "DailyPortfolio",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": " Id",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "snapshotDate",
+            "kind": "date",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Snapshot Date",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "portfolioValues",
+            "kind": "reference",
+            "isArray": true,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Portfolio Values",
+              "list": true,
+              "component": "MultiSelect",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Created At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Updated At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ],
+        "nestedSchemas": [
+          {
+            "entityName": "DailyPortfolioValue",
+            "fields": [
+              {
+                "name": "userId",
+                "kind": "reference",
+                "isArray": false,
+                "required": true,
+                "filter": {
+                  "searchable": true,
+                  "type": "reference"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "User Id",
+                  "list": true,
+                  "component": "TextField",
+                  "defaultValue": ""
+                }
+              },
+              {
+                "name": "value",
+                "kind": "decimal",
+                "isArray": false,
+                "required": true,
+                "native": {
+                  "type": "schema.types.decimal128"
+                },
+                "filter": {
+                  "searchable": true,
+                  "type": "regex"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "Value",
+                  "list": true,
+                  "component": "TextField",
+                  "defaultValue": ""
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "sourceRelativePath": "src/modules/notifications/notifications.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "Notifications",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": " Id",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "userId",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "reference": {
+              "include": true,
+              "target": "Users",
+              "display": "name",
+              "populate": [
+                "email",
+                "name",
+                "googleId",
+                "isActive",
+                "isVerified",
+                "deviceLanguageTag"
+              ],
+              "relationType": "manyToOne"
+            },
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "User Id",
+              "list": true,
+              "component": "Autocomplete",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "title",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Title",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "body",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Body",
+              "list": true,
+              "component": "TextArea",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "read",
+            "kind": "boolean",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "boolean"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Read",
+              "list": true,
+              "component": "Switch",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Created At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Updated At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ]
+      }
+    },
+    {
+      "sourceRelativePath": "src/modules/users/users.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "Users",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": " Id",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "email",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Email",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "password",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Password",
+              "list": false,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "name",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Name",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "googleId",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Google Id",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "appleId",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Apple Id",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "profileImage",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Profile Image",
+              "list": true,
+              "component": "ImageField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "lastActivity",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Last Activity",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "isActive",
+            "kind": "boolean",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "boolean"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Is Active",
+              "list": true,
+              "component": "Switch",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "isVerified",
+            "kind": "boolean",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "boolean"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Is Verified",
+              "list": true,
+              "component": "Switch",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "fcmTokens",
+            "kind": "string",
+            "isArray": true,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Fcm Tokens",
+              "list": true,
+              "component": "MultiSelect",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "otpCode",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Otp Code",
+              "list": false,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "otpExpiresAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Otp Expires At",
+              "list": false,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "currencySymbolId",
+            "kind": "reference",
+            "isArray": false,
+            "required": false,
+            "reference": {
+              "include": true,
+              "target": "Symbols",
+              "display": "displayText",
+              "populate": [
+                "value",
+                "displayText"
+              ],
+              "relationType": "manyToOne"
+            },
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Currency Symbol Id",
+              "list": true,
+              "component": "Autocomplete",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "deviceLanguageTag",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Device Language Tag",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "deviceTimeZone",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Device Time Zone",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "lastPortfolioSnapshotLocalDate",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Last Portfolio Snapshot Local Date",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "appBuildNumber",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": false,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "App Build Number",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Created At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Updated At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ]
+      }
+    },
+    {
+      "sourceRelativePath": "src/modules/app-version-configs/app-version-configs.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "AppVersionConfigs",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": false,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": " Id",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "platform",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "unique": true,
+            "trim": true,
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Platform",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "minSupportedBuildNumber",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": false,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Min Supported Build Number",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "recommendedBuildNumber",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": false,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Recommended Build Number",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "latestBuildNumber",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": false,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Latest Build Number",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "latestVersionName",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Latest Version Name",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "storeUrl",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Store Url",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Created At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Updated At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ]
+      }
+    },
+    {
+      "sourceRelativePath": "src/modules/symbol-types/symbol-types.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "SymbolTypes",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": " Id",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "value",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Value",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "displayText",
+            "kind": "object",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "object": {
+              "fields": [
+                {
+                  "name": "tr",
+                  "kind": "string",
+                  "required": true,
+                  "trim": true
+                },
+                {
+                  "name": "en",
+                  "kind": "string",
+                  "required": true,
+                  "trim": true
+                }
+              ]
+            },
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Display Text",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Created At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Updated At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ]
+      }
+    },
+    {
+      "sourceRelativePath": "src/modules/symbols/symbols.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "Symbols",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": " Id",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "value",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "unique": true,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Value",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "symbolTypeId",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "reference": {
+              "include": true,
+              "target": "SymbolTypes",
+              "display": "value",
+              "populate": [
+                "_id",
+                "value",
+                "displayText"
+              ],
+              "relationType": "manyToOne"
+            },
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Symbol Type Id",
+              "list": true,
+              "component": "Autocomplete",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "displayText",
+            "kind": "object",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "object": {
+              "fields": [
+                {
+                  "name": "tr",
+                  "kind": "string",
+                  "required": true,
+                  "trim": true
+                },
+                {
+                  "name": "en",
+                  "kind": "string",
+                  "required": true,
+                  "trim": true
+                }
+              ]
+            },
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Display Text",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "description",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Description",
+              "list": true,
+              "component": "TextArea",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "currency",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Currency",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "isShow",
+            "kind": "boolean",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "boolean"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Is Show",
+              "list": true,
+              "component": "Switch",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Created At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Updated At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ]
+      }
+    },
+    {
+      "sourceRelativePath": "src/modules/fund-daily-metrics/fund-daily-metrics.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "FundDailyMetrics",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": " Id",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "dateKey",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Date Key",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "ticker",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Ticker",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "price",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Price",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "previousClose",
+            "kind": "number",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Previous Close",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "change",
+            "kind": "number",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Change",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "changePercent",
+            "kind": "number",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Change Percent",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "currency",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Currency",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "asOf",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "As Of",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "stale",
+            "kind": "boolean",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "boolean"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Stale",
+              "list": true,
+              "component": "Switch",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "source",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Source",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Created At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Updated At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ]
+      }
+    },
+    {
+      "sourceRelativePath": "src/modules/transactions/transactions.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "Transactions",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": " Id",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "userId",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "reference": {
+              "include": true,
+              "target": "Users",
+              "display": "name",
+              "populate": [
+                "_id",
+                "email",
+                "name"
+              ],
+              "relationType": "manyToOne"
+            },
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "User Id",
+              "list": true,
+              "component": "Autocomplete",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "symbolId",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "reference": {
+              "include": true,
+              "target": "Symbols",
+              "display": "displayText",
+              "populate": [
+                "_id",
+                "value",
+                "displayText",
+                "description",
+                "currency"
+              ],
+              "relationType": "manyToOne"
+            },
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Symbol Id",
+              "list": true,
+              "component": "Autocomplete",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "quantity",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Quantity",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "price",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Price",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "transactionType",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Transaction Type",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "notes",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Notes",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "priceCurrency",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Price Currency",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "realizedPnL",
+            "kind": "number",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Realized PnL",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": 0
+            }
+          },
+          {
+            "name": "addToCashBalance",
+            "kind": "boolean",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "boolean"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Add To Cash Balance",
+              "list": true,
+              "component": "Switch",
+              "defaultValue": true
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Created At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Updated At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ]
+      }
+    },
+    {
+      "sourceRelativePath": "src/modules/user-watch-list/user-watch-list.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "UserWatchList",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": " Id",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "userId",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "reference": {
+              "include": true,
+              "target": "Users",
+              "display": "name",
+              "populate": [
+                "email",
+                "name",
+                "isActive",
+                "isVerified",
+                "deviceLanguageTag"
+              ],
+              "relationType": "manyToOne"
+            },
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "User Id",
+              "list": true,
+              "component": "Autocomplete",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "symbolId",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "reference": {
+              "include": true,
+              "target": "Symbols",
+              "display": "displayText",
+              "populate": [
+                "_id",
+                "value",
+                "symbolTypeId",
+                "displayText"
+              ],
+              "relationType": "manyToOne"
+            },
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Symbol Id",
+              "list": true,
+              "component": "Autocomplete",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "notificationsEnabled",
+            "kind": "boolean",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "boolean"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Notifications Enabled",
+              "list": true,
+              "component": "Switch",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Created At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Updated At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ]
+      }
+    },
+    {
+      "sourceRelativePath": "src/modules/subscriptions/subscriptions.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "Subscriptions",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": " Id",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "code",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "unique": true,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Code",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "name",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Name",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "isActive",
+            "kind": "boolean",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "boolean"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Is Active",
+              "list": true,
+              "component": "Switch",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "sortOrder",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": false,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Sort Order",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "revenueCatEntitlementId",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Revenue Cat Entitlement Id",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "limits",
+            "kind": "object",
+            "isArray": false,
+            "required": true,
+            "object": {
+              "fields": [
+                {
+                  "name": "maxAssets",
+                  "kind": "number",
+                  "required": false,
+                  "nullable": true
+                },
+                {
+                  "name": "deepDiveDailyLimit",
+                  "kind": "number",
+                  "required": false,
+                  "nullable": true
+                },
+                {
+                  "name": "deepDiveExportShare",
+                  "kind": "boolean",
+                  "required": true
+                },
+                {
+                  "name": "dailyMarketRecommendationUnblurredCount",
+                  "kind": "number",
+                  "required": false,
+                  "nullable": true
+                },
+                {
+                  "name": "usEtfDetails",
+                  "kind": "boolean",
+                  "required": true
+                },
+                {
+                  "name": "trEtfDetails",
+                  "kind": "boolean",
+                  "required": true
+                },
+                {
+                  "name": "trFundPriceNotification",
+                  "kind": "boolean",
+                  "required": true
+                },
+                {
+                  "name": "news",
+                  "kind": "boolean",
+                  "required": true
+                },
+                {
+                  "name": "newsSearch",
+                  "kind": "boolean",
+                  "required": true
+                },
+                {
+                  "name": "portfolioHistoryDays",
+                  "kind": "number",
+                  "required": false,
+                  "nullable": true
+                },
+                {
+                  "name": "valueComparisonCustomDate",
+                  "kind": "boolean",
+                  "required": true
+                },
+                {
+                  "name": "transactionHistoryDays",
+                  "kind": "number",
+                  "required": false,
+                  "nullable": true
+                }
+              ],
+              "typeName": "ISubscriptionLimits",
+              "schemaName": "SubscriptionLimitsSchema"
+            },
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Limits",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Created At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Updated At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ],
+        "nestedSchemas": [
+          {
+            "entityName": "SubscriptionLimits",
+            "fields": [
+              {
+                "name": "maxAssets",
+                "kind": "number",
+                "isArray": false,
+                "required": false,
+                "nullable": true,
+                "filter": {
+                  "searchable": true,
+                  "type": "eq"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "Max Assets",
+                  "list": true,
+                  "component": "NumberField",
+                  "defaultValue": ""
+                }
+              },
+              {
+                "name": "deepDiveDailyLimit",
+                "kind": "number",
+                "isArray": false,
+                "required": false,
+                "nullable": true,
+                "filter": {
+                  "searchable": true,
+                  "type": "eq"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "Deep Dive Daily Limit",
+                  "list": true,
+                  "component": "NumberField",
+                  "defaultValue": ""
+                }
+              },
+              {
+                "name": "deepDiveExportShare",
+                "kind": "boolean",
+                "isArray": false,
+                "required": true,
+                "filter": {
+                  "searchable": true,
+                  "type": "boolean"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "Deep Dive Export Share",
+                  "list": true,
+                  "component": "Switch",
+                  "defaultValue": ""
+                }
+              },
+              {
+                "name": "dailyMarketRecommendationUnblurredCount",
+                "kind": "number",
+                "isArray": false,
+                "required": false,
+                "nullable": true,
+                "filter": {
+                  "searchable": true,
+                  "type": "eq"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "Daily Market Recommendation Unblurred Count",
+                  "list": true,
+                  "component": "NumberField",
+                  "defaultValue": ""
+                }
+              },
+              {
+                "name": "usEtfDetails",
+                "kind": "boolean",
+                "isArray": false,
+                "required": true,
+                "filter": {
+                  "searchable": true,
+                  "type": "boolean"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "Us Etf Details",
+                  "list": true,
+                  "component": "Switch",
+                  "defaultValue": ""
+                }
+              },
+              {
+                "name": "trEtfDetails",
+                "kind": "boolean",
+                "isArray": false,
+                "required": true,
+                "filter": {
+                  "searchable": true,
+                  "type": "boolean"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "Tr Etf Details",
+                  "list": true,
+                  "component": "Switch",
+                  "defaultValue": ""
+                }
+              },
+              {
+                "name": "trFundPriceNotification",
+                "kind": "boolean",
+                "isArray": false,
+                "required": true,
+                "filter": {
+                  "searchable": true,
+                  "type": "boolean"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "Tr Fund Price Notification",
+                  "list": true,
+                  "component": "Switch",
+                  "defaultValue": ""
+                }
+              },
+              {
+                "name": "news",
+                "kind": "boolean",
+                "isArray": false,
+                "required": true,
+                "filter": {
+                  "searchable": true,
+                  "type": "boolean"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "News",
+                  "list": true,
+                  "component": "Switch",
+                  "defaultValue": ""
+                }
+              },
+              {
+                "name": "newsSearch",
+                "kind": "boolean",
+                "isArray": false,
+                "required": true,
+                "filter": {
+                  "searchable": true,
+                  "type": "boolean"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "News Search",
+                  "list": true,
+                  "component": "Switch",
+                  "defaultValue": ""
+                }
+              },
+              {
+                "name": "portfolioHistoryDays",
+                "kind": "number",
+                "isArray": false,
+                "required": false,
+                "nullable": true,
+                "filter": {
+                  "searchable": true,
+                  "type": "eq"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "Portfolio History Days",
+                  "list": true,
+                  "component": "NumberField",
+                  "defaultValue": ""
+                }
+              },
+              {
+                "name": "valueComparisonCustomDate",
+                "kind": "boolean",
+                "isArray": false,
+                "required": true,
+                "filter": {
+                  "searchable": true,
+                  "type": "boolean"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "Value Comparison Custom Date",
+                  "list": true,
+                  "component": "Switch",
+                  "defaultValue": ""
+                }
+              },
+              {
+                "name": "transactionHistoryDays",
+                "kind": "number",
+                "isArray": false,
+                "required": false,
+                "nullable": true,
+                "filter": {
+                  "searchable": true,
+                  "type": "eq"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "Transaction History Days",
+                  "list": true,
+                  "component": "NumberField",
+                  "defaultValue": ""
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "sourceRelativePath": "src/modules/user-subscriptions/user-subscriptions.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "UserSubscriptions",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": " Id",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "userId",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "unique": true,
+            "reference": {
+              "include": true,
+              "target": "Users",
+              "display": "name",
+              "populate": [
+                "_id",
+                "email",
+                "name"
+              ],
+              "relationType": "manyToOne"
+            },
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "User Id",
+              "list": true,
+              "component": "Autocomplete",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "subscriptionId",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "reference": {
+              "include": true,
+              "target": "Subscriptions",
+              "display": "name",
+              "populate": [
+                "_id",
+                "code",
+                "name",
+                "revenueCatEntitlementId",
+                "limits"
+              ],
+              "relationType": "manyToOne"
+            },
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Subscription Id",
+              "list": true,
+              "component": "Autocomplete",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "status",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Status",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "provider",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Provider",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "willRenew",
+            "kind": "boolean",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "boolean"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Will Renew",
+              "list": true,
+              "component": "Switch",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "currentPeriodStart",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Current Period Start",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "currentPeriodEnd",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Current Period End",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "canceledAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Canceled At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "latestEventAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Latest Event At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "deepDiveDailyUsed",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Deep Dive Daily Used",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "deepDiveDailyDate",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Deep Dive Daily Date",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Created At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Updated At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ]
+      }
+    },
+    {
+      "sourceRelativePath": "src/modules/ip-blacklist/ip-blacklist.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "IpBlacklist",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": false,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": " Id",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "ip",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "unique": true,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "IP",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "reason",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Reason",
+              "list": true,
+              "component": "TextArea",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "source",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Source",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": "manual"
+            }
+          },
+          {
+            "name": "hitCount",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": false,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Hit Count",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": "0"
+            }
+          },
+          {
+            "name": "lastHitAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Last Hit At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "isActive",
+            "kind": "boolean",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "boolean"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Is Active",
+              "list": true,
+              "component": "Switch",
+              "defaultValue": "true"
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Created At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Updated At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "generatorVersion": "1.0.0",
+  "workspace": {
+    "frontendPath": "/Users/atakanatabey/Projects/VarlikALL/Varlik360/apps/admin",
+    "generationMode": "fullstack",
+    "isProtectedRoute": true,
+    "isAdminUser": true,
+    "updateExistingFrontendFiles": true,
+    "updateExistingBackendFiles": true,
+    "selectedFrontendFiles": {
+      "service": true,
+      "thunk": true,
+      "slice": true,
+      "page": true
+    },
+    "selectedBackendFiles": {
+      "model": true,
+      "crud": true,
+      "filters": true,
+      "types": true,
+      "service": true,
+      "schema": true,
+      "route": true,
+      "serviceAdmin": true,
+      "routeAdmin": true
+    },
+    "features": {
+      "deletable": true,
+      "updatable": true
+    }
+  },
+  "lastGeneratedAt": "2026-08-05T15:11:00.000Z"
+}

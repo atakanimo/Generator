@@ -1,24 +1,12 @@
 import { readFileSync } from 'fs';
 import { listMongooseModelFiles, type ScannedModel, type SourceType } from './projectScanner.js';
-import { parseModelFile, entityNameFromModelFileName } from './schemaParser.js';
+import { parseNormalizedModel, entityNameFromModelFileName } from './schemaParser.js';
+import { mergeModel } from '../../shared/modelMerge.js';
+import { filterTokenOf, typeTokenOf } from '../../shared/fieldTypeToken.js';
+import type { RelatedModelFieldInfo, RelatedModelFieldsResult } from '../../shared/ipcTypes.js';
+import { findManifestModelByRelativePath, toProjectRelativePath } from '../utils/manifestSnapshot.js';
 
-export interface RelatedModelFieldInfo {
-  name: string;
-  type: string;
-  objectFields?: Array<{
-    name: string;
-    type: string;
-    required: boolean;
-    trim?: boolean;
-  }>;
-}
-
-export interface RelatedModelFieldsResult {
-  success: boolean;
-  fields?: RelatedModelFieldInfo[];
-  modelPath?: string;
-  error?: string;
-}
+export type { RelatedModelFieldInfo, RelatedModelFieldsResult };
 
 function mongooseRegisteredNamesInFile(content: string): string[] {
   const names = new Set<string>();
@@ -132,10 +120,10 @@ export async function getRelatedModelFieldNames(
     };
   }
 
-  const parsed = parseModelFile(match.model.path, 'nodejs-mongoose', {
+  const parsed = parseNormalizedModel(match.model.path, 'nodejs-mongoose', {
     preferredMongooseModelName: match.preferredMongooseModelName
   });
-  if (!parsed.success || !parsed.schema?.fields) {
+  if (!parsed.success || !parsed.model?.fields) {
     return {
       success: false,
       error: parsed.error || 'Failed to parse related model file',
@@ -143,16 +131,24 @@ export async function getRelatedModelFieldNames(
     };
   }
 
-  const fields: RelatedModelFieldInfo[] = parsed.schema.fields
+  // Field config as the target's schema designer has it (manifest row, else defaults) — for the K3 warning.
+  const row = findManifestModelByRelativePath(projectPath, toProjectRelativePath(projectPath, match.model.path));
+  const merged = mergeModel(parsed.model, row, 'nodejs-mongoose');
+  const regexSearchable = new Set(
+    merged.fields.filter(f => f.filter?.searchable && filterTokenOf(f.filter) === 'regex').map(f => f.name)
+  );
+
+  const fields: RelatedModelFieldInfo[] = parsed.model.fields
     .filter(f => typeof f.name === 'string' && f.name.length > 0 && f.name !== '__v')
     .map(f => ({
       name: f.name,
-      type: f.type,
+      type: typeTokenOf(f),
+      regexSearchable: regexSearchable.has(f.name),
       objectFields:
-        String(f.type).toLowerCase() === 'object' && Array.isArray(f.objectFields)
-          ? f.objectFields.map(sub => ({
+        typeTokenOf(f).toLowerCase() === 'object' && Array.isArray(f.object?.fields)
+          ? f.object.fields.map(sub => ({
               name: sub.name,
-              type: sub.type,
+              type: typeTokenOf(sub),
               required: sub.required,
               trim: sub.trim,
             }))

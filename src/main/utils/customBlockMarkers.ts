@@ -1,6 +1,6 @@
 /**
  * Canonical custom block markers: `// <name>` … `// </name>`.
- * Shared by BackendGenerator and FrontendGenerator when merging on update.
+ * Used by BackendGenerator and model saving when merging on update.
  */
 export const DEFAULT_CUSTOM_BLOCK_MARKER_NAMES = [
   'custom-imports',
@@ -8,6 +8,8 @@ export const DEFAULT_CUSTOM_BLOCK_MARKER_NAMES = [
   'custom-methods',
   'custom-routes',
   'custom-schema',
+  'custom-filter-fields',
+  'custom-filter-fields-admin',
   'custom-tojson-transform'
 ] as const;
 

@@ -7,17 +7,47 @@ import mongoose, { Document, Schema } from 'mongoose';
 // <custom-types>
 // </custom-types>
 
+{{#each namedNestedSchemas}}
+export interface {{nestedTypeName}} {
+{{#each objectFields}}
+  {{name}}{{#unless required}}{{#unless nullable}}?{{/unless}}{{/unless}}: {{tsType}};
+{{/each}}
+}
+
+const {{nestedSchemaName}} = new Schema<{{nestedTypeName}}>(
+  {
+{{#each objectFields}}
+    {{name}}: {
+      type: {{mongooseType}}{{#if nullable}}, required: false, default: null{{else}}{{#if required}}, required: true{{/if}}{{/if}}{{#if trim}}, trim: true{{/if}}{{#if ref}},
+      ref: '{{ref}}'{{/if}}
+    }{{#unless @last}},{{/unless}}
+{{/each}}
+  },
+  { _id: false, timestamps: false }
+);
+{{#unless @last}}
+
+{{/unless}}
+{{/each}}
+{{#if namedNestedSchemas}}
+
+{{/if}}
 {{#if hasModelTypePattern}}
 type ModelType = { value: string; displayText: string };
 
 {{/if}}
 export interface {{interfaceName}} extends {{interfaceExtends}} {
-{{#if hasTimestamps}}
+{{#if timestamps.createdAt}}
   createdAt?: Date;
+{{/if}}
+{{#if timestamps.updatedAt}}
   updatedAt?: Date;
 {{/if}}
 {{#each modelFields}}
-  {{name}}: {{#if isObject}}{ {{#each objectFields}}{{name}}: {{tsType}};{{#unless @last}} {{/unless}}{{/each}} }{{else}}{{tsType}}{{/if}};
+{{#if doc}}
+  {{doc}}
+{{/if}}
+  {{name}}{{#if optional}}?{{/if}}: {{#if tsTypeOverride}}{{tsTypeOverride}}{{else}}{{#if nestedTypeName}}{{nestedTypeName}}{{#if isArray}}[]{{/if}}{{else}}{{#if isObject}}{ {{#each objectFields}}{{name}}: {{tsType}};{{#unless @last}} {{/unless}}{{/each}} }{{#if isArray}}[]{{/if}}{{else}}{{tsType}}{{/if}}{{/if}}{{/if}};
 {{/each}}
 }
 
@@ -25,24 +55,37 @@ export type I{{modelExportName}}Model = {{interfaceName}};
 
 const {{schemaName}} = new Schema<{{interfaceName}}>(
   {
-{{#each modelFields}}
-{{#if isObject}}
+{{#each modelFields~}}
+{{#if nestedSchemaName}}
+    {{name}}: {
+      type: {{#if isArray}}[{{nestedSchemaName}}]{{else}}{{nestedSchemaName}}{{/if}}{{#if required}}, required: true{{/if}}{{#if defaultLiteral}}, default: {{defaultLiteral}}{{/if}}{{#each nativeOptions}}, {{this}}{{/each}}
+    }{{#unless @last}},{{/unless}}
+{{else if isObject}}
     {{name}}: {
 {{#each objectFields}}
       {{name}}: {
-        type: {{mongooseType}}{{#if required}}, required: true{{/if}}{{#if trim}}, trim: true{{/if}}
+        type: {{mongooseType}}{{#if nullable}}, required: false, default: null{{else}}{{#if required}}, required: true{{/if}}{{/if}}{{#if trim}}, trim: true{{/if}}{{#if ref}},
+        ref: '{{ref}}'{{/if}}
       }{{#unless @last}},{{/unless}}
 {{/each}}
     }{{#unless @last}},{{/unless}}
+{{else if isMap}}
+    {{name}}: {
+      type: Map,
+      of: Number{{#if required}}, required: true{{/if}}{{#if defaultLiteral}}, default: {{defaultLiteral}}{{/if}}{{#each nativeOptions}}, {{this}}{{/each}}
+    }{{#unless @last}},{{/unless}}
 {{else}}
     {{name}}: {
-      type: {{mongooseType}}{{#if required}}, required: true{{/if}}{{#if unique}}, unique: true{{/if}}{{#if trim}}, trim: true{{/if}}{{#if ref}},
+      type: {{mongooseType}}{{#if required}}, required: true{{/if}}{{#if unique}}, unique: true{{/if}}{{#if trim}}, trim: true{{/if}}{{#if enumLiteral}}, enum: [{{enumLiteral}}]{{/if}}{{#if defaultLiteral}}, default: {{defaultLiteral}}{{/if}}{{#each nativeOptions}}, {{this}}{{/each}}{{#if ref}},
       ref: '{{ref}}'{{/if}}
     }{{#unless @last}},{{/unless}}
 {{/if}}
 {{/each}}
   },
   {
+    {{#if collectionName}}
+    collection: '{{collectionName}}',
+    {{/if}}
     {{#if hasTimestamps}}
     timestamps: {
       {{#if timestamps.createdAt}}
@@ -72,7 +115,7 @@ const {{schemaName}} = new Schema<{{interfaceName}}>(
 // <custom-schema>
 // </custom-schema>
 
-export const {{modelExportName}} = mongoose.model<{{interfaceName}}>('{{modelExportName}}', {{schemaName}});
+export const {{modelExportName}} = mongoose.model<{{interfaceName}}>('{{mongooseModelName}}', {{schemaName}});
 {{#if hasInitializeFunction}}
 export const {{initializeFunctionName}} = async (): Promise<void> => {
   try {

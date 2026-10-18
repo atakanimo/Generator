@@ -12,8 +12,22 @@ import { handleError, ErrorCode } from '../utils/errorHandler.js';
 import { log } from '../utils/logger.js';
 import { getGeneratorRoot, getTemplatesDir } from '../utils/templateHelpers.js';
 import { join } from 'path';
-import { kebabCase } from '../utils/namingUtils.js';
+import { kebabCase, moduleNameFromEntity } from '../utils/namingUtils.js';
 import { mergeMongoAuditBackendTemplateFields } from '../utils/mongoAuditFields.js';
+import { isGeneratorOwnedSource } from '../utils/generatedFileOwnership.js';
+import { missingHostExports } from '../utils/coreAssetImports.js';
+import {
+  NORMAL_OPERATIONS,
+  NORMAL_WRITE_OPERATIONS,
+  type NormalizedModel as V2Model,
+  type NormalOperation
+} from '../../shared/normalizedModel.js';
+import {
+  buildMongooseModelContext,
+  normalizeField,
+  normalizeMongoIdField,
+  type BeField
+} from '../utils/mongooseModelContext.js';
 
 export interface BackendGenerateOptions extends GenerateOptions {
   isProtectedRoute: boolean;
@@ -36,7 +50,7 @@ export interface BackendGenerateOptions extends GenerateOptions {
 }
 
 interface ArtifactConfig {
-  key: 'model' | 'crud' | 'filters' | 'types' | 'service' | 'serviceAdmin' | 'schema' | 'route' | 'routeAdmin';
+  key: 'model' | 'crud' | 'filters' | 'types' | 'service' | 'serviceAdmin' | 'schema' | 'route' | 'routeAdmin' | 'hooks';
   templateCandidates: string[];
   outputDir: string;
   outputFileName: string;
@@ -46,55 +60,20 @@ interface ArtifactConfig {
   alwaysRegenerate?: boolean;
 }
 
-type NormalizedFieldType = 'string' | 'number' | 'boolean' | 'date' | 'objectId' | 'array' | 'object';
-type NormalizedRelationType = 'oneToOne' | 'oneToMany' | 'manyToOne' | 'manyToMany';
 
-interface NormalizedField {
-  name: string;
-  type: NormalizedFieldType;
-  required: boolean;
-  isArray: boolean;
-  filterable: boolean;
-  filterType?: 'regex' | 'exact' | 'objectId' | 'range' | 'boolean' | 'date-range';
-  defaultValue?: string;
-  isReadonly?: boolean;
-  hiddenFromCreate?: boolean;
-  hiddenFromUpdate?: boolean;
-  relation?: {
-    target: string;
-    type: NormalizedRelationType;
-    displayField?: string;
-  };
-  relationPopulateFields?: string[];
-  relationPropertyObjectFields?: Array<{
-    name: string;
-    type: 'String' | 'Number' | 'Boolean';
-    required: boolean;
-    trim: boolean;
-  }>;
-  relationType?: NormalizedRelationType;
-  trim?: boolean;
-  unique?: boolean;
-  objectFields?: Array<{
-    name: string;
-    type: 'String' | 'Number' | 'Boolean';
-    required: boolean;
-    trim: boolean;
-  }>;
-  ui: {
-    showInTable: boolean;
-    label: string;
-    uiComponent?: string;
-  };
-}
 
-interface NormalizedModel {
+/** BE generation context: names + derived fields + ownership, built from the v2 model (`source`). */
+interface BeModelContext {
+  source: V2Model;
   name: string;
   camelName: string;
   pascalName: string;
   kebabName: string;
-  fields: NormalizedField[];
+  fields: BeField[];
   ownership?: {
+    /** `self`: the record is the user (G5) — no ownership field, scope `{ _id: authUserId }`. */
+    kind: 'field' | 'self';
+    /** Ownership field name (`userId`); empty for `self`. */
     field: string;
     normalApiFromAuth: boolean;
     adminApiBodyAllowed: boolean;
@@ -102,23 +81,6 @@ interface NormalizedModel {
   };
 }
 
-type MongooseFieldShape = {
-  name: string;
-  tsType: string;
-  mongooseType: string;
-  required: boolean;
-  unique: boolean;
-  trim: boolean;
-  ref?: string;
-  isObject?: boolean;
-  objectFields?: Array<{
-    name: string;
-    mongooseType: string;
-    tsType: string;
-    required: boolean;
-    trim: boolean;
-  }>;
-};
 
 interface MergeConflictPolicy {
   onMissingPlaceholderInRenderedTemplate: 'fail';
@@ -214,19 +176,21 @@ export class BackendGenerator extends BaseGenerator {
         camelName: entityNames.camelCase,
         pascalName: entityNames.pascalCase
       });
-      this.logInfo('NormalizedModel build started', { step: 'normalized-model-build' });
+      this.logInfo('BeModelContext build started', { step: 'normalized-model-build' });
       const normalizedModel = this.buildNormalizedModel();
       const moduleName = normalizedModel.kebabName;
-      this.logInfo('NormalizedModel created', {
+      this.logInfo('BeModelContext created', {
         step: 'normalized-model-build',
         ownershipField: normalizedModel.ownership?.field ?? null,
         fieldCount: normalizedModel.fields.length
       });
+      const normalApi = this.resolveNormalApi(normalizedModel);
       const templateData = {
         entityName: normalizedModel.pascalName,
         fields: mergeMongoAuditBackendTemplateFields(this.sourceType, this.toTemplateFields(normalizedModel)),
         isProtectedRoute: this.isProtectedRoute,
         isAdminUser: this.isAdminUser,
+        ...normalApi,
         entityNameLower: normalizedModel.camelName,
         camelEntityName: normalizedModel.camelName,
         moduleName,
@@ -236,13 +200,16 @@ export class BackendGenerator extends BaseGenerator {
 
       // Generate files in parallel
       this.logInfo('Generation queue created', { step: 'queue-creation' });
+      // P5 #24: with no normal operation a new model gets no normal route file; an existing one keeps its custom routes.
+      const normalRouteWanted = normalApi.hasNormalOps === true || this.normalRouteFileExists(moduleName);
       const files = this.generateBackendFiles(templateData, {
         entityNameLower: normalizedModel.camelName,
-        moduleName
+        moduleName,
+        normalRouteWanted
       });
 
       // Add route to index if needed
-      if (this.shouldAddRoute && (this.sourceType === 'nodejs-mongoose' || this.sourceType === 'nodejs-typeorm')) {
+      if (normalRouteWanted && this.shouldAddRoute && (this.sourceType === 'nodejs-mongoose' || this.sourceType === 'nodejs-typeorm')) {
         if (this.updateExistingFiles) {
           this.addRouteToIndex(moduleName, normalizedModel.camelName);
         } else {
@@ -307,13 +274,38 @@ export class BackendGenerator extends BaseGenerator {
         sourceRelativePath: 'src/generator-assets/core/logging/logger.ts',
         targetRelativePath: 'src/core/logging/logger.ts'
       },
+      // logger.ts imports (bootstrap must be import-closed, plan 5 P2.1)
+      {
+        sourceRelativePath: 'src/generator-assets/core/logging/job-log-context.ts',
+        targetRelativePath: 'src/core/logging/job-log-context.ts'
+      },
+      {
+        sourceRelativePath: 'src/generator-assets/core/logging/pino-stdout-file-tee.ts',
+        targetRelativePath: 'src/core/logging/pino-stdout-file-tee.ts'
+      },
+      {
+        sourceRelativePath: 'src/generator-assets/core/logging/daily-log-file-path.ts',
+        targetRelativePath: 'src/core/logging/daily-log-file-path.ts'
+      },
       {
         sourceRelativePath: 'src/generator-assets/core/pagination/pagination.helper.ts',
         targetRelativePath: 'src/core/pagination/pagination.helper.ts'
       },
       {
+        sourceRelativePath: 'src/generator-assets/core/filters/filter-query.helper.ts',
+        targetRelativePath: 'src/core/filters/filter-query.helper.ts'
+      },
+      {
         sourceRelativePath: 'src/generator-assets/core/response/response.helper.ts',
         targetRelativePath: 'src/core/response/response.helper.ts'
+      },
+      {
+        sourceRelativePath: 'src/generator-assets/core/response/wire.ts',
+        targetRelativePath: 'src/core/response/wire.ts'
+      },
+      {
+        sourceRelativePath: 'src/generator-assets/core/schema/list-pagination.schema.ts',
+        targetRelativePath: 'src/core/schema/list-pagination.schema.ts'
       },
       {
         sourceRelativePath: 'src/generator-assets/core/types/api-contract.ts',
@@ -322,6 +314,14 @@ export class BackendGenerator extends BaseGenerator {
       {
         sourceRelativePath: 'src/generator-assets/core/services/base-crud.service.ts',
         targetRelativePath: 'src/core/services/base-crud.service.ts'
+      },
+      {
+        sourceRelativePath: 'src/generator-assets/core/services/crud-projection.ts',
+        targetRelativePath: 'src/core/services/crud-projection.ts'
+      },
+      {
+        sourceRelativePath: 'src/generator-assets/core/services/crud-scope.ts',
+        targetRelativePath: 'src/core/services/crud-scope.ts'
       }
     ];
 
@@ -379,6 +379,18 @@ export class BackendGenerator extends BaseGenerator {
         throw new Error(`Failed to read core bootstrap source: ${sourcePath}`);
       }
 
+      // An existing (kept) sibling may be an older copy without a name this asset imports: skip, do not break the host.
+      const missing = missingHostExports(sourceRead.content, targetPath);
+      if (missing.length > 0) {
+        this.logWarn('Core bootstrap file skipped (host sibling lacks imported exports)', {
+          step: 'core-bootstrap-create',
+          file: targetPath,
+          reason: 'missing-host-exports',
+          missing
+        });
+        continue;
+      }
+
       const writeResult = safeWriteFile(targetPath, sourceRead.content, {
         ensureDirectory: true,
         createBackup: false
@@ -406,7 +418,7 @@ export class BackendGenerator extends BaseGenerator {
    */
   private generateBackendFiles(
     templateData: Record<string, unknown>,
-    names: { entityNameLower: string; moduleName: string }
+    names: { entityNameLower: string; moduleName: string; normalRouteWanted: boolean }
   ): Record<string, string> {
     const files: Record<string, string> = {};
 
@@ -454,7 +466,11 @@ export class BackendGenerator extends BaseGenerator {
     return files;
   }
 
-  private createArtifactManifest(names: { entityNameLower: string; moduleName: string }): ArtifactConfig[] {
+  private normalRouteFileExists(moduleName: string): boolean {
+    return safePathExists(join(this.projectRoot, 'src', 'modules', moduleName, `${moduleName}.routes.ts`));
+  }
+
+  private createArtifactManifest(names: { entityNameLower: string; moduleName: string; normalRouteWanted: boolean }): ArtifactConfig[] {
     const moduleDir = join(this.projectRoot, 'src', 'modules', names.moduleName);
     const fileBase = names.moduleName;
     return [
@@ -500,6 +516,17 @@ export class BackendGenerator extends BaseGenerator {
         })
       },
       {
+        // Business-rule hooks of both services: created once without a generator header, so the file is
+        // user-owned from then on and never overwritten.
+        key: 'hooks',
+        templateCandidates: ['express-mongoose/hooks', 'hooks'],
+        outputDir: moduleDir,
+        outputFileName: `${fileBase}.hooks.ts`,
+        enabled:
+          ((this.selectedFiles.service ?? true) || (this.isAdminUser && (this.selectedFiles.serviceAdmin ?? true))) &&
+          this.servicesAreGeneratorOwned(moduleDir, fileBase)
+      },
+      {
         key: 'serviceAdmin',
         templateCandidates: ['express-mongoose/service.admin', 'service.admin'],
         outputDir: moduleDir,
@@ -518,7 +545,7 @@ export class BackendGenerator extends BaseGenerator {
         templateCandidates: ['express-mongoose/route', 'route'],
         outputDir: moduleDir,
         outputFileName: `${fileBase}.routes.ts`,
-        enabled: this.shouldAddRoute && (this.selectedFiles.route ?? true)
+        enabled: names.normalRouteWanted && this.shouldAddRoute && (this.selectedFiles.route ?? true)
       },
       {
         key: 'routeAdmin',
@@ -528,6 +555,14 @@ export class BackendGenerator extends BaseGenerator {
         enabled: this.shouldAddRoute && this.isAdminUser && (this.selectedFiles.routeAdmin ?? true)
       }
     ];
+  }
+
+  /** Hooks only serve generated services: a module whose service files are user-owned (no header) gets none. */
+  private servicesAreGeneratorOwned(moduleDir: string, fileBase: string): boolean {
+    return ['service', 'service.admin'].every(suffix => {
+      const existing = safeReadFile(join(moduleDir, `${fileBase}.${suffix}.ts`));
+      return !existing.success || !existing.content || isGeneratorOwnedSource(existing.content);
+    });
   }
 
   /**
@@ -547,28 +582,21 @@ export class BackendGenerator extends BaseGenerator {
   }
 
   private buildMongooseModelTemplateData(baseTemplateData: Record<string, unknown>): Record<string, unknown> {
-    const normalizedModel = baseTemplateData.normalizedModel as NormalizedModel | undefined;
+    const normalizedModel = baseTemplateData.normalizedModel as BeModelContext | undefined;
     if (!normalizedModel) {
       return baseTemplateData;
     }
-
+    const moduleName = moduleNameFromEntity(normalizedModel.pascalName);
+    const existing = safeReadFile(join(this.projectRoot, 'src', 'modules', moduleName, `${moduleName}.model.ts`));
+    // Do not emit `_id` in Schema/interface body: Document already defines `_id` (builder filters it).
     return {
       ...baseTemplateData,
-      interfaceName: `I${normalizedModel.pascalName}`,
-      interfaceExtends: 'Document',
-      schemaName: `${normalizedModel.pascalName}Schema`,
-      modelExportName: normalizedModel.pascalName,
-      modelName: normalizedModel.pascalName,
-      hasTimestamps: true,
-      timestamps: { createdAt: true, updatedAt: true },
-      hasModelTypePattern: false,
-      hasInitializeFunction: false,
-      initializeData: [],
-      // Do not emit `_id` in Schema/interface body: Document already defines `_id`;
-      // explicit `_id` + Schema<T> triggers TS2322 when type isn’t aligned with Hydrated inference.
-      modelFields: this.toMongooseModelFields(normalizedModel).filter(f => {
-        const n = String(f.name).trim();
-        return n !== '_id' && n !== 'createdAt' && n !== 'updatedAt';
+      ...buildMongooseModelContext(normalizedModel.source, {
+        pascalName: normalizedModel.pascalName,
+        sourceType: this.sourceType,
+        existingContent: existing.success ? existing.content : null,
+        // Before P3 every generated model had both timestamps; keep that when the source does not say.
+        timestampsFallback: { createdAt: true, updatedAt: true }
       })
     };
   }
@@ -585,163 +613,96 @@ export class BackendGenerator extends BaseGenerator {
     return null;
   }
 
-  private buildNormalizedModel(): NormalizedModel {
+  private buildNormalizedModel(): BeModelContext {
     const entityNames = this.getEntityNames();
-    const normalizedFields = (this.schema.fields || []).map((field: Record<string, unknown>) =>
-      this.normalizeMongoIdField(this.normalizeField(field))
-    );
+    const source: V2Model = { ...(this.schema as V2Model), fields: this.schema.fields || [] };
+    const normalizedFields = source.fields.map(field => normalizeMongoIdField(normalizeField(field), this.sourceType));
 
-    const ownershipField = normalizedFields.find((field: NormalizedField) => field.name.toLowerCase() === 'userid');
+    const ownershipField = normalizedFields.find((field: BeField) => field.name.toLowerCase() === 'userid');
+    const ownership: BeModelContext['ownership'] =
+      source.ownership?.kind === 'self'
+        ? { kind: 'self', field: '', normalApiFromAuth: this.isProtectedRoute, adminApiBodyAllowed: false, adminApiFilterable: false }
+        : ownershipField
+          ? {
+              kind: 'field',
+              field: ownershipField.name,
+              normalApiFromAuth: this.isProtectedRoute,
+              adminApiBodyAllowed: true,
+              adminApiFilterable: ownershipField.filterable
+            }
+          : undefined;
 
     return {
+      source,
       name: entityNames.pascalCase,
       camelName: entityNames.camelCase,
       pascalName: entityNames.pascalCase,
       kebabName: this.toKebabCase(entityNames.pascalCase),
       fields: normalizedFields,
-      ownership: ownershipField
-        ? {
-            field: ownershipField.name,
-            normalApiFromAuth: this.isProtectedRoute,
-            adminApiBodyAllowed: true,
-            adminApiFilterable: ownershipField.filterable
-          }
-        : undefined
+      ownership
     };
   }
 
-  private normalizeMongoIdField(field: NormalizedField): NormalizedField {
-    if (this.sourceType !== 'nodejs-mongoose' || field.name !== '_id') {
-      return field;
-    }
-    return { ...field, type: 'objectId', required: true, isArray: false };
-  }
-
-  private normalizeField(field: Record<string, unknown>): NormalizedField {
-    const rawType = String(field.type || 'string').toLowerCase();
-    const relationTarget = field.relationEntityName ? String(field.relationEntityName) : undefined;
-    const isArray = Boolean(field.isArray);
-    const normalizedType = this.mapFieldType(rawType, isArray);
-    const filterable = Boolean(field.isSearchable);
-    const relationPopulateFields = Array.isArray(field.relationPopulateFields)
-      ? (field.relationPopulateFields as unknown[]).map(v => String(v).trim()).filter(Boolean)
-      : undefined;
-
-    return {
-      name: String(field.name || ''),
-      type: normalizedType,
-      required: Boolean(field.required),
-      isArray,
-      filterable,
-      filterType: filterable
-        ? typeof field.filterType === 'string'
-          ? (field.filterType as NormalizedField['filterType'])
-          : this.resolveFilterType(normalizedType)
-        : undefined,
-      defaultValue: typeof field.defaultValue === 'string' ? field.defaultValue : '',
-      isReadonly: Boolean(field.isReadonly),
-      hiddenFromCreate: Boolean(field.hiddenFromCreate),
-      hiddenFromUpdate: Boolean(field.hiddenFromUpdate),
-      relation: relationTarget
-        ? {
-            target: relationTarget,
-            type: typeof field.relationType === 'string' ? (field.relationType as NormalizedRelationType) : isArray ? 'oneToMany' : 'manyToOne',
-            displayField: field.relationProperty ? String(field.relationProperty) : undefined
-          }
-        : undefined,
-      relationPopulateFields: relationPopulateFields && relationPopulateFields.length > 0 ? relationPopulateFields : undefined,
-      relationPropertyObjectFields:
-        Array.isArray(field.relationPropertyObjectFields) && field.relationPropertyObjectFields.length > 0
-          ? (field.relationPropertyObjectFields as Array<Record<string, unknown>>)
-              .map(sub => ({
-                name: String(sub.name || '').trim(),
-                type: (sub.type === 'number' ? 'Number' : sub.type === 'boolean' ? 'Boolean' : 'String') as
-                  | 'String'
-                  | 'Number'
-                  | 'Boolean',
-                required: Boolean(sub.required),
-                trim: sub.type === 'string' || sub.type === 'String' ? sub.trim !== false : false,
-              }))
-              .filter(sub => sub.name)
-          : undefined,
-      relationType: relationTarget
-        ? typeof field.relationType === 'string'
-          ? (field.relationType as NormalizedRelationType)
-          : isArray
-            ? 'oneToMany'
-            : 'manyToOne'
-        : undefined,
-      trim: typeof field.trim === 'boolean' ? field.trim : undefined,
-      unique: typeof field.unique === 'boolean' ? field.unique : undefined,
-      objectFields:
-        normalizedType === 'object' && Array.isArray(field.objectFields)
-          ? (field.objectFields as Array<Record<string, unknown>>)
-              .map(sub => ({
-                name: String(sub.name || '').trim(),
-                type: (sub.type === 'number' ? 'Number' : sub.type === 'boolean' ? 'Boolean' : 'String') as
-                  | 'String'
-                  | 'Number'
-                  | 'Boolean',
-                required: Boolean(sub.required),
-                trim: sub.type === 'string' || sub.type === 'String' ? sub.trim !== false : false
-              }))
-              .filter(sub => sub.name)
-          : undefined,
-      ui: {
-        showInTable: field.showInTable !== false,
-        label: String(field.label || field.name || ''),
-        uiComponent: field.uiComponent ? String(field.uiComponent) : undefined
+  /**
+   * Normal (mobile) API surface (plan 5 P4 #22, contract §2.1, G5).
+   * Requested set: `api.normalOperations`, else every operation (pre-P4 behaviour until P5 stores the set).
+   * Writes need auth + ownership; a `self` model has no create (the record is the user).
+   */
+  private resolveNormalApi(model: BeModelContext): Record<string, unknown> & { hasNormalOps: boolean } {
+    const requested = model.source.api?.normalOperations ?? NORMAL_OPERATIONS;
+    const canWrite = this.isProtectedRoute && model.ownership !== undefined;
+    const isSelf = model.ownership?.kind === 'self';
+    const normalOps = Object.fromEntries(NORMAL_OPERATIONS.map(op => [op, false])) as Record<NormalOperation, boolean>;
+    const dropped: NormalOperation[] = [];
+    for (const op of requested) {
+      if (!NORMAL_OPERATIONS.includes(op)) continue;
+      const isWrite = NORMAL_WRITE_OPERATIONS.includes(op);
+      if ((isWrite && !canWrite) || (op === 'create' && isSelf)) {
+        dropped.push(op);
+        continue;
       }
+      normalOps[op] = true;
+    }
+    if (dropped.length > 0) {
+      this.logWarn('Normal API operations dropped', {
+        step: 'normal-api',
+        entityName: model.pascalName,
+        dropped,
+        reason: !this.isProtectedRoute ? 'unprotected-route' : model.ownership === undefined ? 'no-ownership' : 'self-ownership-create'
+      });
+    }
+    const hasAdminOnly = model.fields.some(field => field.adminOnly === true);
+    return {
+      normalOps,
+      hasNormalOps: Object.values(normalOps).some(Boolean),
+      authScope: canWrite ? (isSelf ? "'self'" : 'true') : 'false',
+      hiddenFields: model.fields.filter(field => field.hidden === true).map(field => field.name),
+      /** Admin update keeps `userId` in the body: an admin may reassign the owner (G5). */
+      adminOwnershipInBody: model.ownership?.kind === 'field',
+      /** Admin route uses `*AdminSchema` when the normal schema omits something (ownership field, adminOnly fields). */
+      adminSchemaVariant: this.isAdminUser && (Boolean(model.ownership?.field) || hasAdminOnly)
     };
   }
 
-  private mapFieldType(rawType: string, _isArray: boolean): NormalizedFieldType {
-    /** Keep element type (string, number, …); `isArray` on the field marks `[]` in TS/Mongoose — do not collapse to 'array'. */
-    const lower = rawType.toLowerCase();
-    if (lower.includes('mixed')) {
-      return 'object';
-    }
-    if (rawType === 'schema') {
-      return 'objectId';
-    }
-    if (rawType === 'date') {
-      return 'date';
-    }
-    if (rawType === 'number') {
-      return 'number';
-    }
-    if (rawType === 'boolean') {
-      return 'boolean';
-    }
-    if (rawType === 'object') {
-      return 'object';
-    }
-    return 'string';
-  }
 
-  private resolveFilterType(type: NormalizedFieldType): 'regex' | 'exact' | 'objectId' | 'range' | 'boolean' | 'date-range' {
-    if (type === 'objectId') {
-      return 'objectId';
-    }
-    if (type === 'number') {
-      return 'exact';
-    }
-    if (type === 'boolean') {
-      return 'boolean';
-    }
-    if (type === 'date') {
-      return 'date-range';
-    }
-    return 'regex';
-  }
 
-  private toTemplateFields(model: NormalizedModel): Array<Record<string, unknown>> {
+
+
+
+  private toTemplateFields(model: BeModelContext): Array<Record<string, unknown>> {
     return model.fields.map(field => ({
       name: field.name,
       required: field.required,
       isArray: field.isArray,
-      isSearchable: field.filterable,
-      filterType: field.filterType,
+      isSearchable: field.filterable && field.hidden !== true,
+      filterType: this.resolveTemplateFilterType(field),
+      enumValues: field.enumValues && field.enumValues.length > 0 ? field.enumValues : undefined,
+      /** `default: null` in the model: the API takes / returns `null` for this field. */
+      nullable: field.schemaDefault === null ? true : undefined,
+      /** Literal model `default:` — the create schema applies it when the field is omitted. */
+      schemaDefault: field.schemaDefault ?? undefined,
+      isHidden: field.hidden === true ? true : undefined,
+      adminOnly: field.adminOnly === true ? true : undefined,
       defaultValue: field.defaultValue ?? '',
       isReadonly: field.isReadonly ?? false,
       hiddenFromCreate: field.hiddenFromCreate ?? false,
@@ -753,120 +714,35 @@ export class BackendGenerator extends BaseGenerator {
       relationEntityName: field.relation?.target,
       relationProperty: field.relation?.displayField,
       relationPopulateFields: field.relationPopulateFields,
-      relationPropertyObjectFields:
-        field.relationPropertyObjectFields?.map(sub => ({
-          name: sub.name,
-          type: sub.type === 'Number' ? 'number' : sub.type === 'Boolean' ? 'boolean' : 'string',
-          required: sub.required,
-          trim: sub.trim,
-        })),
+      relationPropertyObjectFields: field.relationPropertyObjectFields,
       relationType: field.relationType,
       /** Explicit DB field type for helpers (avoids Handlebars `type` name ambiguity in some contexts). */
-      fieldDbType: field.type === 'objectId' ? 'schema' : field.type,
-      type: field.type === 'objectId' ? 'schema' : field.type,
+      fieldDbType: field.type,
+      type: field.type,
       objectFields:
-        field.type === 'object' && Array.isArray(field.objectFields)
+        field.type === 'object' && !field.isMap && Array.isArray(field.objectFields)
           ? field.objectFields.map(sub => ({
-              name: sub.name,
-              type: sub.type,
-              required: sub.required,
-              trim: sub.trim
+              ...sub,
+              includeRelation: sub.type === 'schema' && Boolean(sub.ref),
+              relationEntityName: sub.ref
             }))
-          : undefined
+          : undefined,
+      nestedTypeName: field.nestedTypeName,
+      nestedSchemaName: field.nestedSchemaName,
+      isMap: field.isMap === true ? true : undefined
     }));
   }
 
-  private toMongooseModelFields(model: NormalizedModel): MongooseFieldShape[] {
-    return model.fields.map(field => {
-      const effectiveType = this.sourceType === 'nodejs-mongoose' && field.name === '_id' ? 'objectId' : field.type;
 
-      if (effectiveType === 'object' && field.objectFields?.length) {
-        return {
-          name: field.name,
-          tsType: '',
-          mongooseType: '',
-          required: field.required,
-          unique: field.unique === true,
-          trim: false,
-          isObject: true,
-          objectFields: field.objectFields.map(sub => {
-            let mongooseType = 'String';
-            let tsType = 'string';
-            if (sub.type === 'Number') {
-              mongooseType = 'Number';
-              tsType = 'number';
-            } else if (sub.type === 'Boolean') {
-              mongooseType = 'Boolean';
-              tsType = 'boolean';
-            }
-            return {
-              name: sub.name,
-              mongooseType,
-              tsType,
-              required: sub.required,
-              trim: sub.trim && sub.type === 'String'
-            };
-          })
-        };
-      }
 
-      const mongooseBaseType = this.toMongooseBaseType(effectiveType);
-      const mongooseType = field.isArray ? `[${mongooseBaseType}]` : mongooseBaseType;
-      const tsBaseType = this.toTsBaseType(effectiveType);
-      const tsType = field.isArray ? `${tsBaseType}[]` : tsBaseType;
 
-      return {
-        name: field.name,
-        tsType,
-        mongooseType,
-        required: field.required,
-        unique: field.unique === true,
-        trim: effectiveType === 'string' && field.trim === true,
-        ref: field.relation?.target,
-        isObject: false
-      };
-    });
-  }
-
-  private toMongooseBaseType(type: NormalizedFieldType): string {
-    switch (type) {
-      case 'number':
-        return 'Number';
-      case 'boolean':
-        return 'Boolean';
-      case 'date':
-        return 'Date';
-      case 'objectId':
-        return 'Schema.Types.ObjectId';
-      case 'object':
-        return 'Schema.Types.Mixed';
-      case 'array':
-        // array element type is handled via isArray on field
-        return 'Schema.Types.Mixed';
-      case 'string':
-      default:
-        return 'String';
+  /** Enum fields filter by equality / `$in` (contract §3) unless another filter type was chosen explicitly. */
+  private resolveTemplateFilterType(field: BeField): string | undefined {
+    const hasEnum = Array.isArray(field.enumValues) && field.enumValues.length > 0 && !field.isArray;
+    if (hasEnum && (field.filterType === undefined || field.filterType === 'regex' || field.filterType === 'exact')) {
+      return 'enum';
     }
-  }
-
-  private toTsBaseType(type: NormalizedFieldType): string {
-    switch (type) {
-      case 'number':
-        return 'number';
-      case 'boolean':
-        return 'boolean';
-      case 'date':
-        return 'Date';
-      case 'objectId':
-        return 'mongoose.Types.ObjectId';
-      case 'object':
-        return 'Record<string, unknown>';
-      case 'array':
-        return 'unknown';
-      case 'string':
-      default:
-        return 'string';
-    }
+    return field.filterType;
   }
 
   private toKebabCase(value: string): string {
@@ -878,13 +754,26 @@ export class BackendGenerator extends BaseGenerator {
    */
   private generateFile(
     templateName: string,
-    templateType: 'backend' | 'frontend' | 'react',
+    templateType: 'backend',
     outputPath: string,
     fileName: string,
     templateData: Record<string, unknown>,
     options?: { alwaysRegenerate?: boolean }
   ): string | null {
     const filePath = join(outputPath, fileName);
+
+    if (safePathExists(filePath)) {
+      const existing = safeReadFile(filePath);
+      if (existing.success && !isGeneratorOwnedSource(existing.content ?? '')) {
+        this.logWarn('Skipped user-owned file (no generator header)', {
+          step: 'file-write',
+          file: filePath,
+          action: 'skip',
+          reason: 'user-owned'
+        });
+        return null;
+      }
+    }
 
     const shouldWrite = !safePathExists(filePath) || this.updateExistingFiles || options?.alwaysRegenerate === true;
 
@@ -968,8 +857,7 @@ export class BackendGenerator extends BaseGenerator {
     const mergeResult = applyCustomBlockMerge({
       existingContent: existingFileResult.content,
       renderedContent,
-      markerNames,
-      customImportsPrecedence: true
+      markerNames
     });
 
     if (mergeResult.merged === null) {

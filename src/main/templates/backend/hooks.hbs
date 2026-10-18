@@ -1,0 +1,10 @@
+// Business rules of the generated `{{moduleName}}` services, called before each CRUD operation.
+// Created once by the Generator and never overwritten (no generator header): edit freely.
+// A hook returning an error response stops the operation; that response is sent to the client.
+import type { {{entityName}}ServiceHooks } from './{{moduleName}}.types';
+
+/** Normal (mobile) API service (`{{moduleName}}.service.ts`). */
+export const {{camelEntityName}}Hooks: {{entityName}}ServiceHooks = {};
+
+/** Admin API service (`{{moduleName}}.service.admin.ts`). */
+export const {{camelEntityName}}AdminHooks: {{entityName}}ServiceHooks = {};

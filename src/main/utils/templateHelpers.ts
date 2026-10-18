@@ -5,12 +5,9 @@ import { app } from 'electron';
 import Handlebars from 'handlebars';
 import { pluralize as pluralizeName } from './namingUtils.js';
 import { fieldsHaveSearchable, uppercaseFirstStr } from './handlebars-schema-predicates.js';
-import {
-  fieldsHaveSchemaType,
-  schemaFieldToBackendTsType,
-  emitObjectZodLiteral,
-} from '../../shared/schemaFieldTypes.js';
-import { registerFrontendHandlebarsHelpers } from './handlebars-fe-helpers.js';
+import { fieldsHaveSchemaType, schemaFieldToBackendTsType } from '../../shared/schemaFieldTypes.js';
+import { registerBeFilterHelpers } from './handlebars-be-filters.js';
+import { emitZodFieldExpr } from '../../shared/fieldKind.js';
 import { registerBeTypesHelpers } from './handlebars-be-types.js';
 
 /**
@@ -44,9 +41,9 @@ export function getGeneratorRoot(): string {
 
 /**
  * Get the templates directory path for a specific template type
- * @param templateType - 'backend', 'frontend', or 'react'
+ * @param templateType - 'backend' (the only template set; the admin FE is config, plan 6)
  */
-export function getTemplatesDir(templateType: 'backend' | 'frontend' | 'react' = 'backend'): string {
+export function getTemplatesDir(templateType: 'backend' = 'backend'): string {
   const generatorRoot = getGeneratorRoot();
   const isDev = process.env.NODE_ENV === 'development' || !app?.isPackaged;
 
@@ -171,62 +168,19 @@ export function registerHandlebarsHelpers(): void {
   });
 
   /**
-   * Build the right schema reference for admin routes when ownership exists.
+   * Build the right schema reference for admin routes when the module has `*AdminSchema` variants
+   * (`adminSchemaVariant`: ownership field or adminOnly fields — see BackendGenerator.resolveNormalApi).
    * Returns a full `TSchema.X` expression string.
    *
    * Example:
-   * - schemaRef('UserWatchList', 'GetAllBody', true, 'userId') -> 'TSchema.UserWatchListGetAllBodyAdminSchema'
-   * - schemaRef('SymbolTypes', 'GetAllBody', true, null) -> 'TSchema.SymbolTypesGetAllBodySchema'
+   * - schemaRef('UserWatchList', 'GetAllBody', true, true) -> 'TSchema.UserWatchListGetAllBodyAdminSchema'
+   * - schemaRef('SymbolTypes', 'GetAllBody', true, false) -> 'TSchema.SymbolTypesGetAllBodySchema'
    */
-  Handlebars.registerHelper('schemaRef', (entityName: unknown, baseName: unknown, isAdmin: unknown, ownershipField: unknown) => {
+  Handlebars.registerHelper('schemaRef', (entityName: unknown, baseName: unknown, isAdmin: unknown, adminSchemaVariant: unknown) => {
     const ent = String(entityName || '').trim();
     const base = String(baseName || '').trim();
-    const hasOwnership = String(ownershipField || '').trim().length > 0;
-    const suffix = isAdmin === true && hasOwnership ? 'AdminSchema' : 'Schema';
+    const suffix = isAdmin === true && adminSchemaVariant === true ? 'AdminSchema' : 'Schema';
     return new Handlebars.SafeString(`TSchema.${ent}${base}${suffix}`);
-  });
-
-  /**
-   * Generate a TypeScript-safe "has value" condition for filters.
-   * Number filters: short coercion via String(...) so `.trim()` is never called on a typed number.
-   *
-   * fieldDbType: normalized field type from schema (number, string, schema, …).
-   */
-  Handlebars.registerHelper('filterValueGuard', (fieldName: string, filterType?: unknown, fieldDbType?: unknown) => {
-    const name = String(fieldName || '').trim();
-    if (!name) return '';
-    const ft = String(filterType ?? '').trim().toLowerCase();
-    const t = String(fieldDbType ?? '').trim().toLowerCase();
-
-    if (ft === 'boolean' || t === 'boolean') {
-      return new Handlebars.SafeString(`filters.${name} !== undefined && filters.${name} !== null`);
-    }
-
-    if (ft === 'date-range') {
-      return new Handlebars.SafeString(
-        `(() => {\n      const v = filters.${name} as unknown;\n      if (v === undefined || v === null) return false;\n      if (typeof v === 'string') return v.trim() !== '';\n      if (v instanceof Date) return !Number.isNaN(v.getTime());\n      if (typeof v === 'object' && !Array.isArray(v)) {\n        const o = v as { from?: unknown; to?: unknown };\n        const fromOk =\n          o.from !== undefined &&\n          o.from !== null &&\n          (o.from instanceof Date\n            ? !Number.isNaN(o.from.getTime())\n            : String(o.from).trim() !== '');\n        const toOk =\n          o.to !== undefined &&\n          o.to !== null &&\n          (o.to instanceof Date ? !Number.isNaN(o.to.getTime()) : String(o.to).trim() !== '');\n        return fromOk || toOk;\n      }\n      return false;\n    })()`
-      );
-    }
-
-    if (ft === 'range' || ft === 'minmax') {
-      return new Handlebars.SafeString(`filters.${name} !== undefined && filters.${name} !== null`);
-    }
-
-    if (t === 'number') {
-      return new Handlebars.SafeString(
-        `filters.${name} != null && String(filters.${name}).trim() !== '' && Number.isFinite(Number(filters.${name}))`
-      );
-    }
-
-    if (ft === 'objectid' || ft === 'object_id' || ft === 'mongoid' || ft === 'mongodbobjectid') {
-      return new Handlebars.SafeString(
-        `filters.${name} !== undefined && filters.${name} !== null && (typeof filters.${name} !== 'string' || filters.${name}.trim() !== '')`
-      );
-    }
-
-    return new Handlebars.SafeString(
-      `filters.${name} !== undefined && filters.${name} !== null && (typeof filters.${name} !== 'string' || filters.${name}.trim() !== '')`
-    );
   });
 
   /**
@@ -249,27 +203,15 @@ export function registerHandlebarsHelpers(): void {
 
     if (mode === 'filter' && field.isSearchable !== true) return '';
 
-    const required = mode === 'update' || mode === 'filter' ? false : Boolean(field.required);
-    const isArray = Boolean(field.isArray);
-    const t = String(field.type || 'string').toLowerCase();
-
-    let inner: string;
-    if (t === 'schema') inner = 'z.string()';
-    else if (t === 'number') inner = 'z.number()';
-    else if (t === 'boolean') inner = 'z.boolean()';
-    else if (t === 'date') inner = 'z.union([z.string(), z.date()])';
-    else if (t === 'object') inner = emitObjectZodLiteral(field);
-    else inner = required ? "z.string().min(1)" : 'z.string()';
-
-    const expr = isArray ? `z.array(${inner})` : inner;
-    const optionalSuffix = required ? '' : '.optional()';
-    return new Handlebars.SafeString(`    ${name}: ${expr}${optionalSuffix},\n`);
+    const expr = emitZodFieldExpr(field, mode);
+    return new Handlebars.SafeString(`    ${name}: ${expr},\n`);
   });
 
   /**
    * Like zodField, but can omit/include ownership field (e.g., userId) based on endpoint type.
-   * - For normal protected endpoints, ownership field must be omitted from body + filter DTOs.
-   * - For admin endpoints, ownership field may be included.
+   * - For normal protected endpoints, ownership field must be omitted from body + filter DTOs;
+   *   `adminOnly` fields are omitted from create / update bodies (G5).
+   * - For admin endpoints (`allowOwnership` true), both may be included.
    */
   Handlebars.registerHelper(
     'zodFieldScoped',
@@ -286,42 +228,19 @@ export function registerHandlebarsHelpers(): void {
       const ownership = String(ownershipFieldName || '').trim();
       const isOwnership = ownership && name.toLowerCase() === ownership.toLowerCase();
       if (isOwnership && allowOwnership !== true) return '';
+      // G5: adminOnly fields are not writable through the normal API (admin schemas keep them).
+      if (allowOwnership !== true && field.adminOnly === true && (mode === 'create' || mode === 'update')) return '';
 
       if (mode === 'create' && field.hiddenFromCreate === true) return '';
       if (mode === 'update' && field.hiddenFromUpdate === true) return '';
       if (mode === 'filter' && field.isSearchable !== true) return '';
 
-      const required = mode === 'update' || mode === 'filter' ? false : Boolean(field.required);
-      const isArray = Boolean(field.isArray);
-      const t = String(field.type || 'string').toLowerCase();
-      const filterKind = String(field.filterType || '').trim().toLowerCase();
-
-      let inner: string;
-      if (t === 'schema') inner = 'z.string()';
-      else if (t === 'number') inner = 'z.number()';
-      else if (t === 'boolean') inner = 'z.boolean()';
-      else if (t === 'date' && mode === 'filter' && filterKind === 'date-range') {
-        inner = `z.union([
-    z
-      .object({
-        from: z.union([z.string(), z.date()]).optional(),
-        to: z.union([z.string(), z.date()]).optional(),
-      })
-      .strict(),
-    z.string(),
-    z.date(),
-  ])`;
-      } else if (t === 'date') inner = 'z.union([z.string(), z.date()])';
-      else if (t === 'object') inner = emitObjectZodLiteral(field);
-      else inner = required ? "z.string().min(1)" : 'z.string()';
-
-      const expr = isArray ? `z.array(${inner})` : inner;
-      const optionalSuffix = required ? '' : '.optional()';
-      return new Handlebars.SafeString(`    ${name}: ${expr}${optionalSuffix},\n`);
+      const expr = emitZodFieldExpr(field, mode);
+      return new Handlebars.SafeString(`    ${name}: ${expr},\n`);
     }
   );
 
-  type BeField = {
+  type PopulateField = {
     name?: string;
     includeRelation?: boolean;
     relationEntityName?: string;
@@ -332,7 +251,7 @@ export function registerHandlebarsHelpers(): void {
   const bePopulateEntries = (fields: unknown): Array<{ path: string; select: string }> => {
     if (!Array.isArray(fields)) return [];
     const out: Array<{ path: string; select: string }> = [];
-    for (const raw of fields as BeField[]) {
+    for (const raw of fields as PopulateField[]) {
       const name = String(raw?.name || '').trim();
       if (!name) continue;
       if (raw?.includeRelation !== true) continue;
@@ -386,5 +305,5 @@ export function registerHandlebarsHelpers(): void {
   });
 
   registerBeTypesHelpers();
-  registerFrontendHandlebarsHelpers();
+  registerBeFilterHelpers();
 }

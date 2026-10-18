@@ -37,7 +37,7 @@ function getTemplateCacheKey(templateType: string, templateName: string): string
  */
 export function compileTemplate(
   templateName: string,
-  templateType: 'backend' | 'frontend' | 'react' = 'backend'
+  templateType: 'backend' = 'backend'
 ): { success: boolean; template?: HandlebarsTemplateDelegate; error?: string } {
   // Ensure helpers are registered
   initializeTemplateEngine();
@@ -68,7 +68,8 @@ export function compileTemplate(
     }
 
     // Compile template
-    const template = Handlebars.compile(readResult.content!);
+    // Templates generate source code, not HTML: escaping would turn `Record<…>` into `Record&lt;…&gt;` (plan 5 R1).
+    const template = Handlebars.compile(readResult.content!, { noEscape: true });
 
     // Cache compiled template
     templateCache.set(cacheKey, template);
@@ -94,7 +95,7 @@ export function compileTemplate(
 export function renderTemplate(
   templateName: string,
   data: any,
-  templateType: 'backend' | 'frontend' | 'react' = 'backend'
+  templateType: 'backend' = 'backend'
 ): { success: boolean; content?: string; error?: string } {
   try {
     // Compile template (will use cache if available)
@@ -168,7 +169,7 @@ export function registerHelper(name: string, fn: Handlebars.HelperDelegate): voi
 export function compileAndRender(
   templateName: string,
   data: any,
-  templateType: 'backend' | 'frontend' | 'react' = 'backend'
+  templateType: 'backend' = 'backend'
 ): { success: boolean; content?: string; error?: string } {
   return renderTemplate(templateName, data, templateType);
 }
@@ -177,7 +178,7 @@ export function compileAndRender(
  * Batch render multiple templates with same data
  */
 export function batchRender(
-  templates: Array<{ name: string; type: 'backend' | 'frontend' | 'react' }>,
+  templates: Array<{ name: string; type: 'backend' }>,
   data: any
 ): Array<{ name: string; success: boolean; content?: string; error?: string }> {
   return templates.map(({ name, type }) => {
