@@ -46,11 +46,80 @@ export const adminBaseTexts = {
     invalidNumber: 'Geçerli bir sayı girin',
     invalidDecimal: 'Geçerli bir ondalık sayı girin (ör. 12.50)',
     invalidDate: 'Geçerli bir tarih girin',
-    invalidJson: 'Geçerli bir JSON girin'
+    invalidJson: 'Geçerli bir JSON girin',
+    loginWelcome: 'Tekrar hoş geldiniz',
+    loginSubtitle: 'Hesabınıza giriş yapın',
+    loginEmail: 'E-posta adresi',
+    loginPassword: 'Şifre',
+    loginRememberMe: 'Beni hatırla',
+    loginSubmit: 'Giriş yap',
+    loginForgotPassword: 'Şifrenizi mi unuttunuz?',
+    loginEmailInvalid: 'Geçerli bir e-posta adresi girin',
+    loginLanguage: 'Dil',
+    loginTheme: 'Tema'
   }
 } as const;
 
 export type AdminTextKey = keyof (typeof adminBaseTexts)['ataAdmin'];
+
+/**
+ * İngilizce karşılıklar. Host iki dili de i18next'e ekler (yoksa paket her dilde Türkçe varsayılanı gösterir):
+ * `i18n.addResourceBundle('en', 'translation', adminBaseTextsEn, true, false)` ve `tr` için `adminBaseTexts`.
+ */
+export const adminBaseTextsEn: { ataAdmin: Record<AdminTextKey, string> } = {
+  ataAdmin: {
+    create: 'Add new',
+    createTitle: 'New {{resource}}',
+    editTitle: 'Edit {{resource}}',
+    edit: 'Edit',
+    delete: 'Delete',
+    save: 'Save',
+    cancel: 'Cancel',
+    confirm: 'Confirm',
+    close: 'Close',
+    apply: 'Apply',
+    reset: 'Clear',
+    all: 'All',
+    yes: 'Yes',
+    no: 'No',
+    min: 'Min',
+    max: 'Max',
+    from: 'From',
+    to: 'To',
+    addItem: 'Add',
+    removeItem: 'Remove',
+    key: 'Key',
+    value: 'Value',
+    copy: 'Copy',
+    copied: 'Copied',
+    copyFailed: 'Could not copy',
+    actions: 'Actions',
+    detail: 'Detail',
+    total: '{{count}} records',
+    selected: '{{count}} selected',
+    noRows: 'No records',
+    rowsPerPage: 'Rows per page:',
+    displayedRows: '{{from}}–{{to}} of {{count}}',
+    itemCount: '{{count}} items',
+    deleteTitle: 'Delete this record?',
+    deleteDescription: 'This cannot be undone.',
+    required: 'Required',
+    invalidNumber: 'Enter a valid number',
+    invalidDecimal: 'Enter a valid decimal (e.g. 12.50)',
+    invalidDate: 'Enter a valid date',
+    invalidJson: 'Enter valid JSON',
+    loginWelcome: 'Welcome back',
+    loginSubtitle: 'Sign in to your account',
+    loginEmail: 'Email address',
+    loginPassword: 'Password',
+    loginRememberMe: 'Remember me',
+    loginSubmit: 'Sign in',
+    loginForgotPassword: 'Forgot your password?',
+    loginEmailInvalid: 'Enter a valid email address',
+    loginLanguage: 'Language',
+    loginTheme: 'Theme'
+  }
+};
 
 export function interpolate(template: string, vars?: Record<string, unknown>): string {
   return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, name: string) => (vars?.[name] != null ? String(vars[name]) : ''));

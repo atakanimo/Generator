@@ -16,6 +16,7 @@ import { createRoot } from 'react-dom/client';
 import { AtaAdminProvider, createAdminRoutes, createAtaRestProvider, interpolateForPlayground } from './shim.js';
 import { createHostApi, currentUserId } from './mockBackend.js';
 import { resources, translations } from './resources.js';
+import { LoginDemo } from './login.js';
 
 type Toast = { message: string; severity: 'success' | 'error' } | null;
 
@@ -67,8 +68,12 @@ function App() {
 }
 
 createRoot(document.getElementById('root')!).render(
-  <ThemeProvider theme={createTheme()}>
-    <CssBaseline />
-    <App />
-  </ThemeProvider>
+  new URLSearchParams(location.search).has('login') ? (
+    <LoginDemo />
+  ) : (
+    <ThemeProvider theme={createTheme()}>
+      <CssBaseline />
+      <App />
+    </ThemeProvider>
+  )
 );

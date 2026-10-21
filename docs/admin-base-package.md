@@ -32,6 +32,32 @@
 4. Interceptor sözleşme §7'ye uyar.
 5. Route + menü: `[...elleYazilanRoutes, ...createAdminRoutes(resources)]`.
 6. Kök `<html lang="tr">` (CSS büyük harf dönüşümü `SİL` versin diye).
+7. Paket metinleri (`ataAdmin.*`) i18next'e iki dilde eklenir; eklenmezse paket her dilde Türkçe varsayılanı gösterir:
+   `i18n.addResourceBundle('tr', 'translation', adminBaseTexts, true, false)` ve `i18n.addResourceBundle('en', 'translation', adminBaseTextsEn, true, false)`.
+
+### Login ekranı
+
+`AtaLoginPage` (0.1.5): Varlik360 admin referansı; ortada kart (en çok 480px), logo + `appName`, başlık / alt başlık, e-posta + şifre (doğrulama: zorunlu, e-posta biçimi), "Beni hatırla", tam genişlik giriş düğmesi (gönderim sürerken kilit + spinner), "Şifrenizi mi unuttunuz?", sağ üstte dil / tema düğmeleri. `AtaAdminProvider` dışında da çalışır; metin için `t` prop'u alır (anahtarlar `ataAdmin.login*`).
+
+```tsx
+<AtaLoginPage
+  appName='Varlık360 Admin'
+  t={t}
+  onSubmit={async ({ email, password }) => {
+    const { isSuccess } = await dispatch(login({ email, password })).unwrap();
+    if (isSuccess) navigate('/dashboard');
+  }}
+  forgotPasswordHref='/forgot-password'
+  onToggleLanguage={() => i18n.changeLanguage(i18n.language === 'en' ? 'tr' : 'en')}
+  onToggleTheme={() => dispatch(toggleTheme())}
+  themeMode={mode}
+/>
+```
+
+- Proje başına: `appName`, `logo` (varsayılan `Sync`), renk temadan (`primary`), `onSubmit`, `loading` (global loading), `error` (form üstü uyarı, ör. rol reddi), `forgotPasswordHref` / `onForgotPassword` (ikisi yoksa bağlantı yok), `headerActions`.
+- "Beni hatırla": e-posta `localStorage['remembered_email']`'de (Varlik360'ın eski anahtarı; `rememberStorageKey` ile değişir, `false` → kutu yok). Şifre hiç saklanmaz.
+- API hatası host interceptor'ünün işidir (sözleşme §7); form yalnız alan doğrulamasını gösterir.
+- Playground: `http://localhost:5191/?login` (dil / tema düğmeleri çalışır).
 
 ## Geliştirme
 

@@ -7,6 +7,9 @@ import {
   initialFormValues,
   isFieldVisible,
   validateField,
+  validateLogin,
+  adminBaseTexts,
+  adminBaseTextsEn,
   type AnyResource,
   type FieldConfig
 } from '../src/index.js';
@@ -173,5 +176,17 @@ describe('writeOnly alan (şifre)', () => {
     expect(values.password).toBe('');
     expect(formValuesToBody(fields, values, 'edit')).toEqual({ email: 'a@b.c' });
     expect(formValuesToBody(fields, { ...values, password: 'Yeni12345' }, 'edit')).toEqual({ email: 'a@b.c', password: 'Yeni12345' });
+  });
+});
+
+describe('login', () => {
+  const messages = { required: 'R', emailInvalid: 'E' };
+  it('validates email and password', () => {
+    expect(validateLogin({ email: '', password: '' }, messages)).toEqual({ email: 'R', password: 'R' });
+    expect(validateLogin({ email: 'a@b', password: 'x' }, messages)).toEqual({ email: 'E' });
+    expect(validateLogin({ email: ' a@b.co ', password: 'x' }, messages)).toEqual({});
+  });
+  it('has an English text for every package text', () => {
+    expect(Object.keys(adminBaseTextsEn.ataAdmin).sort()).toEqual(Object.keys(adminBaseTexts.ataAdmin).sort());
   });
 });
