@@ -3,7 +3,7 @@
  * Wrapper for BackendGenerator class to maintain backward compatibility
  */
 
-import { BackendGenerator, BackendGenerateOptions } from '../generators/BackendGenerator.js';
+import { BackendGenerator, BackendGenerateOptions } from '../generators/express-mongoose/BackendGenerator.js';
 import type { NormalizedModel } from '../../shared/normalizedModel.js';
 import type { BackendSelectedFiles, GenerateBackendResult } from '../../shared/ipcTypes.js';
 import { parseBaseUrlFromBackend } from '../utils/backendAppFile.js';

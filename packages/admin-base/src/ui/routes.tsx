@@ -2,6 +2,12 @@ import TableRowsOutlinedIcon from '@mui/icons-material/TableRowsOutlined';
 import type { ComponentType } from 'react';
 import type { AnyResource } from '../schema/extend.js';
 import { ResourcePage } from './ResourcePage.js';
+import { humanize } from './texts.js';
+
+/** Resource başlığının i18n anahtarı (sayfa başlığı ve sol menü aynı anahtarı kullanır). */
+export function resourceTitleKey(resource: Pick<AnyResource, 'name'>): string {
+  return `admin.${resource.name}.title`;
+}
 
 /**
  * Host'un route + sol menü dizisiyle aynı şekil (Varlik360 `ProtectedRoutes`):
@@ -9,8 +15,10 @@ import { ResourcePage } from './ResourcePage.js';
  */
 export interface AdminRouteEntry {
   id: string;
-  /** Menü metni için i18n anahtarı (host kendi `t`'siyle çevirir). */
+  /** Menü metni için i18n anahtarı (host kendi `t`'siyle çevirir): `t(text, { defaultValue })`. */
   text: string;
+  /** Anahtarın çevirisi yoksa gösterilecek metin: config `label`'ı, yoksa humanize edilmiş `name`. */
+  defaultValue: string;
   path: string;
   element: ComponentType;
   icon: ComponentType;
@@ -39,7 +47,8 @@ export function createAdminRoutes(resources: readonly AnyResource[], options: Cr
     Element.displayName = `ResourcePage(${resource.name})`;
     return {
       id: `admin:${resource.name}`,
-      text: options.textKey?.(resource) ?? `admin.${resource.name}.title`,
+      text: options.textKey?.(resource) ?? resourceTitleKey(resource),
+      defaultValue: resource.label ?? humanize(resource.name),
       path: `${base}/${resource.path ?? resource.name}`,
       element: Element,
       icon: resource.extensions?.icon ?? options.defaultIcon ?? TableRowsOutlinedIcon,

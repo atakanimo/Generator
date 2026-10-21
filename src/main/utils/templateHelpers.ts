@@ -41,9 +41,11 @@ export function getGeneratorRoot(): string {
 
 /**
  * Get the templates directory path for a specific template type
- * @param templateType - 'backend' (the only template set; the admin FE is config, plan 6)
+ * @param templateType - backend template set (`src/main/templates/<set>`); the admin FE is config, not templates (plan 6)
  */
-export function getTemplatesDir(templateType: 'backend' = 'backend'): string {
+export type TemplateSet = 'backend-express-mongoose' | 'backend-dotnet-efcore' | 'client-redux';
+
+export function getTemplatesDir(templateType: TemplateSet = 'backend-express-mongoose'): string {
   const generatorRoot = getGeneratorRoot();
   const isDev = process.env.NODE_ENV === 'development' || !app?.isPackaged;
 
@@ -189,8 +191,8 @@ export function registerHandlebarsHelpers(): void {
    *
    * mode:
    * - base: full schema (excluding id fields)
-   * - create: excludes hiddenFromCreate
-   * - update: excludes hiddenFromUpdate and always optional
+   * - create: excludes readonly and hiddenFromCreate
+   * - update: excludes readonly and hiddenFromUpdate, always optional
    * - filter: filter schema for get-all body (always optional)
    */
   Handlebars.registerHelper('zodField', (field: any, mode: 'base' | 'create' | 'update' | 'filter') => {
@@ -198,6 +200,8 @@ export function registerHandlebarsHelpers(): void {
     const name = String(field.name || '').trim();
     if (!name || name === '_id' || name === 'id') return '';
 
+    // Contract §5: `readonly` is never written (create and update), as on .NET.
+    if ((mode === 'create' || mode === 'update') && field.isReadonly === true) return '';
     if (mode === 'create' && field.hiddenFromCreate === true) return '';
     if (mode === 'update' && field.hiddenFromUpdate === true) return '';
 
@@ -231,6 +235,7 @@ export function registerHandlebarsHelpers(): void {
       // G5: adminOnly fields are not writable through the normal API (admin schemas keep them).
       if (allowOwnership !== true && field.adminOnly === true && (mode === 'create' || mode === 'update')) return '';
 
+      if ((mode === 'create' || mode === 'update') && field.isReadonly === true) return '';
       if (mode === 'create' && field.hiddenFromCreate === true) return '';
       if (mode === 'update' && field.hiddenFromUpdate === true) return '';
       if (mode === 'filter' && field.isSearchable !== true) return '';

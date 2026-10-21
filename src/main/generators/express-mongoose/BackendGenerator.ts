@@ -4,30 +4,30 @@
  */
 
 import { BaseGenerator, GenerateOptions, GenerateResult } from './BaseGenerator.js';
-import { renderTemplate, clearTemplateCache } from '../utils/templateEngine.js';
-import { safeWriteFile, safeReadFile, safePathExists } from '../utils/fileUtils.js';
-import { applyCustomBlockMerge, hasCustomToJsonTransformContent } from '../utils/customBlockMerge.js';
-import { getCustomBlockMarkersPresentInSource, getDefaultCustomBlockMarkerNames } from '../utils/customBlockMarkers.js';
-import { handleError, ErrorCode } from '../utils/errorHandler.js';
-import { log } from '../utils/logger.js';
-import { getGeneratorRoot, getTemplatesDir } from '../utils/templateHelpers.js';
+import { renderTemplate, clearTemplateCache } from '../../utils/templateEngine.js';
+import { safeWriteFile, safeReadFile, safePathExists } from '../../utils/fileUtils.js';
+import { applyCustomBlockMerge, hasCustomToJsonTransformContent } from '../../utils/customBlockMerge.js';
+import { getCustomBlockMarkersPresentInSource, getDefaultCustomBlockMarkerNames } from '../../utils/customBlockMarkers.js';
+import { handleError, ErrorCode } from '../../utils/errorHandler.js';
+import { log } from '../../utils/logger.js';
+import { getGeneratorRoot, getTemplatesDir } from '../../utils/templateHelpers.js';
 import { join } from 'path';
-import { kebabCase, moduleNameFromEntity } from '../utils/namingUtils.js';
-import { mergeMongoAuditBackendTemplateFields } from '../utils/mongoAuditFields.js';
-import { isGeneratorOwnedSource } from '../utils/generatedFileOwnership.js';
-import { missingHostExports } from '../utils/coreAssetImports.js';
+import { kebabCase, moduleNameFromEntity } from '../../utils/namingUtils.js';
+import { mergeMongoAuditBackendTemplateFields } from '../../utils/mongoAuditFields.js';
+import { isGeneratorOwnedSource } from '../../utils/generatedFileOwnership.js';
+import { missingHostExports } from '../../utils/coreAssetImports.js';
 import {
   NORMAL_OPERATIONS,
   NORMAL_WRITE_OPERATIONS,
   type NormalizedModel as V2Model,
   type NormalOperation
-} from '../../shared/normalizedModel.js';
+} from '../../../shared/normalizedModel.js';
 import {
   buildMongooseModelContext,
   normalizeField,
   normalizeMongoIdField,
   type BeField
-} from '../utils/mongooseModelContext.js';
+} from '../../utils/mongooseModelContext.js';
 
 export interface BackendGenerateOptions extends GenerateOptions {
   isProtectedRoute: boolean;
@@ -263,64 +263,64 @@ export class BackendGenerator extends BaseGenerator {
     const generatorRoot = getGeneratorRoot();
     const coreBootstrapFiles: CoreBootstrapFile[] = [
       {
-        sourceRelativePath: 'src/generator-assets/core/errors/error-codes.ts',
+        sourceRelativePath: 'src/generator-assets/express-mongoose/errors/error-codes.ts',
         targetRelativePath: 'src/core/errors/error-codes.ts'
       },
       {
-        sourceRelativePath: 'src/generator-assets/core/errors/error.helper.ts',
+        sourceRelativePath: 'src/generator-assets/express-mongoose/errors/error.helper.ts',
         targetRelativePath: 'src/core/errors/error.helper.ts'
       },
       {
-        sourceRelativePath: 'src/generator-assets/core/logging/logger.ts',
+        sourceRelativePath: 'src/generator-assets/express-mongoose/logging/logger.ts',
         targetRelativePath: 'src/core/logging/logger.ts'
       },
       // logger.ts imports (bootstrap must be import-closed, plan 5 P2.1)
       {
-        sourceRelativePath: 'src/generator-assets/core/logging/job-log-context.ts',
+        sourceRelativePath: 'src/generator-assets/express-mongoose/logging/job-log-context.ts',
         targetRelativePath: 'src/core/logging/job-log-context.ts'
       },
       {
-        sourceRelativePath: 'src/generator-assets/core/logging/pino-stdout-file-tee.ts',
+        sourceRelativePath: 'src/generator-assets/express-mongoose/logging/pino-stdout-file-tee.ts',
         targetRelativePath: 'src/core/logging/pino-stdout-file-tee.ts'
       },
       {
-        sourceRelativePath: 'src/generator-assets/core/logging/daily-log-file-path.ts',
+        sourceRelativePath: 'src/generator-assets/express-mongoose/logging/daily-log-file-path.ts',
         targetRelativePath: 'src/core/logging/daily-log-file-path.ts'
       },
       {
-        sourceRelativePath: 'src/generator-assets/core/pagination/pagination.helper.ts',
+        sourceRelativePath: 'src/generator-assets/express-mongoose/pagination/pagination.helper.ts',
         targetRelativePath: 'src/core/pagination/pagination.helper.ts'
       },
       {
-        sourceRelativePath: 'src/generator-assets/core/filters/filter-query.helper.ts',
+        sourceRelativePath: 'src/generator-assets/express-mongoose/filters/filter-query.helper.ts',
         targetRelativePath: 'src/core/filters/filter-query.helper.ts'
       },
       {
-        sourceRelativePath: 'src/generator-assets/core/response/response.helper.ts',
+        sourceRelativePath: 'src/generator-assets/express-mongoose/response/response.helper.ts',
         targetRelativePath: 'src/core/response/response.helper.ts'
       },
       {
-        sourceRelativePath: 'src/generator-assets/core/response/wire.ts',
+        sourceRelativePath: 'src/generator-assets/express-mongoose/response/wire.ts',
         targetRelativePath: 'src/core/response/wire.ts'
       },
       {
-        sourceRelativePath: 'src/generator-assets/core/schema/list-pagination.schema.ts',
+        sourceRelativePath: 'src/generator-assets/express-mongoose/schema/list-pagination.schema.ts',
         targetRelativePath: 'src/core/schema/list-pagination.schema.ts'
       },
       {
-        sourceRelativePath: 'src/generator-assets/core/types/api-contract.ts',
+        sourceRelativePath: 'src/generator-assets/express-mongoose/types/api-contract.ts',
         targetRelativePath: 'src/core/types/api-contract.ts'
       },
       {
-        sourceRelativePath: 'src/generator-assets/core/services/base-crud.service.ts',
+        sourceRelativePath: 'src/generator-assets/express-mongoose/services/base-crud.service.ts',
         targetRelativePath: 'src/core/services/base-crud.service.ts'
       },
       {
-        sourceRelativePath: 'src/generator-assets/core/services/crud-projection.ts',
+        sourceRelativePath: 'src/generator-assets/express-mongoose/services/crud-projection.ts',
         targetRelativePath: 'src/core/services/crud-projection.ts'
       },
       {
-        sourceRelativePath: 'src/generator-assets/core/services/crud-scope.ts',
+        sourceRelativePath: 'src/generator-assets/express-mongoose/services/crud-scope.ts',
         targetRelativePath: 'src/core/services/crud-scope.ts'
       }
     ];
@@ -451,7 +451,7 @@ export class BackendGenerator extends BaseGenerator {
 
       const generatedFile = this.generateFile(
         resolvedTemplateName,
-        'backend',
+        'backend-express-mongoose',
         artifact.outputDir,
         artifact.outputFileName,
         artifact.buildTemplateData ? artifact.buildTemplateData(templateData) : templateData,
@@ -602,7 +602,7 @@ export class BackendGenerator extends BaseGenerator {
   }
 
   private resolveTemplateName(templateCandidates: string[]): string | null {
-    const templatesDir = getTemplatesDir('backend');
+    const templatesDir = getTemplatesDir('backend-express-mongoose');
     for (const templateName of templateCandidates) {
       const templatePath = join(templatesDir, `${templateName}.hbs`);
       const readResult = safeReadFile(templatePath);
@@ -754,7 +754,7 @@ export class BackendGenerator extends BaseGenerator {
    */
   private generateFile(
     templateName: string,
-    templateType: 'backend',
+    templateType: 'backend-express-mongoose',
     outputPath: string,
     fileName: string,
     templateData: Record<string, unknown>,

@@ -1,6 +1,6 @@
 # BE: Express + Mongoose + TypeScript
 
-Bu stack'in üreticisi `src/main/generators/BackendGenerator.ts`, şablonları `src/main/templates/backend/*.hbs`, core asset'leri `src/generator-assets/core/**`. Sözleşme: [api-contract.md](../api-contract.md).
+Bu stack'in üreticisi `src/main/generators/express-mongoose/BackendGenerator.ts`, şablonları `src/main/templates/backend-express-mongoose/*.hbs`, core asset'leri `src/generator-assets/express-mongoose/**`. Sözleşme: [api-contract.md](../api-contract.md).
 
 ## Çağrı zinciri
 
@@ -93,7 +93,7 @@ Marker'lar (`// <ad>` … `// </ad>`, kaynak `utils/customBlockMarkers.ts`):
 
 ## Core asset'ler
 
-`src/generator-assets/core/**` → host `src/core/**`. Handlebars değil, düz dosya.
+`src/generator-assets/express-mongoose/**` → host `src/core/**`. Handlebars değil, düz dosya.
 
 - **Yalnızca eksikse oluşturulur, asla ezilmez.** Farklı bir host dosyası korunur ve `canonical-deviation-detected` loglanır.
 - Yeni asset, host'taki (korunmuş) kardeş dosyanın dışa aktarmadığı bir adı import ediyorsa oluşturulmaz, uyarı loglanır (`utils/coreAssetImports.ts`).

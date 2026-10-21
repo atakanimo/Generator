@@ -70,6 +70,8 @@ export interface BackendSelectedFiles {
 }
 
 export interface ManifestWorkspacePrefs {
+  /** Backend stack of the project (D5); detection is used when absent. */
+  backendStack?: 'nodejs-mongoose' | 'dotnet-ef';
   frontendPath?: string;
   generationMode?: 'frontend' | 'backend' | 'fullstack';
   isProtectedRoute?: boolean;
@@ -101,6 +103,10 @@ export interface GenerateBackendResult {
     /** `<module>.hooks.ts`, only when this run created it. */
     hooks?: string;
   };
+  /** .NET: project-relative files this run created or changed. */
+  writtenFiles?: string[];
+  /** Things to tell the user after a successful run (migration command, contract-closed operations). */
+  notes?: string[];
   error?: string;
 }
 
@@ -213,6 +219,8 @@ export interface ElectronAPI {
     loadModelDraft: (filePath: string, sourceType: SourceType) => Promise<LoadModelDraftResult>;
     getRelatedModelFields: (projectRoot: string, relationEntityName: string, sourceType?: SourceType) => Promise<RelatedModelFieldsResult>;
     updateModel: (filePath: string, sourceType: SourceType, draft: ModelDraft, projectPath?: string) => Promise<UpdateModelResult>;
+    /** New .NET 10 + EF Core host (solution, 4 projects, core assets) in `root`. */
+    bootstrapDotnet: (root: string, app: string) => Promise<{ success: boolean; files?: string[]; error?: string }>;
   };
   // Database connection commands (for future use)
   database: {

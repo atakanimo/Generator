@@ -203,7 +203,8 @@ export function applyManifestWrite(prev: WorkspaceManifest | null, request: Mani
       fields: schema.fields.map(sanitizeFieldRelationMeta),
       nestedSchemas: schema.nestedSchemas?.map(ns => ({ ...ns, fields: ns.fields.map(sanitizeFieldRelationMeta) })),
       ownership: schema.ownership,
-      api: schema.api
+      api: schema.api,
+      ui: schema.ui?.label?.trim() ? { label: schema.ui.label.trim() } : undefined
     });
     manifest.models = upsertModels(manifest.models, { sourceRelativePath: rel, model });
   }

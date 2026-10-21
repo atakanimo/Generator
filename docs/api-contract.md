@@ -1,6 +1,6 @@
 # API sözleşmesi
 
-Bütün BE stack'leri (bugün Express + Mongoose; ileride .NET, Prisma) **aynı HTTP davranışını** verir. `@atakanimo/ata-admin-base` ve mobil istemci yalnızca bu sözleşmeyi bilir. TS tipleri: `packages/admin-base/src/contract/api.ts`, host tarafı `src/generator-assets/core/types/api-contract.ts`.
+Bütün BE stack'leri (bugün Express + Mongoose; ileride .NET, Prisma) **aynı HTTP davranışını** verir. `@atakanimo/ata-admin-base` ve mobil istemci yalnızca bu sözleşmeyi bilir. TS tipleri: `packages/admin-base/src/contract/api.ts`, host tarafı `src/generator-assets/express-mongoose/types/api-contract.ts`.
 
 ## 1. Yanıt zarfı
 
@@ -87,6 +87,8 @@ type PaginatedList<T> = { items: T[]; total: number; hasMore: boolean; currentPa
 | `reference` | populate edilmiş `{ id, ...alanlar }` ya da `"<id>"`; dizilerde `id[]` / obje[] |
 | `object` / `object[]` / `map` | düz JSON |
 
+- `reference` populate yalnızca okuma uçlarında: list (`get-all`) ve getOne obje (`{ id, ...populate }`) döner; create / update cevabında ilişki **id** (`"<id>"` / `id[]`) olarak döner. admin-base create / update sonrası satırı kullanmaz, sorguları yeniler (`invalidateQueries`).
+- Doldurulmamış opsiyonel alan `null` olarak ya da hiç gelmeyebilir (Express gelmez, .NET `null` yazar); istemci ikisini aynı sayar.
 - Stack'e özel alan yok (`__v`, EF navigation döngüleri).
 - Kod ve DB isimleri doğal kalır (Mongoose `_id`); `id` yalnızca JSON adıdır. Eşleme tek yerde yapılır (Express: `toWire`).
 - Girişte: filtre `id` ve `sortBy: 'id'` stack'in kimlik alanına çevrilir; create / update body'sinde `id` / `_id` reddedilir.
@@ -94,7 +96,7 @@ type PaginatedList<T> = { items: T[]; total: number; hasMore: boolean; currentPa
 
 ## 5. Yazma
 
-- create: `hiddenFromCreate` dışındaki model alanları, strict. update: kısmi, strict; `readonly` / `hiddenFromUpdate` alanlar kabul edilmez.
+- create: `readonly` ve `hiddenFromCreate` dışındaki model alanları, strict. update: kısmi, strict; `readonly` / `hiddenFromUpdate` alanlar kabul edilmez. Her stack'te aynı (2026-10-21).
 - `reference` alanlar yalnızca id alır, populate edilmiş obje almaz.
 - Ownership alanı (`userId` benzeri): normal API auth'tan alır, body ve filtreden atar; admin API body ve filtrede kabul eder.
 - `adminOnly` alanlar normal create / update şemasında yoktur; admin şemasında vardır.

@@ -5,7 +5,7 @@
 
 import Handlebars, { HelperOptions } from 'handlebars';
 import { safeReadFile } from './fileUtils.js';
-import { getTemplatesDir, registerHandlebarsHelpers } from './templateHelpers.js';
+import { getTemplatesDir, registerHandlebarsHelpers, TemplateSet } from './templateHelpers.js';
 import { log } from './logger.js';
 
 // Template cache
@@ -37,7 +37,7 @@ function getTemplateCacheKey(templateType: string, templateName: string): string
  */
 export function compileTemplate(
   templateName: string,
-  templateType: 'backend' = 'backend'
+  templateType: TemplateSet = 'backend-express-mongoose'
 ): { success: boolean; template?: HandlebarsTemplateDelegate; error?: string } {
   // Ensure helpers are registered
   initializeTemplateEngine();
@@ -95,7 +95,7 @@ export function compileTemplate(
 export function renderTemplate(
   templateName: string,
   data: any,
-  templateType: 'backend' = 'backend'
+  templateType: TemplateSet = 'backend-express-mongoose'
 ): { success: boolean; content?: string; error?: string } {
   try {
     // Compile template (will use cache if available)
@@ -169,7 +169,7 @@ export function registerHelper(name: string, fn: Handlebars.HelperDelegate): voi
 export function compileAndRender(
   templateName: string,
   data: any,
-  templateType: 'backend' = 'backend'
+  templateType: TemplateSet = 'backend-express-mongoose'
 ): { success: boolean; content?: string; error?: string } {
   return renderTemplate(templateName, data, templateType);
 }
@@ -178,7 +178,7 @@ export function compileAndRender(
  * Batch render multiple templates with same data
  */
 export function batchRender(
-  templates: Array<{ name: string; type: 'backend' }>,
+  templates: Array<{ name: string; type: TemplateSet }>,
   data: any
 ): Array<{ name: string; success: boolean; content?: string; error?: string }> {
   return templates.map(({ name, type }) => {

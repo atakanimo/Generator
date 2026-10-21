@@ -1,6 +1,6 @@
 ---
 description: Stack-agnostic HTTP API contract (envelope, endpoints, list body, row shape, writes, host interceptor)
-globs: src/generator-assets/core/**,src/main/templates/backend/**,packages/admin-base/src/contract/**,packages/admin-base/src/data/**
+globs: src/generator-assets/express-mongoose/**,src/main/templates/backend-express-mongoose/**,src/generator-assets/dotnet-efcore/**,src/main/templates/backend-dotnet-efcore/**,packages/admin-base/src/contract/**,packages/admin-base/src/data/**
 alwaysApply: false
 ---
 

@@ -30,7 +30,8 @@ Host `createAdminRoutes(resources)`'u route + menü dizisine bir kez ekler. Yeni
 | `default: null` / `nullable` | `nullable` |
 | `ui.component` | `TextArea` → `component: 'textarea'`, `ImageField` → `component: 'image'`; diğerleri yazılmaz |
 
-- `_id` ve `access.hidden` alanlar hiç yazılmaz.
+- `_id` hiç yazılmaz. `access.hidden` alan yazılabilirse (salt okunur değil, create ve update'te birden gizli değil) `writeOnly: true` olur: listede ve filtrede yok, formda gizli giriş (ör. şifre); değilse yazılmaz.
+- Kaynak `label`'ı modelin `ui.label`'ı; yoksa entity adından (`SymbolTypes` → `Symbol Types`).
 - Resource etiketi entity adından (`SymbolTypes` → `Symbol Types`).
 - `operations`: Enable Update / Delete'ten; ikisi de açıksa yazılmaz.
 - Admin alanı olmayan kind'lar (`unknown`) yorum + uyarıyla atlanır.

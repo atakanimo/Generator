@@ -5,10 +5,10 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { describe, it } from 'node:test';
-import { extractListPagination, resolveListSort } from '../../src/generator-assets/core/pagination/pagination.helper.ts';
-import { toWire } from '../../src/generator-assets/core/response/wire.ts';
-import { resolveCrudProjection, stripHiddenFields } from '../../src/generator-assets/core/services/crud-projection.ts';
-import { applyAuthScope } from '../../src/generator-assets/core/services/crud-scope.ts';
+import { extractListPagination, resolveListSort } from '../../src/generator-assets/express-mongoose/pagination/pagination.helper.ts';
+import { toWire } from '../../src/generator-assets/express-mongoose/response/wire.ts';
+import { resolveCrudProjection, stripHiddenFields } from '../../src/generator-assets/express-mongoose/services/crud-projection.ts';
+import { applyAuthScope } from '../../src/generator-assets/express-mongoose/services/crud-scope.ts';
 
 const requireFromHost = createRequire('/Users/atakanatabey/Projects/VarlikALL/Varlik360/package.json');
 // eslint-disable-next-line @typescript-eslint/no-var-requires

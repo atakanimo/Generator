@@ -206,7 +206,7 @@ async function regenerate(label, { planned = false, coreOverlay = false } = {}) 
   const out = join(regenDir, label);
   prepareCopy(out);
   if (coreOverlay) {
-    for (const rel of CORE_OVERLAY) cpSync(join(root, 'src/generator-assets/core', rel), join(out, 'src/core', rel));
+    for (const rel of CORE_OVERLAY) cpSync(join(root, 'src/generator-assets/express-mongoose', rel), join(out, 'src/core', rel));
   }
   const { parseNormalizedModel, findManifestModelByRelativePath, mergeModel, generateBackend } = await loadBundle();
 
@@ -384,10 +384,10 @@ function withoutLegacyWorkspaceKeys(workspace) {
 
 /**
  * Core asset type gate (P2): Varlik360 copy with `src/core/**` overwritten by the Generator's core assets
- * (default: current `src/generator-assets/core`), then `tsc`. Run once with pre-change assets and once with the
+ * (default: current `src/generator-assets/express-mongoose`), then `tsc`. Run once with pre-change assets and once with the
  * new ones; errors present in both come from host additions, the difference belongs to the change.
  */
-async function coreAssets(label, assetsDir = join(root, 'src/generator-assets/core')) {
+async function coreAssets(label, assetsDir = join(root, 'src/generator-assets/express-mongoose')) {
   const out = join(regenDir, label);
   prepareCopy(out);
   const files = walk(assetsDir).map(p => relative(assetsDir, p));

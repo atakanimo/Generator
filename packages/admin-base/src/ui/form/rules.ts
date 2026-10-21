@@ -10,8 +10,10 @@ const DECIMAL_PATTERN = /^-?\d+([.,]\d+)?$/;
  * react-hook-form `validate`'i config'ten türetilir (zod yok, karar 16.10.2026).
  * Hata metni anahtarı döner; mesaj alanın altında gösterilir. Son söz BE'de.
  */
-export function validateField(field: FieldConfig, value: unknown): AdminTextKey | true {
+export function validateField(field: FieldConfig, value: unknown, mode: 'create' | 'edit' = 'create'): AdminTextKey | true {
   if (isEmptyValue(value)) {
+    // Yalnızca yazılan alan (şifre) edit'te boş bırakılabilir: değişmez.
+    if (field.writeOnly && mode === 'edit') return true;
     return field.required && field.kind !== 'boolean' ? 'required' : true;
   }
   const values = Array.isArray(value) ? value : [value];

@@ -38,7 +38,7 @@ export function toTemplateView(f: NormalizedField) {
 /** Render model.hbs from a model editor draft through the shared v2 context (same builder as modelCreator). */
 export function renderModelHbs(draft: ModelDraft): string {
   registerHandlebarsHelpers();
-  const src = readFileSync(join(process.cwd(), 'src/main/templates/backend/model.hbs'), 'utf8');
+  const src = readFileSync(join(process.cwd(), 'src/main/templates/backend-express-mongoose/model.hbs'), 'utf8');
   const tpl = Handlebars.compile(src, { noEscape: true });
   const name = draft.model.entityName;
   return tpl({

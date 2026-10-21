@@ -13,6 +13,7 @@ Generator'daki **tek** model tipi: `NormalizedModel` (`src/shared/normalizedMode
 | `native?` | Stack'e özel model ayrıntısı. Mongoose: `modelName` (`mongoose.model('…')`), `collection` |
 | `ownership?` | `{ kind: 'field' \| 'self' }`. Yoksa türetilir: `userId` alanı varsa `field` |
 | `api?` | `{ normalOperations?, requiresAuth?, admin? }`; manifest'te saklanır |
+| `ui?` | `{ label? }`: admin menüsü ve sayfa başlığı (yoksa entity adından); manifest'te saklanır, arayüzde "Model etiketi" |
 
 ## Alan
 

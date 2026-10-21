@@ -181,7 +181,7 @@ function generateMongooseModel(draft: ModelDraft, existingModelContent?: string)
   });
 
   registerHandlebarsHelpers();
-  const templatePath = join(getTemplatesDir('backend'), 'model.hbs');
+  const templatePath = join(getTemplatesDir('backend-express-mongoose'), 'model.hbs');
   if (!existsSync(templatePath)) {
     throw new Error(`Template file not found: ${templatePath}`);
   }

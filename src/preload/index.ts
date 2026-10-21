@@ -84,6 +84,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       draft: ModelDraft,
       projectPath?: string
     ) => ipcRenderer.invoke('project:updateModel', { filePath, sourceType, draft, projectPath }),
+    bootstrapDotnet: (root: string, app: string) => ipcRenderer.invoke('project:bootstrapDotnet', { root, app }),
   },
   database: {
     connect: (config: unknown) => ipcRenderer.invoke('database:connect', config),

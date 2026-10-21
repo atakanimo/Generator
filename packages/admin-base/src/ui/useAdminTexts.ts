@@ -7,7 +7,7 @@ import { adminBaseTexts, humanize, type AdminTextKey } from './texts.js';
 /**
  * Tüm metinler host `t`'sinden geçer (karar 16.10.2026). Anahtar düzeni:
  * - paket: `ataAdmin.<key>`
- * - resource başlığı: `admin.<resource>.title`
+ * - resource başlığı (sayfa + sol menü): `admin.<resource>.title`; config `label` yalnız varsayılan
  * - alan: `admin.<resource>.fields.<alan>` (nested alt alan: `<üst>_<alt>`)
  * - enum değeri: `admin.<resource>.enums.<alan>.<değer>`
  */

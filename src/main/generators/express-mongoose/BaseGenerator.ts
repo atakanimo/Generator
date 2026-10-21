@@ -3,13 +3,13 @@
  * Abstract base class for all code generators with common functionality
  */
 
-import { renderTemplate } from '../utils/templateEngine.js';
-import { safeWriteFile, ensureDirectory, getProjectDirectories, getFrontendDirectories } from '../utils/fileUtils.js';
-import { validateSchema, validateDirectory } from '../utils/validationUtils.js';
-import { handleError, ErrorCode, AppError, errorToResult } from '../utils/errorHandler.js';
-import { logGenerate, log } from '../utils/logger.js';
-import { getProjectRootPath } from '../utils/templateHelpers.js';
-import { camelCase, pascalCase } from '../utils/namingUtils.js';
+import { renderTemplate } from '../../utils/templateEngine.js';
+import { safeWriteFile, ensureDirectory, getProjectDirectories, getFrontendDirectories } from '../../utils/fileUtils.js';
+import { validateSchema, validateDirectory } from '../../utils/validationUtils.js';
+import { handleError, ErrorCode, AppError, errorToResult } from '../../utils/errorHandler.js';
+import { logGenerate, log } from '../../utils/logger.js';
+import { getProjectRootPath } from '../../utils/templateHelpers.js';
+import { camelCase, pascalCase } from '../../utils/namingUtils.js';
 
 export interface GenerateOptions {
   schema: any;
@@ -92,7 +92,7 @@ export abstract class BaseGenerator {
    */
   protected async renderAndWriteTemplate(
     templateName: string,
-    templateType: 'backend',
+    templateType: 'backend-express-mongoose',
     outputPath: string,
     outputFileName: string,
     data: any = {}
@@ -158,7 +158,7 @@ export abstract class BaseGenerator {
   protected async generateFilesParallel(
     fileConfigs: Array<{
       templateName: string;
-      templateType: 'backend';
+      templateType: 'backend-express-mongoose';
       outputPath: string;
       outputFileName: string;
       data?: any;

@@ -32,7 +32,8 @@ import {
 } from '@mui/material';
 import { Save as SaveIcon, Code as CodeIcon, FolderOpen } from '@mui/icons-material';
 import { useAppSelector, useAppDispatch } from '../store/hooks';
-import { updateFieldConfig, updateModelApi, markModelApiSaved, saveSchemaConfig, generateFrontend, generateBackend, setFrontendPath, patchWorkspaceGeneratePrefs, persistWorkspaceManifest, buildManifestWorkspacePayload } from '../features/project/projectSlice';
+import { updateFieldConfig, updateModelApi,
+  updateModelLabel, markModelApiSaved, saveSchemaConfig, generateFrontend, generateBackend, setFrontendPath, patchWorkspaceGeneratePrefs, persistWorkspaceManifest, buildManifestWorkspacePayload } from '../features/project/projectSlice';
 import type { NormalizedField, NormalizedModel, RelationType } from '@shared/normalizedModel';
 import type { RelationPropertyObjectSubField } from '@shared/relationDisplayMeta';
 import { uiComponentOptionsFor, type UIComponent } from '@shared/modelMerge';
@@ -93,6 +94,7 @@ const SchemaDesignPage = () => {
     generatingBackendStatus,
     generatingBackendError,
     lastGeneratedBackendFiles,
+    lastGeneratedBackendNotes,
     workspaceGeneratePrefs,
     workspaceManifestLoaded
   } = useAppSelector(state => state.project);
@@ -151,7 +153,8 @@ const SchemaDesignPage = () => {
     if (generatingBackendStatus === 'success') {
       const files = lastGeneratedBackendFiles;
       const fileList = files ? Object.values(files).filter(Boolean).join(', ') : '';
-      const message = fileList ? `Backend code generated: ${fileList}` : 'Backend code generated successfully!';
+      const base = fileList ? `Backend code generated: ${fileList}` : 'Backend code generated successfully!';
+      const message = lastGeneratedBackendNotes.length ? [base, ...lastGeneratedBackendNotes].join('\n') : base;
       setSnackbarMessage(message);
       setSnackbarSeverity('success');
       setSnackbarOpen(true);
@@ -160,7 +163,7 @@ const SchemaDesignPage = () => {
       setSnackbarSeverity('error');
       setSnackbarOpen(true);
     }
-  }, [generatingBackendStatus, generatingBackendError, lastGeneratedBackendFiles]);
+  }, [generatingBackendStatus, generatingBackendError, lastGeneratedBackendFiles, lastGeneratedBackendNotes]);
 
   // Auto-save disabled - user must click Save button manually
 
@@ -563,6 +566,16 @@ const SchemaDesignPage = () => {
         <Typography variant='subtitle2' sx={{ fontWeight: 600, mb: 2, color: 'text.secondary' }}>
           Backend Settings
         </Typography>
+        <TextField
+          label='Model etiketi'
+          size='small'
+          fullWidth
+          sx={{ mb: 2 }}
+          value={selectedModelSchema.ui?.label ?? ''}
+          onChange={e => dispatch(updateModelLabel(e.target.value))}
+          placeholder={selectedModelSchema.entityName.replace(/([a-z0-9])([A-Z])/g, '$1 $2')}
+          helperText='Admin menüsü ve sayfa başlığı. Boşsa model adından türetilir.'
+        />
         <Box sx={{ mb: 2 }}>
           <ModelApiSettingsPanel
             api={apiSettings}
@@ -587,7 +600,14 @@ const SchemaDesignPage = () => {
           </RadioGroup>
         </Box>
 
-        {(generationMode === 'backend' || generationMode === 'fullstack') && (
+        {(generationMode === 'backend' || generationMode === 'fullstack') && sourceType === 'dotnet-ef' && (
+          <Alert severity='info' sx={{ mt: 2 }}>
+            .NET: modülün bütün dosyaları (Domain, Application, Infrastructure, Api) ve kayıt dosyaları üretilir. Başlıklı dosyalar her
+            seferinde yeniden yazılır; <code>*.Custom.cs</code> ve <code>*Hooks.cs</code> bir kez oluşturulur. Migration Generator'ın işi
+            değildir; komut generate sonrası gösterilir.
+          </Alert>
+        )}
+        {(generationMode === 'backend' || generationMode === 'fullstack') && sourceType !== 'dotnet-ef' && (
           <Box sx={{ mt: 2 }}>
             <FormControlLabel
               control={
@@ -1261,8 +1281,8 @@ const SchemaDesignPage = () => {
         </DialogActions>
       </Dialog>
 
-      <Snackbar open={snackbarOpen} autoHideDuration={4000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
-        <Alert onClose={handleCloseSnackbar} severity={snackbarSeverity} sx={{ width: '100%' }}>
+      <Snackbar open={snackbarOpen} autoHideDuration={lastGeneratedBackendNotes.length ? 12000 : 4000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+        <Alert onClose={handleCloseSnackbar} severity={snackbarSeverity} sx={{ width: '100%', whiteSpace: 'pre-line' }}>
           {snackbarMessage}
         </Alert>
       </Snackbar>

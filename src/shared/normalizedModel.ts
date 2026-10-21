@@ -179,6 +179,8 @@ export interface NormalizedModel {
   ownership?: { kind: 'field' | 'self' };
   /** Per-model API settings, stored in the manifest (P5, G3). */
   api?: NormalizedApi;
+  /** Model-level UI settings, stored in the manifest: `label` = admin menu / page title (default: humanized entity name). */
+  ui?: { label?: string };
 }
 
 // --- Canonical shape --------------------------------------------------------------------------------------
@@ -249,8 +251,9 @@ export function canonicalModel(m: NormalizedModel): NormalizedModel {
       nestedSchemas: m.nestedSchemas?.map(canonicalNested),
       native: sub(m.native, ['modelName', 'collection']),
       ownership: sub(m.ownership, ['kind']),
-      api: sub(m.api, ['normalOperations', 'requiresAuth', 'admin'])
+      api: sub(m.api, ['normalOperations', 'requiresAuth', 'admin']),
+      ui: sub(m.ui, ['label'])
     },
-    ['schemaVersion', 'entityName', 'fields', 'nestedSchemas', 'nestedTypeName', 'timestamps', 'native', 'ownership', 'api']
+    ['schemaVersion', 'entityName', 'fields', 'nestedSchemas', 'nestedTypeName', 'timestamps', 'native', 'ownership', 'api', 'ui']
   );
 }

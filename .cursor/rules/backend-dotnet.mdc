@@ -1,9 +1,0 @@
----
-description: .NET backend generation (planned, no code yet)
-globs: src/main/templates/backend-dotnet/**,src/generator-assets/dotnet/**
-alwaysApply: false
----
-
-# Backend: .NET (planned)
-
-Source: `docs/backend/dotnet.md`, plan `docs/plans/backend-dotnet-efcore.md`. Not implemented yet. Input is NormalizedModel v2, output must follow `docs/api-contract.md` exactly. Do not reuse Express + Mongoose templates or core assets. Keep .NET code in its own generator, template and asset folders.

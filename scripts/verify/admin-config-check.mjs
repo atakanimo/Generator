@@ -66,7 +66,13 @@ check(field('symbols', 'symbolTypeId')?.kind === 'relation' && field('symbols', 
   const rel = 'src/modules/users/users.model.ts';
   const users = b.mergeModel(b.parseNormalizedModel(join(varlik, rel), 'nodejs-mongoose').model, null, 'nodejs-mongoose');
   const hidden = { ...users, fields: users.fields.map(f => (f.name === 'password' ? { ...f, access: { ...f.access, hidden: true } } : f)) };
-  check(!b.toAdminResourceConfig({ model: hidden, endpoint: '' }).config.fields.some(f => f.name === 'password'), 'hidden field emitted (users.password)');
+  // Hidden + writable → write-only form field (never listed / filtered); hidden + readonly → not emitted.
+  const pw = b.toAdminResourceConfig({ model: hidden, endpoint: '' }).config.fields.find(f => f.name === 'password');
+  check(pw?.writeOnly === true && !pw.list && !pw.filter, 'hidden writable field → writeOnly (users.password)');
+  const ro = { ...hidden, fields: hidden.fields.map(f => (f.name === 'password' ? { ...f, access: { ...f.access, readonly: true } } : f)) };
+  check(!b.toAdminResourceConfig({ model: ro, endpoint: '' }).config.fields.some(f => f.name === 'password'), 'hidden readonly field emitted (users.password)');
+  const labelled = { ...users, ui: { label: 'Kullanıcılar' } };
+  check(b.toAdminResourceConfig({ model: labelled, endpoint: '' }).config.label === 'Kullanıcılar', 'model ui.label → resource label');
 }
 check(field('symbol-types', 'createdAt')?.kind === 'datetime' && field('symbol-types', 'createdAt')?.readonly === true, 'timestamps as readonly datetime');
 const daily = field('daily-portfolio', 'portfolioValues');

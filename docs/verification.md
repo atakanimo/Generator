@@ -37,6 +37,7 @@ Varlik360 BE: `/Users/atakanatabey/Projects/VarlikALL/Varlik360/src/modules/**/*
 | Core asset'ler | `test-core-assets` + `--core-assets` |
 | Admin config | `admin-config-check` |
 | `packages/admin-base` | `npm run typecheck`, `npm test`, `npm run build` |
+| .NET üreticisi (`dotnet-efcore/`, şablonlar, asset'ler, parser, `dotnetBackend.ts`) | `regen-dotnet.mjs`, sonra `dotnet-e2e.mjs` (arka planda) |
 | Arayüz | Electron / tarayıcı kontrolü, **en son** |
 
 Kasıtlı bir bozulma varsa (safe degrade) kapı sonucu ile birlikte belgelenir.
@@ -53,3 +54,26 @@ Atlas'a asla bağlanılmaz.
 - BE (Varlik360 kökü): `MONGODB_URI=mongodb://127.0.0.1:27099/generator_symboltypes_test ADMIN_USER_IDS=<admin userId> PORT=3999 npm start`. `.env` değiştirilmez.
 - Admin: `.claude/launch.json` → `varlik360-admin-localbe` (port 5194).
 - Token: `.env` `JWT_SECRET` ile `{ userId }` imzalı kısa ömürlü JWT; secret ekrana basılmaz, token dosyası iş bitince silinir.
+
+## .NET EF Core
+
+Ayrıntı: [backend/dotnet-efcore.md](backend/dotnet-efcore.md). Çıktılar `scripts/verify/out/dotnet/<etiket>/`. Model kaynakları `scripts/verify/fixtures/dotnet/models.json` (EventTypes, Documents, MembershipPlans, Templates, Users, UserNotes: bütün kind'lar, ilişkiler, ownership) ve golden set (`varlik360.manifest.v3.json`).
+
+| Komut | Kontrol | Süre |
+| --- | --- | --- |
+| `node scripts/verify/regen-dotnet.mjs [etiket]` | Boş host, fixture ve golden set: `dotnet build` 0 uyarı 0 hata, `dotnet test`, ikinci generate hiçbir şey yazmaz; parser gidiş-dönüşü; uygulama akışı (bootstrap → tarama → model editörü → generate → notlar → admin uç yolu → ilişki alanları); .NET modellerinden admin config + admin-base tiplerine karşı `tsc` | ~1 dk |
+| `node scripts/verify/dotnet-e2e.mjs [etiket] [--no-parity] [--skip-regen]` | `regen-dotnet` + fixture host'a migration + `dotnet run` → D2 / D3 / D4 / D0 smoke'ları; Docker'da Mongo + Varlik360 HTTP uygulaması ile golden host arasında `contract-parity.mjs` | ~3–4 dk; arka planda |
+| `node scripts/verify/dotnet-d0-smoke.mjs` (ve `-d2-documents`, `-d3-relations`, `-d4-ownership`) | Çalışan bir host'a karşı tek tek (`API_BASE`, `JWT_SECRET`, `JWT_ISSUER`, `JWT_AUDIENCE`); D2–D4 boş tablo bekler | saniyeler |
+| `node scripts/verify/contract-parity.mjs` | Aynı senaryolar Express ve .NET'te; şekil karşılaştırması, bilinen farklar betikte gerekçeli | saniyeler |
+
+Gerekenler: .NET 10 SDK, yerel Postgres (`PG_HOST`, varsayılan `/tmp` soketi; kullanıcının veritabanı oluşturma yetkisi), eşlik için Docker (OrbStack) ve `node_modules`'lı Varlik360 (`VARLIK360`). Express tarafı `scripts/verify/fixtures/express-parity-host.ts` ile yalnızca HTTP uygulaması olarak açılır (job, Firebase, gerçek `.env` yok); Varlik360 kaynağına yazılmaz. `regen-dotnet`'in admin config adımı, `admin-config-check` gibi Varlik360 `apps/admin` içinde geçici bir klasör açıp siler.
+
+Bilinen: `regen-varlik360 --p5` iki tespit senaryosunda FAIL (Symbols, AppVersionConfigs); HEAD'de de aynı, .NET işinden bağımsız.
+
+## İstemci veri katmanı
+
+Ayrıntı: [frontend/client-data-layer.md](frontend/client-data-layer.md).
+
+| Komut | Kontrol | Süre |
+| --- | --- | --- |
+| `node scripts/verify/regen-client.mjs [--adopt] [--keep]` | Varlik360 manifest'i + model dosyaları → mobile'ın 8 modülü (`redux-rn`), Varlik360 `apps/mobile` içinde geçici kopyada (`.gen-client-check/`, iş bitince silinir): operasyonlar = `resolveNormalApi`, var olan dosyalara dokunulmaz, ikinci generate hiçbir şey yazmaz, mobile `tsc` tabanı (2) artmaz, uzantı sözleşmesi derlenir (genişletilmiş state, kendi thunk'ını dispatch eden hook), reducer'lar gerçek store'da sahte `API` ile (append, update merge + populate korunur, delete `meta.arg`, hata state'i bozmaz). Üretilenler `scripts/verify/out/client/`. `--adopt`: eski üretilmiş servis / thunk / slice'lar stub'la değişince ekranlarda kalan `tsc` hataları (bilgi; C3 iş listesi) | ~15 sn |

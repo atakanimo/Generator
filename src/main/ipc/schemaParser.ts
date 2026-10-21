@@ -1,4 +1,7 @@
 import { readFileSync } from 'fs';
+import { dirname } from 'path';
+import { findDotnetHost, listDotnetEntityFiles } from '../parsers/dotnet/dotnetHost.js';
+import { parseDotnetEntity } from '../parsers/dotnet/entityParser.js';
 import {
   canonicalModel,
   type NativeType,
@@ -224,6 +227,17 @@ export interface ParseModelFileOptions {
   preferredMongooseModelName?: string;
 }
 
+/** .NET entity (`src/<App>.Domain/<Folder>/<Entity>.cs`); references resolve against the host's entities. */
+function parseDotnetEntityFile(filePath: string): ParseNormalizedModelResult {
+  try {
+    const host = findDotnetHost(dirname(dirname(dirname(dirname(filePath)))));
+    const folders = new Map(host ? listDotnetEntityFiles(host).map(f => [f.fileName.replace(/\.cs$/, ''), f.folder] as [string, string]) : []);
+    return { success: true, model: parseDotnetEntity(filePath, folders) };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
 export interface ParseNormalizedModelResult {
   success: boolean;
   model?: NormalizedModel;
@@ -238,6 +252,7 @@ export function parseNormalizedModel(
   sourceType?: SourceTypeArg,
   options?: ParseModelFileOptions | null
 ): ParseNormalizedModelResult {
+  if (sourceType === 'dotnet-ef' && filePath.endsWith('.cs')) return parseDotnetEntityFile(filePath);
   try {
     const content = readFileSync(filePath, 'utf-8');
     const fileName = filePath.split(/[/\\]/).pop() || '';

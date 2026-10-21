@@ -1,0 +1,11 @@
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using {{app}}.Domain.{{folder}};
+
+namespace {{app}}.Infrastructure.Persistence.{{folder}};
+
+public sealed partial class {{entity}}Configuration
+{
+    partial void ConfigureCustom(EntityTypeBuilder<{{entity}}> builder)
+    {
+    }
+}

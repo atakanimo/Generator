@@ -1,6 +1,8 @@
 import { readdir, readFile, stat } from 'fs/promises';
 import { join, extname } from 'path';
 import { log } from '../utils/logger.js';
+import { findDotnetHost, listDotnetEntityFiles } from '../parsers/dotnet/dotnetHost.js';
+import { getWorkspacePreferences } from '../utils/manifestSnapshot.js';
 
 export type SourceType = 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm';
 
@@ -39,6 +41,11 @@ export async function scanProject(
     let finalSourceType: SourceType;
     let detectedTechnologies: string[] = [];
 
+    const savedStack = getWorkspacePreferences(projectPath)?.backendStack;
+    if (!sourceType && savedStack) {
+      sourceType = savedStack;
+      log(`[Generator] Stack from manifest: ${savedStack}`, 'info');
+    }
     if (sourceType) {
       finalSourceType = sourceType;
       detectedTechnologies = technologiesFromSourceType(sourceType);
@@ -62,6 +69,11 @@ export async function scanProject(
       const srcModulesPath = join(projectPath, 'src', 'modules');
       models = await scanModulesDirectory(srcModulesPath, ['.js', '.ts']);
       log('[Generator] Node discovery path: src/modules/**', 'info');
+    } else if (finalSourceType === 'dotnet-ef' && findDotnetHost(projectPath)) {
+      // Generator host (plan backend-dotnet-efcore §3): Domain entity files.
+      const host = findDotnetHost(projectPath)!;
+      models = listDotnetEntityFiles(host).map(f => ({ fileName: f.fileName, path: f.path }));
+      log(`[Generator] .NET host ${host.app}: src/${host.app}.Domain/**`, 'info');
     } else if (finalSourceType === 'dotnet-ef') {
       // Look for 'Entities' or 'Models' folder
       const entitiesPath = join(projectPath, 'Entities');
@@ -102,7 +114,9 @@ export async function scanProject(
       discoveryInfo:
         finalSourceType === 'nodejs-mongoose' || finalSourceType === 'nodejs-typeorm'
           ? 'Node.js: src/** altında *.model.ts|*.model.js (özyinelemeli tarama).'
-          : '.NET: Entities/Models klasörleri ve .cs entity dosyaları taranır.'
+          : findDotnetHost(projectPath)
+            ? `.NET 10 + EF Core: src/${findDotnetHost(projectPath)!.app}.Domain/<Modül>/<Entity>.cs (elle yazılmış entity'ler yalnızca ilişki hedefi).`
+            : '.NET: Entities/Models klasörleri ve .cs entity dosyaları taranır.'
     };
   } catch (error) {
     log(
@@ -255,7 +269,13 @@ async function detectProjectStack(projectPath: string): Promise<DetectStackResul
     // continue to .NET checks
   }
 
-  // .NET checks
+  // .NET checks: Generator host (solution + src/<App>.Domain) first.
+  const host = findDotnetHost(projectPath);
+  if (host) {
+    detectedTechnologies.push('.NET 10', 'ASP.NET Core', 'EF Core');
+    if (host.efCorePostgres) detectedTechnologies.push('PostgreSQL');
+    return { success: true, sourceType: 'dotnet-ef', detectedTechnologies };
+  }
   let hasCsproj = false;
   try {
     const entries = await readdir(projectPath, { withFileTypes: true });
@@ -295,7 +315,7 @@ function technologiesFromSourceType(sourceType: SourceType): string[] {
   if (sourceType === 'nodejs-typeorm') {
     return ['Node.js', 'TypeORM'];
   }
-  return ['C#', 'ASP.NET Core', 'Entity Framework'];
+  return ['.NET', 'ASP.NET Core', 'EF Core'];
 }
 
 /**

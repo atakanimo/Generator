@@ -270,6 +270,7 @@ export function mergeModel(code: NormalizedModel, saved: NormalizedModel | null,
         ? { modelName: code.native.modelName, collection: code.native.collection }
         : undefined,
     ownership: saved?.ownership,
-    api: saved?.api
+    api: saved?.api,
+    ui: saved?.ui
   });
 }

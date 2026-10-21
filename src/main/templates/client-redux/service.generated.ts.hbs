@@ -1,0 +1,86 @@
+{{header}}
+// `{{entity}}` normal API ({{endpoint}}). Do not edit: change the model in the Generator and regenerate;
+// custom endpoints go in `{{camel}}.service.ts`.
+{{#if hasOps}}
+import { API } from '{{imports.api}}';
+import { LocalResponse } from '{{imports.localResponse}}';
+import { {{commonImports}} } from './common.generated';
+{{/if}}
+
+export interface {{names.row}} {
+{{#each rowProps}}
+  {{name}}{{#if optional}}?{{/if}}: {{type}};
+{{/each}}
+}
+{{#if hasSavedType}}
+
+/** Create / update answer: relations are ids, not populated objects. */
+export interface {{names.saved}} {
+{{#each savedProps}}
+  {{name}}{{#if optional}}?{{/if}}: {{type}};
+{{/each}}
+}
+{{/if}}
+{{#if ops.create}}
+
+export interface {{names.createInput}} {
+{{#each createProps}}
+  {{name}}{{#if optional}}?{{/if}}: {{type}};
+{{/each}}
+}
+{{/if}}
+{{#if ops.update}}
+
+export interface {{names.updateInput}} {
+{{#each updateProps}}
+  {{name}}{{#if optional}}?{{/if}}: {{type}};
+{{/each}}
+}
+{{/if}}
+{{#if ops.list}}
+
+/** List filters (searchable fields). */
+export interface {{names.query}} {
+{{#each queryProps}}
+  {{name}}{{#if optional}}?{{/if}}: {{type}};
+{{/each}}
+}
+
+export type {{names.listBody}} = ListPaginationBody & { filters?: {{names.query}} };
+{{/if}}{{#if ops.list}}
+
+export const getAll = async (
+  body?: {{names.listBody}},
+  options?: RequestOptions
+): Promise<LocalResponse<PaginatedList<{{names.row}}>>> => {
+  return API({ url: '{{endpoint}}/get-all', method: 'POST', data: body ?? {}, ...requestFlags(options) });
+};
+{{/if}}
+{{#if ops.getOne}}
+
+export const getById = async (id: string, options?: RequestOptions): Promise<LocalResponse<{{names.row}}>> => {
+  return API({ url: `{{endpoint}}/${id}`, method: 'GET', ...requestFlags(options) });
+};
+{{/if}}
+{{#if ops.create}}
+
+export const create = async (data: {{names.createInput}}, options?: RequestOptions): Promise<LocalResponse<{{names.saved}}>> => {
+  return API({ url: '{{endpoint}}/create', method: 'POST', data, ...requestFlags(options) });
+};
+{{/if}}
+{{#if ops.update}}
+
+export const update = async (
+  id: string,
+  data: {{names.updateInput}},
+  options?: RequestOptions
+): Promise<LocalResponse<{{names.saved}}>> => {
+  return API({ url: `{{endpoint}}/update/${id}`, method: 'POST', data, ...requestFlags(options) });
+};
+{{/if}}
+{{#if ops.delete}}
+
+export const {{names.deleteFn}} = async (id: string, options?: RequestOptions): Promise<LocalResponse<null>> => {
+  return API({ url: `{{endpoint}}/${id}`, method: 'DELETE', ...requestFlags(options) });
+};
+{{/if}}

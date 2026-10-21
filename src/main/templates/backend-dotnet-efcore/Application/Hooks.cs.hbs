@@ -1,0 +1,14 @@
+using {{app}}.Application.Common.Hooks;
+using {{app}}.Domain.{{folder}};
+
+namespace {{app}}.Application.{{folder}};
+
+public interface I{{entity}}Hooks : IServiceHooks<{{entity}}, {{entity}}Filters, {{entity}}CreateBody, {{entity}}UpdateBody>;
+
+public interface I{{entity}}AdminHooks : IServiceHooks<{{entity}}, {{entity}}Filters, {{entity}}AdminCreateBody, {{entity}}AdminUpdateBody>;
+
+/// <summary>Normal servis kancaları; yalnızca gerekeni ezin.</summary>
+public sealed class {{entity}}Hooks : ServiceHooks<{{entity}}, {{entity}}Filters, {{entity}}CreateBody, {{entity}}UpdateBody>, I{{entity}}Hooks;
+
+/// <summary>Admin servis kancaları.</summary>
+public sealed class {{entity}}AdminHooks : ServiceHooks<{{entity}}, {{entity}}Filters, {{entity}}AdminCreateBody, {{entity}}AdminUpdateBody>, I{{entity}}AdminHooks;

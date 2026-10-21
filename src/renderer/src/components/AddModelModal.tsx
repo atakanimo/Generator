@@ -160,6 +160,8 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
   const loadedFields = useRef(new Set<NormalizedField>());
 
   const isMongoose = sourceType === 'nodejs-mongoose';
+  // .NET host (D5): no seed function; timestamps always come from `AuditableEntity`.
+  const isDotnet = sourceType === 'dotnet-ef';
 
   useEffect(() => {
     if (open && initialData) {
@@ -386,7 +388,7 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
 
       await onSave({
         model,
-        seed: hasInitializeFunction ? { data: resolvedInitializeData } : undefined
+        seed: isMongoose && hasInitializeFunction ? { data: resolvedInitializeData } : undefined
       });
       handleClose();
     } catch (err) {
@@ -406,13 +408,13 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
     onClose();
   };
 
-  if (!isMongoose) {
+  if (!isMongoose && !isDotnet) {
     return (
       <Dialog open={open} onClose={handleClose} maxWidth='md' fullWidth>
         <DialogTitle>Add Model</DialogTitle>
         <DialogContent>
           <Alert severity='info' sx={{ mt: 2 }}>
-            Model creation is currently only supported for Node.js (Mongoose) projects.
+            Model creation is supported for Node.js (Mongoose) and .NET (EF Core) projects.
           </Alert>
         </DialogContent>
         <DialogActions>
@@ -709,6 +711,13 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
 
           <Divider />
 
+          {isDotnet ? (
+            <Alert severity='info'>
+              .NET: <code>id</code>, <code>createdAt</code> ve <code>updatedAt</code> her entity'de vardır (AuditableEntity). Kaydedince modül
+              dosyaları üretilir; şema değiştiyse migration eklemeyi unutmayın.
+            </Alert>
+          ) : (
+            <>
           <Box>
             <Typography variant='h6' gutterBottom sx={{ mb: 2 }}>
               Timestamps
@@ -818,6 +827,8 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
               </Box>
             )}
           </Box>
+            </>
+          )}
         </Box>
       </DialogContent>
       <DialogActions>

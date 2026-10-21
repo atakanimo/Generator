@@ -29,6 +29,11 @@ interface FieldCommon {
   readonly?: boolean;
   hideOnCreate?: boolean;
   hideOnUpdate?: boolean;
+  /**
+   * Cevapta hiç gelmez, yalnızca yazılır (ör. şifre): tabloda ve filtrede yok; formda gizli giriş (`string`'de
+   * `type=password`), edit'te boş başlar ve boş bırakılırsa gönderilmez; `required` yalnızca create'te geçerli.
+   */
+  writeOnly?: boolean;
   /** Tabloda kolon olarak gösterilir. */
   list?: boolean;
   filter?: FilterType;

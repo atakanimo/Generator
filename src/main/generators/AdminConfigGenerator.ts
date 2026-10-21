@@ -70,6 +70,7 @@ const FIELD_KEY_ORDER: Array<keyof AdminFieldConfig> = [
   'readonly',
   'hideOnCreate',
   'hideOnUpdate',
+  'writeOnly',
   'list',
   'filter',
   'default',

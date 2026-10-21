@@ -1,0 +1,26 @@
+// `{{entity}}` slice: generated state / reducers / cases plus this module's own.
+// Created once by the Generator, never overwritten: edit freely. Register it in the root reducer by hand.
+import { createSlice } from '@reduxjs/toolkit';
+import type { RootState } from '{{imports.rootState}}';
+import { {{camel}}Thunks } from '../thunks/{{camel}}.thunk';
+import { {{entity}}BaseState, add{{entity}}BaseCases, {{camel}}BaseReducers, {{camel}}InitialState } from './{{camel}}.slice.generated';
+
+type {{entity}}State = {{entity}}BaseState;
+
+const initialState: {{entity}}State = { ...{{camel}}InitialState };
+
+const {{entity}}Slicer = createSlice({
+  name: '{{camel}}',
+  initialState,
+  reducers: { ...{{camel}}BaseReducers },
+  extraReducers: builder => {
+    add{{entity}}BaseCases(builder, {{camel}}Thunks);
+    // Own thunks: `builder.addCase(…)` here. More on a generated thunk's action: `builder.addMatcher(thunk.fulfilled.match, …)`
+    // after every `addCase` (RTK throws on a second case for the same action, and on `addCase` after `addMatcher`).
+  }
+});
+
+export const { setCurrentItem, clearCurrentItem } = {{entity}}Slicer.actions;
+export default {{entity}}Slicer.reducer;
+
+export const Get{{entity}}State = (state: RootState) => state.{{camel}};

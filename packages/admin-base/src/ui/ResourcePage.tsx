@@ -136,7 +136,7 @@ export function ResourcePage({ resource }: ResourcePageProps) {
   const BelowTable = slots.belowTable;
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', gap: 2 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0, width: '100%', overflow: 'hidden', gap: 2 }}>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ flexShrink: 0, alignItems: { sm: 'center' } }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography component='h1' sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
@@ -173,7 +173,7 @@ export function ResourcePage({ resource }: ResourcePageProps) {
         </Stack>
       </Stack>
 
-      <Box sx={{ flexShrink: 0 }}>
+      <Box sx={{ flexShrink: 0, minWidth: 0 }}>
         <FilterBar resource={resource} onApply={applyFilters} />
       </Box>
 
@@ -213,6 +213,8 @@ export function ResourcePage({ resource }: ResourcePageProps) {
             borderColor: 'divider',
             borderRadius: 1,
             bgcolor: 'background.paper',
+            // Header like the reference admin (DataGrid v7 look): page background behind headers, semi-bold 13px titles
+            '& .MuiDataGrid-columnHeader, & .MuiDataGrid-filler, & .MuiDataGrid-scrollbarFiller--header': { bgcolor: 'background.default' },
             '& .MuiDataGrid-columnHeaderTitle': { fontWeight: 600, fontSize: '0.8125rem' },
             '& .MuiDataGrid-cell': { display: 'flex', alignItems: 'center', fontSize: '0.875rem' }
           }}

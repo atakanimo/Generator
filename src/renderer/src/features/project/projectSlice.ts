@@ -39,6 +39,8 @@ interface ProjectState {
   generatingBackendStatus: 'idle' | 'generating' | 'success' | 'error';
   generatingBackendError: string | null;
   lastGeneratedBackendFiles: GenerateBackendResult['files'] | null;
+  /** Notes of the last backend generate (.NET: migration command, contract-closed operations). */
+  lastGeneratedBackendNotes: string[];
   generatingFrontendStatus: 'idle' | 'generating' | 'success' | 'error';
   generatingFrontendError: string | null;
   lastGeneratedFrontendFiles: GenerateFrontendResult['files'] | null;
@@ -73,6 +75,7 @@ const initialState: ProjectState = {
   generatingBackendStatus: 'idle',
   generatingBackendError: null,
   lastGeneratedBackendFiles: null,
+  lastGeneratedBackendNotes: [],
   generatingFrontendStatus: 'idle',
   generatingFrontendError: null,
   lastGeneratedFrontendFiles: null,
@@ -277,7 +280,7 @@ export const generateBackend = createAsyncThunk(
           sourceCheck
         );
         if (result.success) {
-          return { success: true, files: result.files || null, sourceHash: result.sourceHash ?? null };
+          return { success: true, files: result.files || null, sourceHash: result.sourceHash ?? null, notes: result.notes ?? [] };
         } else {
           return rejectWithValue(result.error || 'Backend generation failed');
         }
@@ -513,6 +516,12 @@ const projectSlice = createSlice({
     markModelApiSaved: state => {
       if (state.selectedModelSchema) state.selectedModelApiSource = 'saved';
     },
+    /** Model-level label (admin menu / page title); empty → default (humanized entity name). */
+    updateModelLabel: (state, action: PayloadAction<string>) => {
+      if (!state.selectedModelSchema) return;
+      const label = action.payload;
+      state.selectedModelSchema.ui = label.trim() ? { ...state.selectedModelSchema.ui, label } : undefined;
+    },
     updateModelApi: (state, action: PayloadAction<ModelApiSettings>) => {
       if (!state.selectedModelSchema) return;
       state.selectedModelSchema = patchModelApi(state.selectedModelSchema, action.payload);
@@ -604,6 +613,7 @@ const projectSlice = createSlice({
         state.generatingBackendStatus = 'success';
         state.generatingBackendError = null;
         state.lastGeneratedBackendFiles = action.payload.files || null;
+        state.lastGeneratedBackendNotes = action.payload.notes || [];
         if (action.payload.sourceHash) state.selectedModelSourceHash = action.payload.sourceHash;
       })
       .addCase(generateBackend.rejected, (state, action) => {
@@ -681,6 +691,7 @@ export const {
   resetProject,
   clearSelectedSchema,
   updateModelApi,
+  updateModelLabel,
   markModelApiSaved,
   updateFieldConfig
 } = projectSlice.actions;

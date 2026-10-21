@@ -138,7 +138,7 @@ function ControlledField({ resource, field, mode, path, label, topLevel }: Field
     name: path,
     rules: {
       validate: v => {
-        const result = validateField(field, v);
+        const result = validateField(field, v, mode);
         return result === true ? true : texts.text(result);
       }
     }
@@ -236,7 +236,8 @@ function ControlledField({ resource, field, mode, path, label, topLevel }: Field
       {...common}
       value={value ?? ''}
       onChange={e => onChange(e.target.value)}
-      type={field.kind === 'number' ? 'number' : 'text'}
+      type={field.kind === 'number' ? 'number' : field.writeOnly ? 'password' : 'text'}
+      autoComplete={field.writeOnly ? 'new-password' : undefined}
       multiline={field.component === 'textarea'}
       minRows={field.component === 'textarea' ? 3 : undefined}
       slotProps={field.kind === 'decimal' ? { htmlInput: { inputMode: 'decimal' } } : undefined}

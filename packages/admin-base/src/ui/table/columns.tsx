@@ -58,7 +58,7 @@ export function buildColumns({ resource, texts, onOpenJson, renderActions, actio
   ];
 
   for (const field of resource.fields) {
-    if (!field.list) continue;
+    if (!field.list || field.writeOnly) continue;
     const Cell = overrides[field.name]?.cell;
     columns.push({
       field: field.name,

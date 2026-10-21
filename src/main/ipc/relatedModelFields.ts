@@ -5,6 +5,9 @@ import { mergeModel } from '../../shared/modelMerge.js';
 import { filterTokenOf, typeTokenOf } from '../../shared/fieldTypeToken.js';
 import type { RelatedModelFieldInfo, RelatedModelFieldsResult } from '../../shared/ipcTypes.js';
 import { findManifestModelByRelativePath, toProjectRelativePath } from '../utils/manifestSnapshot.js';
+import type { NormalizedModel } from '../../shared/normalizedModel.js';
+import { findDotnetHost, listDotnetEntityFiles } from '../parsers/dotnet/dotnetHost.js';
+import { parseDotnetEntity } from '../parsers/dotnet/entityParser.js';
 
 export type { RelatedModelFieldInfo, RelatedModelFieldsResult };
 
@@ -95,6 +98,7 @@ export async function getRelatedModelFieldNames(
     return { success: false, error: 'Relation entity name is empty' };
   }
 
+  if (sourceType === 'dotnet-ef') return dotnetRelatedFields(projectPath, trimmed);
   if (sourceType && sourceType !== 'nodejs-mongoose') {
     return {
       success: false,
@@ -134,11 +138,30 @@ export async function getRelatedModelFieldNames(
   // Field config as the target's schema designer has it (manifest row, else defaults) — for the K3 warning.
   const row = findManifestModelByRelativePath(projectPath, toProjectRelativePath(projectPath, match.model.path));
   const merged = mergeModel(parsed.model, row, 'nodejs-mongoose');
+  return { success: true, fields: relatedFieldInfos(parsed.model, merged), modelPath: match.model.path };
+}
+
+/** .NET host: target by module folder (`EventTypes`) or entity class (`EventType`). */
+function dotnetRelatedFields(projectPath: string, name: string): RelatedModelFieldsResult {
+  const host = findDotnetHost(projectPath);
+  if (!host) return { success: false, error: '.NET host bulunamadı.' };
+  const files = listDotnetEntityFiles(host);
+  const variants = relationRefNameVariants(name).map(v => v.toLowerCase());
+  const match = files.find(f => variants.includes(f.folder.toLowerCase()) || variants.includes(f.fileName.replace(/\.cs$/, '').toLowerCase()));
+  if (!match) return { success: false, error: `"${name}" için entity bulunamadı (src/${host.app}.Domain/<Modül>/<Entity>.cs).` };
+  const folders = new Map(files.map(f => [f.fileName.replace(/\.cs$/, ''), f.folder] as [string, string]));
+  const parsed = parseDotnetEntity(match.path, folders);
+  const row = findManifestModelByRelativePath(projectPath, toProjectRelativePath(projectPath, match.path));
+  const merged = mergeModel(parsed, row, 'dotnet-ef');
+  return { success: true, fields: relatedFieldInfos(parsed, merged), modelPath: match.path };
+}
+
+function relatedFieldInfos(parsedModel: NormalizedModel, merged: NormalizedModel): RelatedModelFieldInfo[] {
   const regexSearchable = new Set(
     merged.fields.filter(f => f.filter?.searchable && filterTokenOf(f.filter) === 'regex').map(f => f.name)
   );
 
-  const fields: RelatedModelFieldInfo[] = parsed.model.fields
+  return parsedModel.fields
     .filter(f => typeof f.name === 'string' && f.name.length > 0 && f.name !== '__v')
     .map(f => ({
       name: f.name,
@@ -154,6 +177,4 @@ export async function getRelatedModelFieldNames(
             }))
           : undefined,
     }));
-
-  return { success: true, fields, modelPath: match.model.path };
 }

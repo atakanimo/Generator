@@ -24,6 +24,8 @@ export interface AdminFieldConfig {
   readonly?: true;
   hideOnCreate?: true;
   hideOnUpdate?: true;
+  /** Model `hidden` but writable (e.g. password): never in a response, written through the form. */
+  writeOnly?: true;
   list?: true;
   filter?: AdminFilterType;
   default?: string | number | boolean | null | AdminDynamicDefault;
@@ -186,7 +188,20 @@ function fieldConfig(field: NormalizedField, skipped: SkippedField[]): AdminFiel
   }
   if (kind === 'map') out.valueKind = 'number';
   if (kind === 'json') delete out.filter;
+  if (field.access?.hidden === true) {
+    // Hidden (G2) but writable: the form writes it, nothing shows it (contract §2.1).
+    out.writeOnly = true;
+    delete out.list;
+    delete out.filter;
+    delete out.default;
+  }
   return out;
+}
+
+/** A hidden field still belongs in the admin form when create or update can write it (e.g. password). */
+function isWritable(field: NormalizedField): boolean {
+  const access = field.access ?? {};
+  return access.readonly !== true && !(access.hiddenFromCreate === true && access.hiddenFromUpdate === true);
 }
 
 /** Admin `ResourceSchema` of a model, plus the fields that could not be expressed. */
@@ -194,7 +209,7 @@ export function toAdminResourceConfig(input: AdminResourceInput): { config: Admi
   const { model, endpoint, features } = input;
   const skipped: SkippedField[] = [];
   const fields = model.fields
-    .filter(f => f.name !== '_id' && f.name !== 'id' && f.access?.hidden !== true)
+    .filter(f => f.name !== '_id' && f.name !== 'id' && (f.access?.hidden !== true || isWritable(f)))
     .map(f => fieldConfig(f, skipped))
     .filter((f): f is AdminFieldConfig => f !== null);
 
@@ -202,8 +217,8 @@ export function toAdminResourceConfig(input: AdminResourceInput): { config: Admi
     schemaVersion: 1,
     name: adminResourceName(model.entityName),
     endpoint,
-    // Menu / page title: `SymbolTypes` → `Symbol Types`
-    label: model.entityName.replace(/([a-z0-9])([A-Z])/g, '$1 $2'),
+    // Menu / page title: the model's own label, else `SymbolTypes` → `Symbol Types`
+    label: model.ui?.label?.trim() || model.entityName.replace(/([a-z0-9])([A-Z])/g, '$1 $2'),
     fields
   };
   const updatable = features?.updatable !== false;

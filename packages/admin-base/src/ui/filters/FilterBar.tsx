@@ -22,7 +22,7 @@ export function FilterBar({ resource, onApply }: FilterBarProps) {
   const texts = useAdminTexts();
   const { text } = texts;
   const [draft, setDraft] = useState<FilterDraft>({});
-  const fields = resource.fields.filter(f => f.filter);
+  const fields = resource.fields.filter(f => f.filter && !f.writeOnly);
 
   const set = (name: string, value: unknown) => setDraft(prev => ({ ...prev, [name]: value }));
   const apply = () => onApply(buildListFilters(resource.fields, draft));

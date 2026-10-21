@@ -25,4 +25,4 @@ export { validateField } from './ui/form/rules.js';
 export { FilterBar, type FilterBarProps } from './ui/filters/FilterBar.js';
 export { buildListFilters, type FilterDraft } from './ui/filters/filterValues.js';
 export { RelationAutocomplete, type RelationAutocompleteProps } from './ui/inputs/RelationAutocomplete.js';
-export { createAdminRoutes, type AdminRouteEntry, type CreateAdminRoutesOptions } from './ui/routes.js';
+export { createAdminRoutes, resourceTitleKey, type AdminRouteEntry, type CreateAdminRoutesOptions } from './ui/routes.js';

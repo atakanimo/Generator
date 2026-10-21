@@ -16,6 +16,7 @@ import { parseBaseUrlFromBackend } from './utils/backendAppFile.js';
 import { createModel, loadModelDraft, updateModel } from './ipc/modelCreator.js';
 import { getRelatedModelFieldNames } from './ipc/relatedModelFields.js';
 import { log } from './utils/logger.js';
+import { bootstrapDotnetProject, generateDotnetBackend, loadDotnetModelDraft, writeDotnetModel } from './ipc/dotnetBackend.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -206,6 +207,12 @@ app.whenReady().then(() => {
       try {
         const stale = staleModelSourceError(sourceCheck);
         if (stale) return { success: false, error: stale };
+        if (sourceType === 'dotnet-ef') {
+          const { filePath: _entity, ...dotnet } = generateDotnetBackend(projectPath, schema);
+          return dotnet.success && sourceCheck?.filePath && existsSync(sourceCheck.filePath)
+            ? { ...dotnet, sourceHash: modelSourceHash(readFileSync(sourceCheck.filePath, 'utf8')) }
+            : dotnet;
+        }
         const generated = generateBackend(
           schema,
           projectPath,
@@ -263,7 +270,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('project:createModel', async (_, { projectPath, sourceType, draft }) => {
     try {
-      const result = await createModel(projectPath, sourceType, draft);
+      const result = sourceType === 'dotnet-ef' ? writeDotnetModel(projectPath, draft) : await createModel(projectPath, sourceType, draft);
       if (result.success && result.filePath) {
         const reconciled = reconcileModelFromDisk(projectPath?.trim(), result.filePath, sourceType);
         if (!reconciled.success) {
@@ -290,7 +297,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('project:loadModelDraft', async (_, { filePath, sourceType }) => {
     try {
-      return loadModelDraft(filePath, sourceType);
+      return sourceType === 'dotnet-ef' ? loadDotnetModelDraft(filePath) : loadModelDraft(filePath, sourceType);
     } catch (error) {
       log(`Error loading model draft: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
       return {
@@ -302,7 +309,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('project:updateModel', async (_, { filePath, projectPath, sourceType, draft }) => {
     try {
-      const result = await updateModel(filePath, sourceType, draft);
+      const result = sourceType === 'dotnet-ef' ? writeDotnetModel(projectPath, draft) : await updateModel(filePath, sourceType, draft);
       if (result.success && result.filePath) {
         const reconciled = reconcileModelFromDisk(projectPath?.trim(), result.filePath, sourceType);
         if (!reconciled.success) {
@@ -325,6 +332,12 @@ app.whenReady().then(() => {
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
+  });
+
+  ipcMain.handle('project:bootstrapDotnet', async (_, { root, app: appName }: { root?: string; app?: string }) => {
+    const target = root?.trim();
+    if (!target || !appName?.trim()) return { success: false, error: 'Klasör ve uygulama adı gerekli.' };
+    return bootstrapDotnetProject(target, appName.trim());
   });
 
   createWindow();

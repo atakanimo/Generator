@@ -27,7 +27,7 @@ Her admin modülü iki dosyadan oluşur (host'ta `modules/<m>/`):
 
 ## Alanlar (`src/schema/fields.ts`)
 
-Ortak: `name`, `label`, `isArray`, `required`, `nullable`, `readonly`, `hideOnCreate`, `hideOnUpdate`, `list` (tablo kolonu), `filter`, `default`, `component`.
+Ortak: `name`, `label`, `isArray`, `required`, `nullable`, `readonly`, `hideOnCreate`, `hideOnUpdate`, `writeOnly`, `list` (tablo kolonu), `filter`, `default`, `component`.
 
 | `kind` | Ek alanlar | Tablo | Form | JSON |
 | --- | --- | --- | --- | --- |
@@ -44,6 +44,7 @@ Ortak: `name`, `label`, `isArray`, `required`, `nullable`, `readonly`, `hideOnCr
 
 - `filter`: `eq | regex | range | date-range | boolean | enum | relation`. Yalnızca `filter`'ı olan alanlar filtre çubuğunda çıkar.
 - `default`: sabit değer ya da `{ dynamic: 'now' | 'uuid' | 'currentUserId' }` (create formu açılınca hesaplanır).
+- `writeOnly` (ör. şifre; model `hidden` + yazılabilir): cevapta gelmez, tabloda ve filtrede yok; formda gizli giriş, edit'te boş başlar ve boşsa gönderilmez; `required` yalnızca create'te.
 - Update body'si formdaki yazılabilir alanların tamamıdır (`toWriteBody`); `readonly` / `hideOnUpdate` alanlar ve şema dışı anahtarlar düşer, ilişkiler id'ye iner.
 
 ## `extendResource` (`src/schema/extend.ts`)

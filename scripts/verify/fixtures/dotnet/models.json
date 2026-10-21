@@ -1,0 +1,501 @@
+[
+  {
+    "schemaVersion": 2,
+    "entityName": "EventTypes",
+    "fields": [
+      {
+        "name": "name",
+        "kind": "string",
+        "isArray": false,
+        "required": true,
+        "unique": true,
+        "trim": true,
+        "filter": {
+          "searchable": true,
+          "type": "regex"
+        }
+      },
+      {
+        "name": "description",
+        "kind": "string",
+        "isArray": false,
+        "required": false,
+        "filter": {
+          "searchable": true,
+          "type": "regex"
+        }
+      },
+      {
+        "name": "isActive",
+        "kind": "boolean",
+        "isArray": false,
+        "required": true,
+        "default": true,
+        "filter": {
+          "searchable": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "name": "createdAt",
+        "kind": "date",
+        "isArray": false,
+        "required": false,
+        "access": {
+          "readonly": true
+        }
+      },
+      {
+        "name": "updatedAt",
+        "kind": "date",
+        "isArray": false,
+        "required": false,
+        "access": {
+          "readonly": true
+        }
+      }
+    ],
+    "timestamps": {
+      "createdAt": true,
+      "updatedAt": true
+    },
+    "api": {
+      "normalOperations": [
+        "list",
+        "getOne"
+      ],
+      "requiresAuth": false,
+      "admin": true
+    }
+  },
+  {
+    "schemaVersion": 2,
+    "entityName": "Documents",
+    "fields": [
+      {
+        "name": "type",
+        "kind": "enum",
+        "isArray": false,
+        "required": true,
+        "unique": true,
+        "enum": {
+          "values": [
+            "kvkk",
+            "gizlilik",
+            "kullanici"
+          ]
+        },
+        "filter": {
+          "searchable": true,
+          "type": "enum"
+        }
+      },
+      {
+        "name": "title",
+        "kind": "string",
+        "isArray": false,
+        "required": true,
+        "trim": true,
+        "filter": {
+          "searchable": true,
+          "type": "regex"
+        }
+      },
+      {
+        "name": "content",
+        "kind": "string",
+        "isArray": false,
+        "required": true,
+        "filter": {
+          "searchable": false
+        }
+      },
+      {
+        "name": "version",
+        "kind": "number",
+        "isArray": false,
+        "required": true,
+        "default": 1,
+        "filter": {
+          "searchable": true,
+          "type": "range"
+        }
+      },
+      {
+        "name": "status",
+        "kind": "enum",
+        "isArray": false,
+        "required": false,
+        "enum": {
+          "values": [
+            "draft",
+            "in-review",
+            "published"
+          ]
+        },
+        "filter": {
+          "searchable": true,
+          "type": "eq"
+        }
+      },
+      {
+        "name": "publishedAt",
+        "kind": "date",
+        "isArray": false,
+        "required": false,
+        "filter": {
+          "searchable": true,
+          "type": "date-range"
+        }
+      },
+      {
+        "name": "isActive",
+        "kind": "boolean",
+        "isArray": false,
+        "required": true,
+        "default": true
+      }
+    ],
+    "timestamps": {
+      "createdAt": true,
+      "updatedAt": true
+    },
+    "api": {
+      "normalOperations": [
+        "list",
+        "getOne",
+        "create",
+        "update",
+        "delete"
+      ],
+      "admin": true
+    }
+  },
+  {
+    "schemaVersion": 2,
+    "entityName": "MembershipPlans",
+    "fields": [
+      {
+        "name": "code",
+        "kind": "string",
+        "isArray": false,
+        "required": true,
+        "unique": true,
+        "filter": {
+          "searchable": true,
+          "type": "eq"
+        }
+      },
+      {
+        "name": "price",
+        "kind": "decimal",
+        "isArray": false,
+        "required": true,
+        "filter": {
+          "searchable": true,
+          "type": "range"
+        }
+      },
+      {
+        "name": "discount",
+        "kind": "decimal",
+        "isArray": false,
+        "required": false,
+        "default": 0
+      },
+      {
+        "name": "features",
+        "kind": "map",
+        "isArray": false,
+        "required": false,
+        "native": {
+          "type": "map<boolean>"
+        }
+      },
+      {
+        "name": "meta",
+        "kind": "json",
+        "isArray": false,
+        "required": false
+      },
+      {
+        "name": "limits",
+        "kind": "object",
+        "isArray": false,
+        "required": true,
+        "object": {
+          "typeName": "IPlanLimits",
+          "fields": [
+            {
+              "name": "maxEvents",
+              "kind": "number",
+              "required": false,
+              "nullable": true
+            },
+            {
+              "name": "watermark",
+              "kind": "boolean",
+              "required": true
+            }
+          ]
+        }
+      },
+      {
+        "name": "tiers",
+        "kind": "object",
+        "isArray": true,
+        "required": false,
+        "object": {
+          "fields": [
+            {
+              "name": "name",
+              "kind": "string",
+              "required": true
+            },
+            {
+              "name": "price",
+              "kind": "decimal",
+              "required": true
+            }
+          ]
+        }
+      },
+      {
+        "name": "tags",
+        "kind": "string",
+        "isArray": true,
+        "required": false
+      }
+    ],
+    "timestamps": {
+      "createdAt": true,
+      "updatedAt": true
+    },
+    "api": {
+      "normalOperations": [
+        "list",
+        "getOne"
+      ],
+      "admin": true
+    }
+  },
+  {
+    "schemaVersion": 2,
+    "entityName": "Templates",
+    "fields": [
+      {
+        "name": "name",
+        "kind": "string",
+        "isArray": false,
+        "required": true,
+        "filter": {
+          "searchable": true,
+          "type": "regex"
+        }
+      },
+      {
+        "name": "eventTypeId",
+        "kind": "reference",
+        "isArray": false,
+        "required": true,
+        "reference": {
+          "include": true,
+          "target": "EventTypes",
+          "display": "name",
+          "populate": [
+            "_id",
+            "name",
+            "isActive"
+          ],
+          "relationType": "manyToOne"
+        },
+        "filter": {
+          "searchable": true,
+          "type": "reference"
+        }
+      },
+      {
+        "name": "planId",
+        "kind": "reference",
+        "isArray": false,
+        "required": false,
+        "reference": {
+          "include": false,
+          "target": "MembershipPlans"
+        },
+        "filter": {
+          "searchable": true,
+          "type": "reference"
+        }
+      },
+      {
+        "name": "documentIds",
+        "kind": "reference",
+        "isArray": true,
+        "required": false,
+        "reference": {
+          "include": true,
+          "target": "Documents",
+          "display": "title",
+          "populate": [
+            "title",
+            "type"
+          ],
+          "relationType": "manyToMany"
+        },
+        "filter": {
+          "searchable": true,
+          "type": "reference"
+        }
+      },
+      {
+        "name": "externalIds",
+        "kind": "reference",
+        "isArray": true,
+        "required": false
+      }
+    ],
+    "timestamps": {
+      "createdAt": true,
+      "updatedAt": true
+    },
+    "api": {
+      "normalOperations": [
+        "list",
+        "getOne",
+        "create",
+        "update",
+        "delete"
+      ],
+      "admin": true
+    }
+  },
+  {
+    "schemaVersion": 2,
+    "entityName": "Users",
+    "fields": [
+      {
+        "name": "email",
+        "kind": "string",
+        "isArray": false,
+        "required": true,
+        "unique": true,
+        "trim": true,
+        "filter": {
+          "searchable": true,
+          "type": "regex"
+        }
+      },
+      {
+        "name": "password",
+        "kind": "string",
+        "isArray": false,
+        "required": true,
+        "access": {
+          "hidden": true
+        }
+      },
+      {
+        "name": "name",
+        "kind": "string",
+        "isArray": false,
+        "required": true,
+        "filter": {
+          "searchable": true,
+          "type": "regex"
+        }
+      },
+      {
+        "name": "role",
+        "kind": "enum",
+        "isArray": false,
+        "required": true,
+        "default": "user",
+        "enum": {
+          "values": [
+            "user",
+            "admin"
+          ]
+        },
+        "access": {
+          "adminOnly": true
+        }
+      }
+    ],
+    "timestamps": {
+      "createdAt": true,
+      "updatedAt": true
+    },
+    "ownership": {
+      "kind": "self"
+    },
+    "api": {
+      "normalOperations": [
+        "getOne",
+        "create",
+        "update"
+      ],
+      "admin": true
+    }
+  },
+  {
+    "schemaVersion": 2,
+    "entityName": "UserNotes",
+    "fields": [
+      {
+        "name": "userId",
+        "kind": "reference",
+        "isArray": false,
+        "required": true,
+        "reference": {
+          "include": true,
+          "target": "Users",
+          "display": "name",
+          "populate": [
+            "name",
+            "email",
+            "password"
+          ]
+        },
+        "filter": {
+          "searchable": true,
+          "type": "reference"
+        }
+      },
+      {
+        "name": "text",
+        "kind": "string",
+        "isArray": false,
+        "required": true,
+        "filter": {
+          "searchable": true,
+          "type": "regex"
+        }
+      },
+      {
+        "name": "pinned",
+        "kind": "boolean",
+        "isArray": false,
+        "required": true,
+        "default": false,
+        "access": {
+          "adminOnly": true
+        }
+      }
+    ],
+    "timestamps": {
+      "createdAt": true,
+      "updatedAt": true
+    },
+    "api": {
+      "normalOperations": [
+        "list",
+        "getOne",
+        "create",
+        "update",
+        "delete"
+      ],
+      "admin": true
+    }
+  }
+]

@@ -155,3 +155,23 @@ describe('dinamik varsayılanlar', () => {
     expect(initialFormValues(fields, 'edit', { code: 'abc' }).code).toBe('abc');
   });
 });
+
+describe('writeOnly alan (şifre)', () => {
+  const fields: FieldConfig[] = [
+    { name: 'email', kind: 'string', required: true },
+    { name: 'password', kind: 'string', required: true, writeOnly: true }
+  ];
+
+  it('create: zorunlu; edit: boş bırakılabilir', () => {
+    expect(validateField(fields[1]!, '', 'create')).toBe('required');
+    expect(validateField(fields[1]!, '', 'edit')).toBe(true);
+    expect(validateField(fields[0]!, '', 'edit')).toBe('required');
+  });
+
+  it('edit: boş başlar, boşsa gönderilmez; doluysa gönderilir', () => {
+    const values = initialFormValues(fields, 'edit', { id: 'u1', email: 'a@b.c' });
+    expect(values.password).toBe('');
+    expect(formValuesToBody(fields, values, 'edit')).toEqual({ email: 'a@b.c' });
+    expect(formValuesToBody(fields, { ...values, password: 'Yeni12345' }, 'edit')).toEqual({ email: 'a@b.c', password: 'Yeni12345' });
+  });
+});

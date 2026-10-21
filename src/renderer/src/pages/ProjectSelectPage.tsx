@@ -12,9 +12,13 @@ import {
   ListItemText,
   ListItemButton,
   Divider,
-  Snackbar
+  Snackbar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
-import { FolderOpen, Add as AddIcon, Edit as EditIcon } from '@mui/icons-material';
+import { FolderOpen, Add as AddIcon, Edit as EditIcon, CreateNewFolder } from '@mui/icons-material';
 import { useAppSelector, useAppDispatch } from '../store/hooks';
 import { setProjectPath, scanProjectFiles, parseModelFile, createModel, updateModel, loadModelDraft } from '../features/project/projectSlice';
 import { IconButton } from '@mui/material';
@@ -28,6 +32,7 @@ const ProjectSelectPage = () => {
   const {
     projectPath,
     sourceType,
+    detectedTechnologies,
     status,
     error,
     modelsFound,
@@ -47,6 +52,37 @@ const ProjectSelectPage = () => {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
+  const [dotnetDialogOpen, setDotnetDialogOpen] = useState(false);
+  const [dotnetRoot, setDotnetRoot] = useState('');
+  const [dotnetApp, setDotnetApp] = useState('');
+  const [dotnetError, setDotnetError] = useState<string | null>(null);
+  const [dotnetBusy, setDotnetBusy] = useState(false);
+
+  const handleBrowseDotnetRoot = async () => {
+    const result = await window.electronAPI?.dialog?.openDirectory();
+    if (result && !result.canceled && result.filePaths?.length) setDotnetRoot(result.filePaths[0]);
+  };
+
+  /** New .NET 10 + EF Core host (plan backend-dotnet-efcore D5), then the folder is opened like any project. */
+  const handleCreateDotnetHost = async () => {
+    setDotnetBusy(true);
+    setDotnetError(null);
+    try {
+      const result = await window.electronAPI.project.bootstrapDotnet(dotnetRoot, dotnetApp);
+      if (!result.success) {
+        setDotnetError(result.error || 'Proje oluşturulamadı');
+        return;
+      }
+      setDotnetDialogOpen(false);
+      dispatch(setProjectPath(dotnetRoot));
+      dispatch(scanProjectFiles({ path: dotnetRoot }));
+      setSnackbarMessage(`${dotnetApp}: ${result.files?.length ?? 0} dosya oluşturuldu.`);
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+    } finally {
+      setDotnetBusy(false);
+    }
+  };
 
   const handleBrowseFolder = async () => {
     try {
@@ -188,6 +224,11 @@ const ProjectSelectPage = () => {
               Browse Folder
             </Button>
           </Box>
+          <Box sx={{ mt: 2 }}>
+            <Button size='small' startIcon={<CreateNewFolder />} onClick={() => setDotnetDialogOpen(true)}>
+              Yeni .NET projesi
+            </Button>
+          </Box>
         </Paper>
 
         {/* Card 2: Auto Detected Technology Stack */}
@@ -200,7 +241,9 @@ const ProjectSelectPage = () => {
             <Typography variant='body2'>
               - Node.js: <code>src/modules/**</code> altında <code>*.model.ts|*.model.js</code> dosyaları taranır.
             </Typography>
-            <Typography variant='body2'>- .NET: <code>Entities/Models</code> altı entity dosyaları taranır.</Typography>
+            <Typography variant='body2'>
+              - .NET: <code>src/&lt;App&gt;.Domain/&lt;Modül&gt;/&lt;Entity&gt;.cs</code> entity dosyaları taranır (çözüm: <code>&lt;App&gt;.slnx</code>).
+            </Typography>
           </Box>
           <Alert severity={sourceType ? 'success' : 'warning'}>
             <Typography variant='body2'>
@@ -211,7 +254,8 @@ const ProjectSelectPage = () => {
                     ? 'Node.js / Express / Mongoose'
                     : sourceType === 'nodejs-typeorm'
                       ? 'Node.js / TypeORM'
-                      : 'C# / ASP.NET Core / Entity Framework'}
+                      : '.NET / ASP.NET Core / EF Core'}
+                  {detectedTechnologies.length > 0 && <> ({detectedTechnologies.join(', ')})</>}
                 </>
               ) : (
                 'Stack could not be detected yet. Select project root and run scan.'
@@ -321,6 +365,41 @@ const ProjectSelectPage = () => {
         isEditMode={!!editModelDraft}
         modelFilePath={editModelFilePath || undefined}
       />
+
+      <Dialog open={dotnetDialogOpen} onClose={() => setDotnetDialogOpen(false)} maxWidth='sm' fullWidth>
+        <DialogTitle>Yeni .NET projesi</DialogTitle>
+        <DialogContent>
+          <Typography variant='body2' color='text.secondary' sx={{ mb: 2 }}>
+            .NET 10 + EF Core + PostgreSQL, Clean Architecture: çözüm, 4 proje, test projesi ve core dosyaları. Var olan dosyaların
+            üzerine yazılmaz.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+            <TextField label='Klasör' fullWidth value={dotnetRoot} InputProps={{ readOnly: true }} placeholder='Boş bir klasör seçin' />
+            <Button variant='outlined' onClick={handleBrowseDotnetRoot}>
+              Seç
+            </Button>
+          </Box>
+          <TextField
+            label='Uygulama adı'
+            fullWidth
+            value={dotnetApp}
+            onChange={e => setDotnetApp(e.target.value)}
+            placeholder='SharedFrame'
+            helperText='PascalCase; proje adları <Ad>.Api, <Ad>.Domain… olur'
+          />
+          {dotnetError && (
+            <Alert severity='error' sx={{ mt: 2 }}>
+              {dotnetError}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDotnetDialogOpen(false)}>Vazgeç</Button>
+          <Button variant='contained' onClick={handleCreateDotnetHost} disabled={!dotnetRoot || !dotnetApp || dotnetBusy}>
+            Oluştur
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Snackbar for notifications */}
       <Snackbar open={snackbarOpen} autoHideDuration={4000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
