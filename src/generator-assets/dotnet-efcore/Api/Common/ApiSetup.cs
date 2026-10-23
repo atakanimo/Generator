@@ -19,6 +19,7 @@ public static class ApiSetup
 
     public static WebApplication UseApi(this WebApplication app)
     {
+        app.UseMiddleware<TraceIdMiddleware>();
         app.UseExceptionHandler(_ => { });
         app.UseStatusCodePages(context => context.HttpContext.Response.StatusCode switch
         {

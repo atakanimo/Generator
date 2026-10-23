@@ -3,7 +3,8 @@ import { useMemo } from 'react';
 import { RELATION_OPTIONS_LIMIT, type Id, type ListBody } from '../contract/api.js';
 import type { ActionParams } from '../data/dataProvider.js';
 import { bindResourceApi, type ResourceApi } from '../data/resourceApi.js';
-import type { RelationFieldConfig } from '../schema/fields.js';
+import type { LoadOptions } from '../schema/extend.js';
+import type { FieldConfig, RelationFieldConfig } from '../schema/fields.js';
 import { canSearchRelation } from '../schema/relation.js';
 import type { InferRow, ResourceSchema } from '../schema/resource.js';
 import { useAtaAdmin } from './context.js';
@@ -105,4 +106,21 @@ export function useRelationOptions(field: RelationFieldConfig, search: string, o
     enabled: target !== undefined && (options?.enabled ?? true),
     placeholderData: keepPreviousData
   });
+}
+
+const NO_OPTIONS: readonly string[] = [];
+
+/**
+ * Select seçenekleri: `loadOptions` (extensions `fields.<ad>.loadOptions`) verilmişse yüklenen liste, yoksa `enum`
+ * alanının statik `options`'ı. Yüklenen liste mutation'larla geçersiz kılınmaz (anahtar `resourceKeys.all` dışında).
+ */
+export function useFieldOptions(resourceName: string, field: FieldConfig, loadOptions?: LoadOptions): readonly string[] {
+  const query = useQuery({
+    queryKey: ['ata-admin-options', resourceName, field.name] as const,
+    queryFn: ({ signal }) => loadOptions!({ signal }),
+    enabled: loadOptions !== undefined,
+    staleTime: 5 * 60_000
+  });
+  if (loadOptions) return query.data ?? NO_OPTIONS;
+  return field.kind === 'enum' ? field.options : NO_OPTIONS;
 }

@@ -4,7 +4,7 @@
  *
  *  1. `regen-dotnet.mjs <label>` (build, idempotency, parser round trip, app flow, admin config).
  *  2. Smoke: `out/dotnet/<label>/models` → fresh Postgres DB → `dotnet ef migrations add` + `database update` →
- *     `dotnet run` → dotnet-d2 / d3 / d4 smokes (need empty tables, run first) → dotnet-d0-smoke (event-types).
+ *     `dotnet run` → dotnet-d2 / d3 / d4 / py1-formats smokes (need empty tables, run first) → dotnet-d0-smoke (event-types).
  *  3. Parity (skip with --no-parity): Mongo in Docker (`mongo:7`) + Varlik360's HTTP app
  *     (`fixtures/express-parity-host.ts`) vs the golden host on Postgres → `contract-parity.mjs`.
  *
@@ -124,7 +124,7 @@ async function main() {
 
 async function smokes() {
   const modelsHost = await startDotnetHost(join(outBase, 'models'), 'gen_e2e_models', 5191);
-  for (const script of ['dotnet-d2-documents-smoke.mjs', 'dotnet-d3-relations-smoke.mjs', 'dotnet-d4-ownership-smoke.mjs', 'dotnet-d0-smoke.mjs']) {
+  for (const script of ['dotnet-d2-documents-smoke.mjs', 'dotnet-d3-relations-smoke.mjs', 'dotnet-d4-ownership-smoke.mjs', 'dotnet-py1-formats-smoke.mjs', 'dotnet-d0-smoke.mjs']) {
     smoke(script, 'http://localhost:5191');
   }
   modelsHost.child.kill('SIGKILL');

@@ -13,4 +13,6 @@ export interface IApiResponse<T> {
   isSuccess: boolean;
   uiMessage: string | null;
   errorData: IErrorData | null;
+  /** Request id from the host request context (`@utils/requestContext`). Omitted outside a request. */
+  traceId?: string;
 }

@@ -59,6 +59,7 @@ const FIELD_KEY_ORDER: Array<keyof AdminFieldConfig> = [
   'kind',
   'label',
   'options',
+  'numbers',
   'ref',
   'display',
   'populate',
@@ -74,7 +75,11 @@ const FIELD_KEY_ORDER: Array<keyof AdminFieldConfig> = [
   'list',
   'filter',
   'default',
-  'component'
+  'component',
+  'format',
+  'numberFormat',
+  'dateFormat',
+  'constraints'
 ];
 
 function renderField(field: AdminFieldConfig, indent: string): string {

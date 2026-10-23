@@ -10,14 +10,14 @@ Bu stack'in üreticisi `src/main/generators/express-mongoose/BackendGenerator.ts
 1. Klasörler (`setupDirectories`, `ensureProjectDirectories`).
 2. Core bootstrap (`ensureCoreBootstrapFiles`): eksik core dosyaları oluşturulur.
 3. Modül dosyaları (aşağıdaki sırayla).
-4. Route enjeksiyonu: yalnızca `updateExistingFiles=true` iken, idempotent. Normal işlemi olmayan modele normal route eklenmez.
+4. Route enjeksiyonu: yalnızca `updateExistingFiles=true` iken, idempotent. Normal işlemi olmayan modele normal route eklenmez. Hedef dosya `findBackendAppFile` (`utils/backendAppFile.ts`; base URL de buradan okunur): `src/app.ts`, `src/index.ts`, `src/server.ts` (ve kökteki eşleri) arasında router bağlayan (`app.use('/…', …)`) ilk dosya; Varlik360'ta `src/app.ts` (`createApp`). Route dosyası zaten import edilip bağlanmışsa (`findAdminMountPath` / `findNormalMountPath`, yol ne olursa olsun) eklenmez. Import dosyadaki mevcut router import'larının biçimini izler (`@modules/…` ya da `./modules/…`); `app.use` son router mount'undan sonra, onun girintisiyle (hata / swagger handler'larından önce). Host'a özel ara katmanlar (Varlik360 `adminApiRateLimiter`) eklenmez
 
 ## Üretilen dosyalar: `src/modules/<module>/` (kebab-case)
 
 | # | Dosya | Şablon | İçerik |
 | --- | --- | --- | --- |
 | 1 | `<m>.model.ts` | `model.hbs` | Mongoose şema + arayüz. Bağlam `buildMongooseModelContext` (BE generate ve model kaydetme aynı bağlamı kullanır) |
-| 2 | `<m>.crud.ts` | `crud.hbs` | `BaseCrudService`, `CrudAuthScope`, `HIDDEN_FIELDS` |
+| 2 | `<m>.crud.ts` | `crud.hbs` | `BaseCrudService`, `CrudAuthScope`, `HIDDEN_FIELDS`. Mesaj geçmez: hata / başarı metinleri host'un ortak `crud.*` anahtarları |
 | 3 | `<m>.filters.ts` | `filters.hbs` | Filtre → Mongo sorgusu. `filterType` zinciri `handlebars-be-filters.ts`'te |
 | 4 | `<m>.types.ts` | `types.hbs` | `Get<Entity>Filters`, `<Entity>ListBody`, enum union'ları, `<Entity>ServiceHooks` |
 | 5 | `<m>.service.ts` | `service.hbs` | CRUD delegasyonu + hook çağrıları (doğrudan `Model.find*` yok) |
@@ -58,6 +58,10 @@ Marker'lar (`// <ad>` … `// </ad>`, kaynak `utils/customBlockMarkers.ts`):
 
 - Generated servis her CRUD metodundan önce `<m>.hooks.ts`'teki hook'u çağırır:
   - `beforeList` (filtreleri değiştirir), `beforeGetById`, `beforeCreate`, `beforeUpdate`, `beforeDelete`. Hata cevabı dönen hook işlemi durdurur, cevap istemciye gider.
+  - `afterCreate(row)`, `afterUpdate(row)`, `afterDelete(row)`: yazma kaydedildikten sonra, yazılan / silinen kayıtla. Geri alınmaz; hook hata fırlatırsa cevap hata olur, kayıt durur. Tutarlılık kontrolü `before*`'tadır.
+  - `mapRows(rows)`: bir list sayfasının bütün satırları (ya da getOne'ın tek satırı) tek çağrıda, cevaba yazılmadan önce; toplu IO, N+1 yok. Aynı sırayla döner.
+  - Sözleşme ve yardımcılar asset'te: `@core/services/service-hooks` (`ServiceHooks<TFilters, TInput>`, `mapListRows`, `mapOneRow`, `runAfterWrite`). Üretilen servisler yalnızca bunları çağırır; modül başına kopya yardımcı yok. `afterDelete`'e silinen kaydı `BaseCrudService.deleteById(…, { onDeleted })` verir.
+  - Satırlar `toWire` öncesi DB kaydıdır (`_id`); `lean: false` okuyan modülde Mongoose dokümanıdır.
   - `defaultSort?: Record<string, 1 | -1>`: istek `sortBy` göndermezse; varsayılan `{ createdAt: -1, _id: -1 }`.
 - Export'lar: `<camel>Hooks` (normal), `<camel>AdminHooks` (admin). Tip: `<Entity>ServiceHooks`. Hook yoksa davranış değişmez.
 - Servisleri kullanıcıya ait modülde hooks dosyası oluşturulmaz.
@@ -90,6 +94,10 @@ Marker'lar (`// <ad>` … `// </ad>`, kaynak `utils/customBlockMarkers.ts`):
 - ObjectId dönüşümü: `Types.ObjectId.createFromHexString(...)`.
 - Şablon yoksa hata loglanır, dosya atlanır.
 - `Get*Query = Get*Filters` alias'ı geçici; `filters.hbs` ve host'un kendi filtre dosyaları kullanıyor.
+
+## Host çevirileri
+
+CRUD mesajları modül başına değil, host'un locale dosyalarında tek bir `crud` bloğundadır: `listFailed`, `getByIdFailed`, `createFailed`, `updateFailed`, `deleteFailed`, `notFound`, `deleteSuccess` (entity adı geçmez). `BaseCrudService` bunları mesaj verilmeyen her çağrıda, istek dilinde `t('crud.*')` ile çözer. Yeni modül locale'e bir şey eklemez. Bir servis kendi metnini isterse `defaultMessages` ya da metot `errorMessages` ile verir. Varlik360'ta blok `src/locales/en.ts` / `tr.ts`'te; modüllerin eski `<modül>.getAllFailed` … blokları regen sonrası kullanılmaz.
 
 ## Core asset'ler
 

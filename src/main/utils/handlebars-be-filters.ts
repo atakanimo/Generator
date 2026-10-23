@@ -11,10 +11,17 @@ type FilterField = {
   isSearchable?: boolean;
   filterType?: string;
   fieldDbType?: string;
+  /** `date`: stored as a `YYYY-MM-DD` string → string range (`dateOnlyRangeFilter`). */
+  dateFormat?: string;
 };
 
+function rangeFn(filterType: string, dateFormat: string | undefined): string {
+  if (filterType === 'range') return 'numberRangeFilter';
+  return dateFormat === 'date' ? 'dateOnlyRangeFilter' : 'dateRangeFilter';
+}
+
 /** One field's filter lines; values are already validated by the Zod filter schema. */
-function block(name: string, filterType: string): string {
+function block(name: string, filterType: string, dateFormat?: string): string {
   const v = `filters.${name}`;
   switch (filterType) {
     case 'objectId':
@@ -25,7 +32,7 @@ function block(name: string, filterType: string): string {
       return `  if (hasFilterValue(${v})) query.${name} = Array.isArray(${v}) ? { $in: ${v} } : ${v};\n`;
     case 'range':
     case 'date-range': {
-      const fn = filterType === 'range' ? 'numberRangeFilter' : 'dateRangeFilter';
+      const fn = rangeFn(filterType, dateFormat);
       return `  const ${name}Filter = ${fn}(${v});\n  if (${name}Filter !== undefined) query.${name} = ${name}Filter;\n`;
     }
     default:
@@ -40,7 +47,7 @@ export function emitBeFilterQueryBlocks(fields: unknown): string {
   for (const raw of fields as FilterField[]) {
     const name = String(raw?.name ?? '').trim();
     if (!name || name === '_id' || name === 'id' || raw.isSearchable !== true) continue;
-    out += block(name, String(raw.filterType ?? ''));
+    out += block(name, String(raw.filterType ?? ''), raw.dateFormat);
   }
   return out;
 }
@@ -51,8 +58,7 @@ export function beFilterHelperImports(fields: unknown): string {
   for (const raw of Array.isArray(fields) ? (fields as FilterField[]) : []) {
     if (raw?.isSearchable !== true) continue;
     if (raw.filterType === 'regex') used.add('regexFilter');
-    if (raw.filterType === 'range') used.add('numberRangeFilter');
-    if (raw.filterType === 'date-range') used.add('dateRangeFilter');
+    if (raw.filterType === 'range' || raw.filterType === 'date-range') used.add(rangeFn(raw.filterType, raw.dateFormat));
   }
   return [...used].sort().join(', ');
 }

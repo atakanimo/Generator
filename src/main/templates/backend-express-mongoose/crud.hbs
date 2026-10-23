@@ -2,7 +2,6 @@
 import { BaseCrudService, type CrudAuthScope } from '@core/services/base-crud.service';
 import { {{entityName}}, type I{{entityName}} } from './{{moduleName}}.model';
 import type { Model } from 'mongoose';
-import { t } from '@helpers';
 
 // <custom-imports>
 // </custom-imports>
@@ -17,15 +16,7 @@ class {{entityName}}Crud extends BaseCrudService<I{{entityName}}> {
   constructor(authScope: CrudAuthScope = false) {
     super(
       {{entityName}} as unknown as Model<I{{entityName}}>,
-      {
-        listFailed: t('{{camelEntityName}}.getAllFailed'),
-        getByIdFailed: t('{{camelEntityName}}.getByIdFailed'),
-        createFailed: t('{{camelEntityName}}.createFailed'),
-        updateFailed: t('{{camelEntityName}}.updateFailed'),
-        deleteFailed: t('{{camelEntityName}}.deleteFailed'),
-        notFound: t('{{camelEntityName}}.notFoundOrUnauthorized'),
-        successMessage: t('{{camelEntityName}}.deleteSuccess')
-      },
+      {}, // messages: the host's shared `crud.*` keys (BaseCrudService)
       authScope{{#if hiddenFields.length}},
       HIDDEN_FIELDS{{/if}}
     );

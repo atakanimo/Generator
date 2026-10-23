@@ -7,6 +7,12 @@
  */
 import type { NormalizedField, NormalizedModel, NormalizedObjectSubField } from './normalizedModel.js';
 import { typeTokenOf } from './fieldTypeToken.js';
+import { constraintsForField, syncEnumNumbers } from './fieldConstraints.js';
+
+/** `numberFormat` is a C# / Python choice (JSON number is the same). Hidden for Express. */
+export function editorShowsNumberFormat(sourceType: string | null | undefined): boolean {
+  return sourceType === 'dotnet-ef' || sourceType === 'python-fastapi';
+}
 
 /** What the model editor saves: the model plus the seed (`initialize<Model>`) function, which only the file holds. */
 export interface ModelDraft {
@@ -150,16 +156,52 @@ export function withSubReference(sub: NormalizedObjectSubField, ref: string | un
   return out;
 }
 
+export function withConstraint(field: NormalizedField, key: 'minLength' | 'maxLength' | 'min' | 'max', raw: string): NormalizedField {
+  const constraints = { ...field.constraints };
+  if (raw.trim() === '') delete constraints[key];
+  else {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return field;
+    constraints[key] = n;
+  }
+  const out = { ...field };
+  if (Object.keys(constraints).length) out.constraints = constraints;
+  else delete out.constraints;
+  return out;
+}
+
+export function withPattern(field: NormalizedField, raw: string): NormalizedField {
+  const constraints = { ...field.constraints };
+  if (!raw.trim()) delete constraints.pattern;
+  else constraints.pattern = raw;
+  const out = { ...field };
+  if (Object.keys(constraints).length) out.constraints = constraints;
+  else delete out.constraints;
+  return out;
+}
+
 /** String field enum values: set → `kind: 'enum'`, cleared → `kind: 'string'`. */
 export function withEnumValues(field: NormalizedField, values: string[] | undefined): NormalizedField {
   const out = { ...field };
   if (values?.length) {
     out.kind = 'enum';
-    out.enum = { values };
+    // A numeric enum stays numeric; labels added at the end get the next free number.
+    out.enum = field.enum?.numbers ? { values, numbers: syncEnumNumbers(field.enum.numbers, values.length) } : { values };
   } else {
     if (out.kind === 'enum') out.kind = 'string';
     delete out.enum;
   }
+  return out;
+}
+
+/**
+ * Numeric enum on / off, or new numbers (`numbers[i]` is the stored value of label i). `undefined` → string enum.
+ * Turning it on starts from 0, 1, 2… which the user may then change.
+ */
+export function withEnumNumbers(field: NormalizedField, numbers: number[] | undefined): NormalizedField {
+  if (!field.enum) return field;
+  const out = { ...field };
+  out.enum = numbers ? { values: field.enum.values, numbers: syncEnumNumbers(numbers, field.enum.values.length) } : { values: field.enum.values };
   return out;
 }
 
@@ -172,11 +214,28 @@ export function editorTypeHasDefault(type: EditorFieldType): boolean {
  * Tidy a field the user edited, before save: trimmed names, named sub-fields only, sub-field options that
  * belong to their type, no default on types without one.
  */
+/** Drop type details that do not belong to the kind the editor saved. */
+function tidyTypeDetails(out: NormalizedField): void {
+  if (out.kind !== 'number' || out.numberFormat !== 'int') delete out.numberFormat;
+  if (out.kind !== 'date' || out.dateFormat !== 'date') delete out.dateFormat;
+  if (out.kind !== 'string' || out.enum?.values?.length || out.format !== 'email') delete out.format;
+  if (out.enum?.numbers) {
+    out.enum = out.enum.numbers.length ? { ...out.enum, numbers: syncEnumNumbers(out.enum.numbers, out.enum.values.length) } : { values: out.enum.values };
+  }
+  const constraints = constraintsForField(out, out.constraints);
+  if (constraints) out.constraints = constraints;
+  else delete out.constraints;
+}
+
 export function normalizeEditedField(field: NormalizedField): NormalizedField {
   const out: NormalizedField = { ...field, name: field.name.trim() };
   if (out.kind === 'object') {
     delete out.enum;
     delete out.default;
+    delete out.numberFormat;
+    delete out.dateFormat;
+    delete out.format;
+    delete out.constraints;
     if (out.object) {
       const typeName = out.object.typeName?.trim();
       const schemaName = out.object.schemaName?.trim();
@@ -202,5 +261,6 @@ export function normalizeEditedField(field: NormalizedField): NormalizedField {
     return out;
   }
   if (!editorTypeHasDefault(editorTypeOf(out))) delete out.default;
+  tidyTypeDetails(out);
   return out;
 }

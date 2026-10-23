@@ -71,7 +71,9 @@ Tek generic interface `ICrudService<TRow, TCreate, TUpdate, TFilters>` (List / G
 
 Create / update sırası: map → m-n ilişkileri yükle → tekil ilişki var mı (yoksa 400) → unique (409) → hook → kaydet → `WriteRow` ile yeniden oku. Delete'te kullanılan kayıt (FK Restrict) ve yarışta kaçan unique ihlali `EnvelopeExceptionHandler`'da 409 olur.
 
-Hook'lar: `I<E>Hooks` (normal) ve `I<E>AdminHooks` (admin), `ServiceHooks<…>`'tan türer: `BeforeList`, `BeforeGetById`, `BeforeCreate`, `BeforeUpdate`, `BeforeDelete`, `DefaultSort`. `Error` dönen hook işlemi durdurur.
+Hook'lar: `I<E>Hooks` (normal) ve `I<E>AdminHooks` (admin), `ServiceHooks<…>`'tan türer: `BeforeList`, `BeforeGetById`, `BeforeCreate`, `BeforeUpdate`, `BeforeDelete`, `DefaultSort`, `AfterCreate(entity)`, `AfterUpdate(entity)`, `AfterDelete(entity)`, `MapRows(rows)`. `Error` dönen `Before*` işlemi durur. `After*` yazılan / silinen kayıtla çalışır, geri alınmaz. `MapRows` bir list sayfasının satırlarını (getOne'da tek satır) tek çağrıda, async değiştirir (toplu IO). Set, Express ve Python ile aynı.
+
+**Geçiş (PY1, kırıcı):** `IServiceHooks` / `ServiceHooks` beşinci tip parametresi `TRow` aldı ve `MapRows` eklendi. Modülün `Hooks.cs`'i K dosyasıdır, Generator ezmez: var olan host'ta her `I<E>Hooks` / `I<E>AdminHooks` ve `<E>Hooks` / `<E>AdminHooks` bildirimine `, <E>Row` eklenir; asset'ler (`Common/`) yalnızca yoksa yazıldığı için `ServiceHooks.cs`, `CrudServiceBase.cs`, `FilterExtensions.cs`, `TraceIdMiddleware.cs`, `ApiResponse.cs`, `ResultExtensions.cs`, `ApiSetup.cs`, `JsonSetup.cs` elle güncellenir, `Domain/Common/NumericEnumAttribute.cs` eklenir (sayısal enum: `[NumericEnum]` + `Name = n`; küresel string enum dönüştürücüsü bu enum'ları atlar).
 
 ## Normal API ve ownership
 

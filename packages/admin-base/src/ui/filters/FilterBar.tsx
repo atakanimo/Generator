@@ -2,8 +2,10 @@ import { Box, Button, MenuItem, Stack, TextField } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
 import { useState, type KeyboardEvent } from 'react';
+import { useFieldOptions } from '../../react/hooks.js';
+import type { AnyResource } from '../../schema/extend.js';
 import type { FieldConfig } from '../../schema/fields.js';
-import type { ResourceSchema } from '../../schema/resource.js';
+import { enumChoices, enumValueFromInput } from '../enumChoices.js';
 import { isRecord } from '../format.js';
 import { RelationAutocomplete } from '../inputs/RelationAutocomplete.js';
 import { fieldLabelKey, useAdminTexts } from '../useAdminTexts.js';
@@ -13,8 +15,36 @@ import { buildListFilters, type FilterDraft } from './filterValues.js';
 const minWidthFor: Record<string, number> = { boolean: 140, enum: 140, 'date-range': 160, range: 120, relation: 200 };
 
 export interface FilterBarProps {
-  resource: ResourceSchema;
+  resource: AnyResource;
   onApply: (filters: Record<string, unknown>) => void;
+}
+
+interface EnumFilterProps {
+  resource: AnyResource;
+  field: FieldConfig;
+  label: string;
+  sx: { minWidth: number };
+  value: unknown;
+  onChange: (value: unknown) => void;
+}
+
+/** Ayrı bileşen: `loadOptions` sorgusu hook olduğu için alan başına bir kez çağrılmalı. */
+function EnumFilter({ resource, field, label, sx, value, onChange }: EnumFilterProps) {
+  const texts = useAdminTexts();
+  const loadOptions = resource.extensions?.fields?.[field.name]?.loadOptions;
+  const loaded = useFieldOptions(resource.name, field, loadOptions);
+  const choices = enumChoices(field, loadOptions ? loaded : undefined);
+  return (
+    <TextField select size='small' label={label} sx={sx} value={value ?? ''}
+      onChange={e => onChange(enumValueFromInput(field, e.target.value))}>
+      <MenuItem value=''>{texts.text('all')}</MenuItem>
+      {choices.map(choice => (
+        <MenuItem key={String(choice.value)} value={choice.value}>
+          {texts.enumLabel(resource, field.name, choice.label)}
+        </MenuItem>
+      ))}
+    </TextField>
+  );
 }
 
 /** Taslak / uygulanmış ayrımı: istek yalnızca "Uygula" ile atılır. */
@@ -51,16 +81,7 @@ export function FilterBar({ resource, onApply }: FilterBarProps) {
           </TextField>
         );
       case 'enum':
-        return (
-          <TextField select size='small' label={label} sx={sx} value={raw ?? ''} onChange={e => set(field.name, e.target.value)}>
-            <MenuItem value=''>{text('all')}</MenuItem>
-            {(field.kind === 'enum' ? field.options : []).map(option => (
-              <MenuItem key={option} value={option}>
-                {texts.enumLabel(resource, field.name, option)}
-              </MenuItem>
-            ))}
-          </TextField>
-        );
+        return <EnumFilter resource={resource} field={field} label={label} sx={sx} value={raw} onChange={v => set(field.name, v)} />;
       case 'relation':
         return field.kind === 'relation' ? (
           <RelationAutocomplete field={field} label={label} value={raw} onChange={v => set(field.name, v)} sx={sx} />

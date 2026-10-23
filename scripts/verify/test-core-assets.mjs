@@ -18,7 +18,21 @@ await build({
   platform: 'node',
   format: 'esm',
   outfile,
-  logLevel: 'silent'
+  logLevel: 'silent',
+  plugins: [
+    {
+      // `service-hooks` imports the host-aware error helper (request context, logger); the test only needs its shape.
+      name: 'stub-error-helper',
+      setup(api) {
+        api.onResolve({ filter: /^@core\/errors\/error\.helper$/ }, () => ({ path: 'error-helper', namespace: 'stub' }));
+        api.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
+          contents:
+            'export const HandleServiceError = (error, opts) => ({ isSuccess: false, data: null, uiMessage: null, errorData: { message: String(error?.message ?? error), header: opts?.context ?? "", code: 500 } });',
+          loader: 'js'
+        }));
+      }
+    }
+  ]
 });
 
 const run = spawnSync(process.execPath, ['--test', outfile], { stdio: 'inherit' });

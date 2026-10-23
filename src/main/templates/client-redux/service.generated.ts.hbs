@@ -53,13 +53,13 @@ export const getAll = async (
   body?: {{names.listBody}},
   options?: RequestOptions
 ): Promise<LocalResponse<PaginatedList<{{names.row}}>>> => {
-  return API({ url: '{{endpoint}}/get-all', method: 'POST', data: body ?? {}, ...requestFlags(options) });
+  return API({ url: '{{endpoint}}/get-all', method: 'POST', data: body ?? {}, ...requestFlags(options, true) });
 };
 {{/if}}
 {{#if ops.getOne}}
 
 export const getById = async (id: string, options?: RequestOptions): Promise<LocalResponse<{{names.row}}>> => {
-  return API({ url: `{{endpoint}}/${id}`, method: 'GET', ...requestFlags(options) });
+  return API({ url: `{{endpoint}}/${id}`, method: 'GET', ...requestFlags(options, true) });
 };
 {{/if}}
 {{#if ops.create}}

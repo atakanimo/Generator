@@ -54,7 +54,9 @@ const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const ENVELOPE_KEYS = ['data', 'errorData', 'isSuccess', 'uiMessage'];
 
 function isEnvelope(r) {
-  return r.json && JSON.stringify(Object.keys(r.json).sort()) === JSON.stringify(ENVELOPE_KEYS);
+  if (!r.json || (r.json.traceId !== undefined && typeof r.json.traceId !== 'string')) return false;
+  const keys = Object.keys(r.json).filter((key) => key !== 'traceId').sort();
+  return JSON.stringify(keys) === JSON.stringify(ENVELOPE_KEYS);
 }
 function okEnvelope(r) {
   return r.status === 200 && isEnvelope(r) && r.json.isSuccess === true && r.json.errorData === null && typeof r.json.uiMessage === 'string';

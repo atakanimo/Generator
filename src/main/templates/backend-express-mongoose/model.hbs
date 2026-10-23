@@ -76,7 +76,7 @@ const {{schemaName}} = new Schema<{{interfaceName}}>(
     }{{#unless @last}},{{/unless}}
 {{else}}
     {{name}}: {
-      type: {{mongooseType}}{{#if required}}, required: true{{/if}}{{#if unique}}, unique: true{{/if}}{{#if trim}}, trim: true{{/if}}{{#if enumLiteral}}, enum: [{{enumLiteral}}]{{/if}}{{#if defaultLiteral}}, default: {{defaultLiteral}}{{/if}}{{#each nativeOptions}}, {{this}}{{/each}}{{#if ref}},
+      type: {{mongooseType}}{{#if required}}, required: true{{/if}}{{#if unique}}, unique: true{{/if}}{{#if trim}}, trim: true{{/if}}{{#if enumLiteral}}, enum: [{{enumLiteral}}]{{/if}}{{#if minLength}}, minlength: {{minLength}}{{/if}}{{#if maxLength}}, maxlength: {{maxLength}}{{/if}}{{#if minimum}}, min: {{minimum}}{{/if}}{{#if maximum}}, max: {{maximum}}{{/if}}{{#if matchLiteral}}, match: {{{matchLiteral}}}{{/if}}{{#if defaultLiteral}}, default: {{defaultLiteral}}{{/if}}{{#each nativeOptions}}, {{this}}{{/each}}{{#if ref}},
       ref: '{{ref}}'{{/if}}
     }{{#unless @last}},{{/unless}}
 {{/if}}

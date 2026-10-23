@@ -13,6 +13,7 @@ import type {
   NormalizedObjectSubField
 } from '../../../shared/normalizedModel.js';
 import { NORMAL_OPERATIONS } from '../../../shared/normalizedModel.js';
+import { constraintsForField, EMAIL_PATTERN, isNumericEnum } from '../../../shared/fieldConstraints.js';
 import { kebabCase, moduleNameFromEntity, pascalCase, pluralize, singularize } from '../../utils/namingUtils.js';
 import type { DotnetRegistryModule } from './DotnetHostBootstrap.js';
 
@@ -24,7 +25,9 @@ export class DotnetUnsupportedError extends Error {}
 
 export interface DotnetEnum {
   name: string;
-  members: Array<{ name: string; value: string; literal: string }>;
+  /** JSON number: each member carries its explicit `number` (`Name = n`). Absent → string enum. */
+  numeric?: boolean;
+  members: Array<{ name: string; value: string; literal: string; number?: number }>;
 }
 
 /** Embedded object class (EF complex type, `ToJson()`). */
@@ -53,6 +56,7 @@ interface FieldInfo {
   required: boolean;
   defaultLiteral?: string;
   enumName?: string;
+  enumNumeric?: boolean;
   /** ref: FK property; refArray: navigation collection. */
   fk?: string;
   nav?: string;
@@ -152,6 +156,18 @@ const SCALAR_TYPES: Record<string, { type: string; isValueType: boolean }> = {
   boolean: { type: 'bool', isValueType: true },
   date: { type: 'DateTimeOffset', isValueType: true }
 };
+
+function clrScalar(field: NormalizedField): { type: string; isValueType: boolean } {
+  if (field.kind === 'number') {
+    return field.numberFormat === 'int' ? { type: 'int', isValueType: true } : { type: 'double', isValueType: true };
+  }
+  if (field.kind === 'date') {
+    return field.dateFormat === 'date' ? { type: 'DateOnly', isValueType: true } : { type: 'DateTimeOffset', isValueType: true };
+  }
+  const known = SCALAR_TYPES[field.kind];
+  if (!known) throw new DotnetUnsupportedError(`${field.name}: ${field.kind}`);
+  return known;
+}
 
 function mapValueType(field: NormalizedField): string {
   const native = field.native?.type ?? '';
@@ -312,17 +328,24 @@ function describeModel(model: NormalizedModel, targets: Map<string, TargetInfo>)
     if (field.kind === 'enum') {
       const values = field.enum?.values ?? [];
       if (values.length === 0) throw new DotnetUnsupportedError(`${where}: enum değeri yok.`);
-      enumDef = { name: `${entity}${field.isArray ? singularize(prop) : prop}`, members: values.map((value) => ({ name: enumMemberName(value), value, literal: csString(value) })) };
+      const numbers = isNumericEnum(field.enum) ? field.enum.numbers : undefined;
+      const numeric = numbers !== undefined;
+      enumDef = {
+        name: `${entity}${field.isArray ? singularize(prop) : prop}`,
+        numeric,
+        members: values.map((value, i) => ({ name: enumMemberName(value), value, literal: csString(value), number: numbers?.[i] }))
+      };
       enums.push(enumDef);
     }
-    const { type, isValueType } = enumDef ? { type: enumDef.name, isValueType: true } : SCALAR_TYPES[field.kind];
+    const { type, isValueType } = enumDef ? { type: enumDef.name, isValueType: true } : clrScalar(field);
     fields.push({
       ...base,
       category: field.isArray ? (enumDef ? 'enumArray' : 'scalarArray') : 'scalar',
       type,
       isValueType,
       defaultLiteral: defaultLiteral(field, enumDef),
-      enumName: enumDef?.name
+      enumName: enumDef?.name,
+      enumNumeric: enumDef?.numeric
     });
   }
   return { model, names, fields, enums, complexTypes };
@@ -344,6 +367,33 @@ function valueType(f: FieldInfo): string {
   }
 }
 
+function boundLiteral(type: string, value: number): string {
+  if (type === 'decimal') return `${value}m`;
+  if (type === 'double') return Number.isInteger(value) ? `${value}d` : String(value);
+  return String(value);
+}
+
+/** One FluentValidation call each, so `.When` applies to that check (optional bodies). */
+function validatorChecks(f: FieldInfo): string[] {
+  const checks: string[] = [];
+  // Same limits and email pattern as the other stacks (`fieldConstraints.ts`); arrays carry none.
+  const c = constraintsForField(f.source, f.source.constraints);
+  if (f.category === 'scalar' && f.type === 'string') {
+    if (f.required) checks.push('NotEmpty()');
+    if (f.source.format === 'email') checks.push(`Matches(${csString(EMAIL_PATTERN)})`);
+    if (c?.minLength != null) checks.push(`MinimumLength(${c.minLength})`);
+    if (c?.maxLength != null) checks.push(`MaximumLength(${c.maxLength})`);
+    if (c?.pattern) checks.push(`Matches(${csString(c.pattern)})`);
+  }
+  if (f.category === 'scalar' && (f.type === 'int' || f.type === 'double' || f.type === 'decimal')) {
+    if (c?.min != null) checks.push(`GreaterThanOrEqualTo(${boundLiteral(f.type, c.min)})`);
+    if (c?.max != null) checks.push(`LessThanOrEqualTo(${boundLiteral(f.type, c.max)})`);
+  }
+  if (f.enumName && f.category === 'scalar') checks.push('IsInEnum()');
+  if (f.category === 'ref' && f.required) checks.push('NotEmpty()');
+  return checks;
+}
+
 function isCollection(f: FieldInfo): boolean {
   return f.category === 'scalarArray' || f.category === 'enumArray' || f.category === 'objectArray' || f.category === 'refArray';
 }
@@ -360,9 +410,7 @@ function buildBody(name: string, fields: FieldInfo[], mode: 'create' | 'update')
     props.push(requiredHere ? `public required ${t} ${f.prop} { get; init; }` : `public ${t}? ${f.prop} { get; init; }`);
 
     const when = requiredHere ? '' : `.When(x => x.${f.prop} is not null)`;
-    if (f.category === 'scalar' && f.type === 'string' && f.required) rules.push(`RuleFor(x => x.${f.prop}).NotEmpty()${when};`);
-    if (f.enumName && f.category === 'scalar') rules.push(`RuleFor(x => x.${f.prop}).IsInEnum()${when};`);
-    if (f.category === 'ref' && f.required) rules.push(`RuleFor(x => x.${f.prop}).NotEmpty()${when};`);
+    for (const check of validatorChecks(f)) rules.push(`RuleFor(x => x.${f.prop}).${check}${when};`);
     if ((f.category === 'object' || f.category === 'json') && requiredHere) rules.push(`RuleFor(x => x.${f.prop}).NotNull();`);
 
     const trim = f.source.trim === true && f.category === 'scalar' && f.type === 'string';
@@ -560,7 +608,7 @@ function buildModuleContext(app: string, info: ModelInfo, infos: Map<string, Mod
     switch (f.category) {
       case 'scalar':
         if (f.type === 'string' && f.required) configLines.push(`builder.Property(x => x.${f.prop}).IsRequired();`);
-        if (f.enumName) configLines.push(`builder.Property(x => x.${f.prop}).HasConversion<string>();`);
+        if (f.enumName && !f.enumNumeric) configLines.push(`builder.Property(x => x.${f.prop}).HasConversion<string>();`);
         break;
       case 'enumArray':
       case 'map':

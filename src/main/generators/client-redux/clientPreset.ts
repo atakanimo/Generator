@@ -2,7 +2,7 @@
  * Client data-layer presets (plan client-data-layer §2 #9): where files go and what the host provides.
  * The generated code only differs by these values; the shape of the files is the same for every client.
  */
-export type ClientPresetId = 'redux-rn';
+export type ClientPresetId = 'redux-rn' | 'redux-web';
 
 export interface ClientPreset {
   id: ClientPresetId;
@@ -34,6 +34,17 @@ export const REDUX_RN_PRESET: ClientPreset = {
   requestFlags: 'headers'
 };
 
+/**
+ * React web (SharedFrame `apps/web`): same layout and names as `redux-rn`; the interceptor reads `skipLoading` /
+ * `skipSuccessToast` from the axios config (contract §7), and reads never show the success toast.
+ */
+export const REDUX_WEB_PRESET: ClientPreset = {
+  ...REDUX_RN_PRESET,
+  id: 'redux-web',
+  requestFlags: 'config'
+};
+
 export const CLIENT_PRESETS: Record<ClientPresetId, ClientPreset> = {
-  'redux-rn': REDUX_RN_PRESET
+  'redux-rn': REDUX_RN_PRESET,
+  'redux-web': REDUX_WEB_PRESET
 };

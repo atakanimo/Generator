@@ -70,9 +70,13 @@ function withFieldExtras(fieldContent: string, field: NormalizedField): Normaliz
   let out: NormalizedField = { ...field };
   if (extras.enumValues) {
     const token = typeTokenOf(field);
-    out.enum = { values: extras.enumValues };
+    out.enum = extras.enumNumbers ? { values: extras.enumValues, numbers: extras.enumNumbers } : { values: extras.enumValues };
     out = withTypeToken(out, token);
   }
+  // Date-only fields are stored as `YYYY-MM-DD` strings; the `match` pattern marks them.
+  if (extras.dateOnly) out = { ...withTypeToken(out, 'Date'), dateFormat: 'date' };
+  if (extras.constraints) out.constraints = { ...out.constraints, ...extras.constraints };
+  if (extras.format) out.format = extras.format;
   if (extras.schemaDefault !== undefined) out.default = extras.schemaDefault;
   if (extras.hidden) out.access = { ...out.access, hidden: true };
   if (extras.nativeOptions) out = withNative(out, { options: extras.nativeOptions });

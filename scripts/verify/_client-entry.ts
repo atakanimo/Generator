@@ -5,3 +5,6 @@ export { mergeModel } from '../../src/shared/modelMerge.ts';
 export { generateClientModules } from '../../src/main/generators/client-redux/ClientGenerator.ts';
 export { REDUX_RN_PRESET } from '../../src/main/generators/client-redux/clientPreset.ts';
 export { resolveNormalApi } from '../../src/shared/normalApi.ts';
+export { REDUX_WEB_PRESET } from '../../src/main/generators/client-redux/clientPreset.ts';
+export { loadDotnetModels } from '../../src/main/ipc/dotnetBackend.ts';
+export { findDotnetHost } from '../../src/main/parsers/dotnet/dotnetHost.ts';

@@ -6,7 +6,8 @@ import { useState } from 'react';
 import type { FieldConfig } from '../../schema/fields.js';
 import { relationLabel } from '../../schema/relation.js';
 import type { ResourceSchema } from '../../schema/resource.js';
-import { formatDateTime, isEmptyValue, shortId, valueSummary } from '../format.js';
+import { enumLabelOf } from '../enumChoices.js';
+import { formatDate, formatDateTime, isEmptyValue, shortId, valueSummary } from '../format.js';
 import { fieldLabelKey, useAdminTexts } from '../useAdminTexts.js';
 
 const cellTextSx = { fontSize: '0.875rem', minWidth: 0 } as const;
@@ -81,11 +82,11 @@ export function ValueCell({ resource, field, value, onOpenJson }: ValueCellProps
     case 'relation':
       return <TextCell text={list.map(v => relationLabel(v, field)).join(', ')} />;
     case 'enum':
-      return <TextCell text={list.map(v => enumLabel(resource, field.name, String(v))).join(', ')} />;
+      return <TextCell text={list.map(v => enumLabel(resource, field.name, enumLabelOf(field, v))).join(', ')} />;
     case 'boolean':
       return value ? <CheckIcon fontSize='small' color='success' /> : <CloseIcon fontSize='small' color='disabled' />;
     case 'datetime':
-      return <TextCell text={list.map(formatDateTime).join(', ')} />;
+      return <TextCell text={list.map(v => (field.dateFormat === 'date' ? formatDate(v) : formatDateTime(v))).join(', ')} />;
     case 'object':
     case 'map':
     case 'json':

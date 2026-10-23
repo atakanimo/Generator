@@ -8,48 +8,33 @@ import { safePathExists, safeReadFile } from './fileUtils.js';
 import { log } from './logger.js';
 import { getProjectRootPath } from './templateHelpers.js';
 
+const APP_FILE_CANDIDATES = ['src/app.ts', 'src/index.ts', 'src/server.ts', 'app.ts', 'index.ts', 'server.ts'];
+
+/**
+ * The BE app file: the first candidate that mounts routers (`app.use('/…', …)`), else the first that exists.
+ * Varlik360 has both `src/index.ts` (server start) and `src/app.ts` (`createApp`, the mounts): this picks `app.ts`.
+ * Single lookup for the base URL and route injection (`BackendGenerator.mountRouter`).
+ */
+export function findBackendAppFile(backendPath: string): string | null {
+  const projectRoot = getProjectRootPath(backendPath);
+  const existing = APP_FILE_CANDIDATES.map(rel => join(projectRoot, rel)).filter(path => safePathExists(path));
+  const mounts = existing.find(path => /app\.use\(\s*['"]\//.test(safeReadFile(path).content ?? ''));
+  return mounts ?? existing[0] ?? null;
+}
+
 /** API base URL from the first `/api…` mount (`/api/symbols` → `/api/symbols`, `/api` → `/api`); default `/api`. */
 export function parseBaseUrlFromBackend(backendPath: string): string {
   try {
-    const projectRoot = getProjectRootPath(backendPath);
-
-    const possiblePaths = [
-      join(projectRoot, 'src', 'index.ts'),
-      join(projectRoot, 'src', 'app.ts'),
-      join(projectRoot, 'src', 'server.ts'),
-      join(projectRoot, 'index.ts'),
-      join(projectRoot, 'app.ts'),
-      join(projectRoot, 'server.ts')
-    ];
-
-    for (const path of possiblePaths) {
-      if (safePathExists(path)) {
-        const readResult = safeReadFile(path);
-        if (readResult.success && readResult.content) {
-          const matches = Array.from(readResult.content.matchAll(/app\.use\(['"]([^'"]+)['"]/g));
-
-          if (matches.length > 0) {
-            const apiRoutes = matches.map(m => m[1]).filter(p => p.startsWith('/api'));
-
-            if (apiRoutes.length > 0) {
-              const firstRoute = apiRoutes[0];
-              const parts = firstRoute.split('/').filter(p => p);
-
-              if (parts.length >= 1 && parts[0] === 'api') {
-                if (parts.length >= 2) {
-                  return `/${parts[0]}/${parts[1]}`;
-                }
-                return '/api';
-              }
-
-              return firstRoute;
-            }
-          }
-        }
-      }
-    }
-
-    return '/api'; // Default fallback
+    const appFile = findBackendAppFile(backendPath);
+    const content = appFile ? safeReadFile(appFile).content : undefined;
+    if (!content) return '/api';
+    const apiRoutes = Array.from(content.matchAll(/app\.use\(['"]([^'"]+)['"]/g))
+      .map(m => m[1])
+      .filter(p => p.startsWith('/api'));
+    if (apiRoutes.length === 0) return '/api';
+    const parts = apiRoutes[0].split('/').filter(p => p);
+    if (parts[0] !== 'api') return apiRoutes[0];
+    return parts.length >= 2 ? `/${parts[0]}/${parts[1]}` : '/api';
   } catch (error) {
     log(`Error parsing base URL from backend | ${JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' })}`, 'error');
     return '/api';

@@ -497,5 +497,122 @@
       ],
       "admin": true
     }
+  },
+  {
+    "schemaVersion": 2,
+    "entityName": "Reminders",
+    "fields": [
+      {
+        "name": "title",
+        "kind": "string",
+        "isArray": false,
+        "required": true,
+        "constraints": {
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "filter": {
+          "searchable": true,
+          "type": "regex"
+        }
+      },
+      {
+        "name": "code",
+        "kind": "string",
+        "isArray": false,
+        "required": false,
+        "constraints": {
+          "pattern": "^[A-Z]{3}$"
+        }
+      },
+      {
+        "name": "contactEmail",
+        "kind": "string",
+        "isArray": false,
+        "required": false,
+        "format": "email"
+      },
+      {
+        "name": "priority",
+        "kind": "enum",
+        "isArray": false,
+        "required": true,
+        "enum": {
+          "values": [
+            "low",
+            "high"
+          ],
+          "numbers": [
+            10,
+            20
+          ]
+        },
+        "filter": {
+          "searchable": true,
+          "type": "enum"
+        }
+      },
+      {
+        "name": "attempts",
+        "kind": "number",
+        "isArray": false,
+        "required": false,
+        "numberFormat": "int",
+        "constraints": {
+          "min": 0,
+          "max": 10
+        }
+      },
+      {
+        "name": "dueOn",
+        "kind": "date",
+        "isArray": false,
+        "required": false,
+        "dateFormat": "date",
+        "filter": {
+          "searchable": true,
+          "type": "date-range"
+        }
+      },
+      {
+        "name": "tags",
+        "kind": "string",
+        "isArray": true,
+        "required": false,
+        "constraints": {
+          "minLength": 1
+        }
+      },
+      {
+        "name": "createdAt",
+        "kind": "date",
+        "isArray": false,
+        "required": false,
+        "access": {
+          "readonly": true
+        }
+      },
+      {
+        "name": "updatedAt",
+        "kind": "date",
+        "isArray": false,
+        "required": false,
+        "access": {
+          "readonly": true
+        }
+      }
+    ],
+    "timestamps": {
+      "createdAt": true,
+      "updatedAt": true
+    },
+    "api": {
+      "normalOperations": [
+        "list",
+        "getOne"
+      ],
+      "requiresAuth": false,
+      "admin": true
+    }
   }
 ]

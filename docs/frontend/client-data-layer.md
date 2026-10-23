@@ -90,7 +90,15 @@ const NotificationsSlicer = createSlice({
 
 ## Preset
 
-`clientPreset.ts`. Bugün `redux-rn` (Varlik360 `apps/mobile`): klasörler `src/services`, `src/store/thunks`, `src/store/slices`; host'tan `API` (`@/services/api`), `LocalResponse` (`@/types`), `RootState` (`@/store`); istek bayrakları header'da (`requestFlags: 'headers'`, interceptor `config.headers.skipLoading` okur). Web için `config` taşıması hazır, preset C5'te.
+`clientPreset.ts`. İki preset de aynı klasör ve adları kullanır: `src/services`, `src/store/thunks`, `src/store/slices`; host'tan `API` (`@/services/api`), `LocalResponse` (`@/types`), `RootState` (`@/store`).
+
+| Preset | İstemci | İstek bayrakları |
+| --- | --- | --- |
+| `redux-rn` | Varlik360 `apps/mobile` | Header'da (`config.headers.skipLoading`) |
+| `redux-web` | SharedFrame `apps/web` | Axios config'te (`skipLoading`, `skipSuccessToast`); okumalar (list / getOne) başarı toast'ı göstermez |
+
+- `optionalAsNull` verilmezse `backendRoot` bir .NET host'u ise açık (BE boş opsiyonel alanı `null` yazar).
+- URL'ler mutlak (`/api/<modül>`): host'un axios `baseURL`'ü yalnız origin'dir (`http://localhost:5080`; canlıda boş = aynı origin). Elle yazılan özel uçlar da `/api/...` yazar.
 
 ## URL
 

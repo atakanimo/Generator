@@ -54,45 +54,36 @@ public static class FilterExtensions
         return query;
     }
 
-    /// <summary><c>from</c> gün başı ≤ x &lt; <c>to</c> + 1 gün (UTC).</summary>
-    public static IQueryable<T> WhereDateRange<T>(this IQueryable<T> query, Expression<Func<T, DateTimeOffset>> selector, DateRangeFilter? range)
-    {
-        if (range is null)
-        {
-            return query;
-        }
+    // Tarih aralığı: `from` gün başı ≤ x < `to` + 1 gün (UTC). Dört aşırı yükleme yalnızca sütun tipini (DateTimeOffset /
+    // DateOnly, nullable ya da değil) seçer; EF ifadesi aynı tipte sabit istediği için sınır değeri o tipe çevrilir.
 
-        if (range.From is { } from)
+    public static IQueryable<T> WhereDateRange<T>(this IQueryable<T> query, Expression<Func<T, DateTimeOffset>> selector, DateRangeFilter? range) =>
+        WhereInUtcDays(query, selector, range, day => day);
+
+    public static IQueryable<T> WhereDateRange<T>(this IQueryable<T> query, Expression<Func<T, DateTimeOffset?>> selector, DateRangeFilter? range) =>
+        WhereInUtcDays<T, DateTimeOffset?>(query, selector, range, day => day);
+
+    public static IQueryable<T> WhereDateRange<T>(this IQueryable<T> query, Expression<Func<T, DateOnly>> selector, DateRangeFilter? range) =>
+        WhereInUtcDays(query, selector, range, day => DateOnly.FromDateTime(day.UtcDateTime));
+
+    public static IQueryable<T> WhereDateRange<T>(this IQueryable<T> query, Expression<Func<T, DateOnly?>> selector, DateRangeFilter? range) =>
+        WhereInUtcDays<T, DateOnly?>(query, selector, range, day => DateOnly.FromDateTime(day.UtcDateTime));
+
+    private static IQueryable<T> WhereInUtcDays<T, TValue>(
+        IQueryable<T> query,
+        Expression<Func<T, TValue>> selector,
+        DateRangeFilter? range,
+        Func<DateTimeOffset, TValue> bound)
+    {
+        if (range?.From is { } from)
         {
-            var start = StartOfUtcDay(from);
+            var start = bound(StartOfUtcDay(from));
             query = query.Where(Build(selector, body => Expression.GreaterThanOrEqual(body, Param(start))));
         }
 
-        if (range.To is { } to)
+        if (range?.To is { } to)
         {
-            var end = StartOfUtcDay(to).AddDays(1);
-            query = query.Where(Build(selector, body => Expression.LessThan(body, Param(end))));
-        }
-
-        return query;
-    }
-
-    public static IQueryable<T> WhereDateRange<T>(this IQueryable<T> query, Expression<Func<T, DateTimeOffset?>> selector, DateRangeFilter? range)
-    {
-        if (range is null)
-        {
-            return query;
-        }
-
-        if (range.From is { } from)
-        {
-            DateTimeOffset? start = StartOfUtcDay(from);
-            query = query.Where(Build(selector, body => Expression.GreaterThanOrEqual(body, Param(start))));
-        }
-
-        if (range.To is { } to)
-        {
-            DateTimeOffset? end = StartOfUtcDay(to).AddDays(1);
+            var end = bound(StartOfUtcDay(to).AddDays(1));
             query = query.Where(Build(selector, body => Expression.LessThan(body, Param(end))));
         }
 

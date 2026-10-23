@@ -30,6 +30,12 @@ export type TemplateField = {
   nestedSchemaName?: string;
   /** Enum values (P3 parse) — string fields only. */
   enumValues?: string[];
+  /** Numeric enum: `enumNumbers[i]` is the stored / JSON value of `enumValues[i]`. */
+  enumNumbers?: number[];
+  numberFormat?: 'int' | 'float';
+  dateFormat?: 'datetime' | 'date';
+  format?: 'email';
+  constraints?: { minLength?: number; maxLength?: number; min?: number; max?: number; pattern?: string };
   /** Takes / returns `null` (BE: model `default: null`). */
   nullable?: boolean;
   /** Literal model `default:` (BE create schema `.default(...)`). */
@@ -41,17 +47,24 @@ export function tsStringLiteral(value: string): string {
   return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 }
 
-/** Enum values of a string field (`enumValues` from P3 parse), or null. */
-export function enumValuesOf(field: { type?: string; enumValues?: unknown }): string[] | null {
+/** Enum values of a string field (`enumValues` from P3 parse), or null. Numeric enums are not strings. */
+export function enumValuesOf(field: { type?: string; enumValues?: unknown; enumNumbers?: unknown }): string[] | null {
+  if (Array.isArray(field.enumNumbers) && field.enumNumbers.length > 0) return null;
   const values = field.enumValues;
   if (!Array.isArray(values) || values.length === 0 || String(field.type ?? '').trim().toLowerCase() !== 'string') return null;
   return values.map(v => String(v));
 }
 
-/** TS union of an enum field's values, e.g. `'active' | 'expired'`, or null. */
-export function enumTsUnion(field: { type?: string; enumValues?: unknown }): string | null {
-  const values = enumValuesOf(field);
-  return values ? values.map(tsStringLiteral).join(' | ') : null;
+/** Numbers of a numeric enum field, or null. */
+export function enumNumbersOf(field: { enumNumbers?: unknown }): number[] | null {
+  return Array.isArray(field.enumNumbers) && field.enumNumbers.length > 0 ? field.enumNumbers.map(Number) : null;
+}
+
+/** TS union of an enum field's values, e.g. `'active' | 'expired'` or `0 | 5`, or null. */
+export function enumTsUnion(field: { type?: string; enumValues?: unknown; enumNumbers?: unknown }): string | null {
+  const numbers = enumNumbersOf(field);
+  if (numbers) return numbers.map(String).join(' | ');
+  return enumValuesOf(field)?.map(tsStringLiteral).join(' | ') ?? null;
 }
 
 /** Normalize a sub-field type token to a TS primitive / id name. */

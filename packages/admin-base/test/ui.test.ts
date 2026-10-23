@@ -13,6 +13,7 @@ import {
   type AnyResource,
   type FieldConfig
 } from '../src/index.js';
+import { enumChoices, enumLabelOf, enumValueFromInput } from '../src/ui/enumChoices.js';
 import { usersSchema, userSubscriptionsSchema } from './fixtures.js';
 
 describe('buildListFilters', () => {
@@ -96,6 +97,32 @@ describe('validateField', () => {
     expect(validateField({ name: 'a', kind: 'decimal' }, '12.5.1')).toBe('invalidDecimal');
     expect(validateField({ name: 'a', kind: 'datetime' }, 'not-a-date')).toBe('invalidDate');
     expect(validateField({ name: 'a', kind: 'string', isArray: true, required: true }, [])).toBe('required');
+  });
+
+  it('e-posta, tam sayı, uzunluk ve aralık', () => {
+    expect(validateField({ name: 'a', kind: 'string', format: 'email' }, 'a@b.c')).toBe(true);
+    expect(validateField({ name: 'a', kind: 'string', format: 'email' }, 'nope')).toBe('invalidEmail');
+    expect(validateField({ name: 'a', kind: 'number', numberFormat: 'int' }, 1.5)).toBe('invalidInteger');
+    expect(validateField({ name: 'a', kind: 'number', numberFormat: 'int', constraints: { min: 0, max: 2 } }, 3)).toBe('tooLarge');
+    expect(validateField({ name: 'a', kind: 'string', constraints: { minLength: 3 } }, 'ab')).toBe('tooShort');
+    expect(validateField({ name: 'a', kind: 'string', constraints: { pattern: '^[a-z]+$' } }, 'A')).toBe('invalidPattern');
+    expect(validateField({ name: 'a', kind: 'datetime', dateFormat: 'date' }, '2026-10-22')).toBe(true);
+    expect(validateField({ name: 'a', kind: 'datetime', dateFormat: 'date' }, '2026-10-22T00:00:00.000Z')).toBe('invalidDate');
+    // Sınırlar yalnızca tekil alanlarda (BE ile aynı): dizi alanında uygulanmaz.
+    expect(validateField({ name: 'a', kind: 'string', isArray: true, constraints: { minLength: 3 } }, ['ab'])).toBe(true);
+  });
+
+  it('sayısal enum: açık değerler, etiket ve girdi dönüşümü', () => {
+    const field = { name: 'level', kind: 'enum', options: ['low', 'high'], numbers: [10, 20] } as const;
+    expect(enumChoices(field)).toEqual([
+      { value: 10, label: 'low' },
+      { value: 20, label: 'high' }
+    ]);
+    expect(enumLabelOf(field, 20)).toBe('high');
+    expect(enumLabelOf(field, 99)).toBe('99');
+    expect(enumValueFromInput(field, '20')).toBe(20);
+    const loaded = enumChoices({ name: 'm', kind: 'string' }, ['US', 'TR']);
+    expect(loaded.map(c => c.value)).toEqual(['US', 'TR']);
   });
 });
 

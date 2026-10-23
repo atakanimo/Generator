@@ -8,6 +8,10 @@ import { resolveCrudProjection, stripHiddenFields } from '@core/services/crud-pr
 import { applyAuthScope, type CrudAuthScope } from '@core/services/crud-scope';
 import { t } from '@helpers';
 
+/**
+ * Per-service message overrides. Unset → the host's shared `crud.*` locale keys (`listFailed`, `getByIdFailed`,
+ * `createFailed`, `updateFailed`, `deleteFailed`, `notFound`, `deleteSuccess`), resolved per call in the request language.
+ */
 type CrudDefaultMessages = {
   listFailed?: string;
   findFailed?: string;
@@ -84,7 +88,7 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
   }
 
   async create(payload: Record<string, unknown>, errorMessages?: { createFailed: string }): Promise<IApiResponse<unknown>> {
-    const createFailed = errorMessages?.createFailed ?? this.defaultMessages.createFailed ?? 'Create failed';
+    const createFailed = errorMessages?.createFailed ?? this.defaultMessages.createFailed ?? t('crud.createFailed');
     try {
       const uid = this.requireAuthUserId();
       if (uid === '') {
@@ -118,7 +122,7 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
     },
     errorMessages?: { listFailed: string }
   ): Promise<IApiResponse<PaginatedList<unknown>>> {
-    const listFailed = errorMessages?.listFailed ?? this.defaultMessages.listFailed ?? 'List failed';
+    const listFailed = errorMessages?.listFailed ?? this.defaultMessages.listFailed ?? t('crud.listFailed');
     try {
       const uid = this.requireAuthUserId();
       if (uid === '') {
@@ -165,7 +169,7 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
    * `lean: false` Mongoose dokümanı döner (ör. `.save()` için).
    */
   async find(baseFilter: FilterQuery<TDoc>, options?: CrudFindListOptions, errorMessages?: CrudFindErrorMessages): Promise<IApiResponse<unknown[]>> {
-    const findFailed = errorMessages?.findFailed ?? this.defaultMessages.findFailed ?? this.defaultMessages.listFailed ?? 'Find failed';
+    const findFailed = errorMessages?.findFailed ?? this.defaultMessages.findFailed ?? this.defaultMessages.listFailed ?? t('crud.listFailed');
     try {
       const uid = this.requireAuthUserId();
       if (uid === '') {
@@ -205,8 +209,8 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
     },
     errorMessages?: { findFailed?: string; notFound?: string }
   ): Promise<IApiResponse<unknown>> {
-    const findFailed = errorMessages?.findFailed ?? this.defaultMessages.findFailed ?? this.defaultMessages.listFailed ?? 'Find failed';
-    const notFoundMsg = errorMessages?.notFound ?? this.defaultMessages.notFound ?? 'Not found';
+    const findFailed = errorMessages?.findFailed ?? this.defaultMessages.findFailed ?? this.defaultMessages.listFailed ?? t('crud.listFailed');
+    const notFoundMsg = errorMessages?.notFound ?? this.defaultMessages.notFound ?? t('crud.notFound');
     try {
       const uid = this.requireAuthUserId();
       if (uid === '') {
@@ -241,8 +245,8 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
     options?: { projection?: string | Record<string, 0 | 1 | boolean> | null; populate?: CrudPopulate; lean?: boolean },
     errorMessages?: { getByIdFailed: string; notFound?: string }
   ): Promise<IApiResponse<unknown>> {
-    const getByIdFailed = errorMessages?.getByIdFailed ?? this.defaultMessages.getByIdFailed ?? 'Get failed';
-    const notFoundMsg = errorMessages?.notFound ?? this.defaultMessages.notFound ?? 'Not found';
+    const getByIdFailed = errorMessages?.getByIdFailed ?? this.defaultMessages.getByIdFailed ?? t('crud.getByIdFailed');
+    const notFoundMsg = errorMessages?.notFound ?? this.defaultMessages.notFound ?? t('crud.notFound');
     try {
       const uid = this.requireAuthUserId();
       if (uid === '') {
@@ -281,8 +285,8 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
     errorMessages?: { updateFailed: string; notFound?: string; successUiMessage?: string },
     opts?: { allowUserIdInPayload?: boolean }
   ): Promise<IApiResponse<unknown>> {
-    const updateFailed = errorMessages?.updateFailed ?? this.defaultMessages.updateFailed ?? 'Update failed';
-    const notFoundMsg = errorMessages?.notFound ?? this.defaultMessages.notFound ?? 'Not found';
+    const updateFailed = errorMessages?.updateFailed ?? this.defaultMessages.updateFailed ?? t('crud.updateFailed');
+    const notFoundMsg = errorMessages?.notFound ?? this.defaultMessages.notFound ?? t('crud.notFound');
     try {
       const uid = this.requireAuthUserId();
       if (uid === '') {
@@ -321,11 +325,13 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
   async deleteById(
     id: string,
     extraFilter: FilterQuery<TDoc> = {},
-    errorMessages?: { deleteFailed: string; notFound?: string; successMessage?: string }
+    errorMessages?: { deleteFailed: string; notFound?: string; successMessage?: string },
+    /** `onDeleted`: called with the deleted record (service `afterDelete`); a throw becomes the response, the delete stays. */
+    opts?: { onDeleted?: (row: Record<string, unknown>) => Promise<void> | void; context?: string }
   ): Promise<IApiResponse<null>> {
-    const deleteFailed = errorMessages?.deleteFailed ?? this.defaultMessages.deleteFailed ?? 'Delete failed';
-    const notFoundMsg = errorMessages?.notFound ?? this.defaultMessages.notFound ?? 'Not found';
-    const successMessage = errorMessages?.successMessage ?? this.defaultMessages.successMessage;
+    const deleteFailed = errorMessages?.deleteFailed ?? this.defaultMessages.deleteFailed ?? t('crud.deleteFailed');
+    const notFoundMsg = errorMessages?.notFound ?? this.defaultMessages.notFound ?? t('crud.notFound');
+    const successMessage = errorMessages?.successMessage ?? this.defaultMessages.successMessage ?? t('crud.deleteSuccess');
     try {
       const uid = this.requireAuthUserId();
       if (uid === '') {
@@ -342,6 +348,13 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
         .exec();
       if (!deleted) {
         return ErrorResponse({ message: notFoundMsg, code: 'NOT_FOUND' });
+      }
+      if (opts?.onDeleted) {
+        try {
+          await opts.onDeleted(deleted as Record<string, unknown>);
+        } catch (error) {
+          return HandleServiceError(error, { context: opts.context ?? 'BaseCrudService.deleteById.onDeleted' });
+        }
       }
       return SuccessResponse(null, successMessage);
     } catch (error) {

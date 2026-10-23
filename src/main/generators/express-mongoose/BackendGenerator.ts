@@ -12,6 +12,7 @@ import { handleError, ErrorCode } from '../../utils/errorHandler.js';
 import { log } from '../../utils/logger.js';
 import { getGeneratorRoot, getTemplatesDir } from '../../utils/templateHelpers.js';
 import { join } from 'path';
+import { findAdminMountPath, findBackendAppFile, findNormalMountPath } from '../../utils/backendAppFile.js';
 import { kebabCase, moduleNameFromEntity } from '../../utils/namingUtils.js';
 import { mergeMongoAuditBackendTemplateFields } from '../../utils/mongoAuditFields.js';
 import { isGeneratorOwnedSource } from '../../utils/generatedFileOwnership.js';
@@ -310,6 +311,10 @@ export class BackendGenerator extends BaseGenerator {
       {
         sourceRelativePath: 'src/generator-assets/express-mongoose/types/api-contract.ts',
         targetRelativePath: 'src/core/types/api-contract.ts'
+      },
+      {
+        sourceRelativePath: 'src/generator-assets/express-mongoose/services/service-hooks.ts',
+        targetRelativePath: 'src/core/services/service-hooks.ts'
       },
       {
         sourceRelativePath: 'src/generator-assets/express-mongoose/services/base-crud.service.ts',
@@ -697,6 +702,11 @@ export class BackendGenerator extends BaseGenerator {
       isSearchable: field.filterable && field.hidden !== true,
       filterType: this.resolveTemplateFilterType(field),
       enumValues: field.enumValues && field.enumValues.length > 0 ? field.enumValues : undefined,
+      enumNumbers: field.enumNumbers,
+      numberFormat: field.numberFormat,
+      dateFormat: field.dateFormat,
+      format: field.format,
+      constraints: field.constraints,
       /** `default: null` in the model: the API takes / returns `null` for this field. */
       nullable: field.schemaDefault === null ? true : undefined,
       /** Literal model `default:` — the create schema applies it when the field is omitted. */
@@ -879,210 +889,64 @@ export class BackendGenerator extends BaseGenerator {
     return mergeResult.merged;
   }
 
-  /**
-   * Add route to src/index.ts
-   */
+  /** Mount the normal router (`<module>.routes`) in the BE app file unless it is already mounted. */
   private addRouteToIndex(moduleName: string, entityNameLower: string): void {
-    const indexPath = this.findIndexFile();
-
-    if (!indexPath) {
-      this.logWarn('Could not find index.ts, app.ts, or server.ts file');
-      return;
-    }
-
-    try {
-      this.injectRouteToFile(indexPath, moduleName, entityNameLower);
-      this.logInfo('Route added to index', { indexPath, entityName: this.schema.entityName });
-    } catch (error) {
-      this.logError('Failed to add route to index', {
-        indexPath,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
+    this.mountRouter(moduleName, 'normal', `${entityNameLower}Route`, `${this.baseUrl}/${moduleName}`);
   }
 
-  /**
-   * Add admin route to index (e.g. /api/entity/admin)
-   */
+  /** Mount the admin router (`<module>.routes.admin`, e.g. `/api/<module>/admin`) unless it is already mounted. */
   private addAdminRouteToIndex(moduleName: string, entityNameLower: string): void {
-    const indexPath = this.findIndexFile();
+    this.mountRouter(moduleName, 'admin', `${entityNameLower}AdminRoutes`, `${this.baseUrl}/${moduleName}/admin`);
+  }
 
-    if (!indexPath) {
-      this.logWarn('Could not find index.ts, app.ts, or server.ts file');
+  /**
+   * Import + `app.use(mountPath, router)` in the BE app file (`findBackendAppFile`: the file that mounts the routers).
+   * "Already mounted" is read from the file (import of the router file + its `app.use`), not derived from the path:
+   * existing projects mount under their own paths (`/api/symboltypes`). The import follows the file's existing router
+   * imports (`@modules/…` or `./modules/…`); the `app.use` line goes after the last router mount, with its indent.
+   */
+  private mountRouter(moduleName: string, kind: 'normal' | 'admin', variable: string, mountPath: string): void {
+    const appFile = findBackendAppFile(this.projectRoot);
+    if (!appFile) {
+      this.logWarn('Could not find the backend app file (src/app.ts, src/index.ts, src/server.ts)');
       return;
     }
-
+    const existing = kind === 'admin' ? findAdminMountPath(this.projectRoot, moduleName) : findNormalMountPath(this.projectRoot, moduleName);
+    if (existing) {
+      this.logInfo('Route already mounted', { moduleName, kind, mountPath: existing, appFile });
+      return;
+    }
     try {
-      this.injectAdminRouteToFile(indexPath, moduleName, entityNameLower);
-      this.logInfo('Admin route added to index', { indexPath, entityName: this.schema.entityName });
+      const readResult = safeReadFile(appFile);
+      if (!readResult.success || !readResult.content) throw new Error(`Failed to read ${appFile}`);
+      const lines = readResult.content.split('\n');
+      const lastMount = this.findLastAppUseIndex(lines);
+      if (lastMount === -1) throw new Error('No app.use(...) router mount to add the route after');
+      const routeFile = `${moduleName}/${moduleName}.routes${kind === 'admin' ? '.admin' : ''}`;
+      const prefix = /from\s+['"]([^'"]*modules\/)[^'"]+\.routes(?:\.admin)?['"]/.exec(readResult.content)?.[1] ?? './modules/';
+      const indent = /^\s*/.exec(lines[lastMount])?.[0] ?? '';
+      lines.splice(lastMount + 1, 0, `${indent}app.use('${mountPath}', ${variable});`);
+      lines.splice(this.findLastImportIndex(lines) + 1, 0, `import ${variable} from '${prefix}${routeFile}';`);
+      safeWriteFile(appFile, lines.join('\n'), { createBackup: false });
+      this.logInfo('Route mounted', { moduleName, kind, mountPath, appFile });
     } catch (error) {
-      this.logError('Failed to add admin route to index', {
-        indexPath,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
+      this.logError('Failed to mount route', { appFile, moduleName, kind, error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
 
-  /**
-   * Inject admin route import and usage to index file
-   */
-  private injectAdminRouteToFile(indexPath: string, moduleName: string, entityNameLower: string): void {
-    const readResult = safeReadFile(indexPath);
-
-    if (!readResult.success || !readResult.content) {
-      throw new Error(`Failed to read ${indexPath}`);
-    }
-
-    const content = readResult.content;
-    const lines = content.split('\n');
-
-    const routeVariableName = `${entityNameLower}AdminRoutes`;
-    const adminPath = `${this.baseUrl}/${moduleName}/admin`;
-
-    const routePattern = new RegExp(`app\\.use\\(['"]${adminPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`);
-    if (lines.some(line => routePattern.test(line))) {
-      this.logInfo('Admin route already exists in index', { entityNameLower, indexPath });
-      return;
-    }
-
-    const importPattern = new RegExp(`import.*from.*['"]\\./modules/${moduleName}/${moduleName}\\.routes\\.admin['"]`);
-    const hasImport = lines.some(line => importPattern.test(line));
-
-    const lastImportIndex = this.findLastImportIndex(lines);
-    const lastAppUseIndex = this.findLastAppUseIndex(lines);
-
-    if (lastAppUseIndex === -1) {
-      throw new Error('Could not find a suitable location to add the admin route');
-    }
-
-    if (!hasImport && lastImportIndex !== -1) {
-      const importLine = `import ${routeVariableName} from './modules/${moduleName}/${moduleName}.routes.admin';`;
-      lines.splice(lastImportIndex + 1, 0, importLine);
-    }
-
-    const routeLine = `app.use('${adminPath}', ${routeVariableName});`;
-    const insertIndex = hasImport ? lastAppUseIndex + 1 : lastAppUseIndex + 2;
-    lines.splice(insertIndex, 0, routeLine);
-
-    const newContent = lines.join('\n');
-    safeWriteFile(indexPath, newContent, { createBackup: false });
-
-    this.logInfo('Admin route injected', { routeLine, indexPath });
-  }
-
-  /**
-   * Find the main index file (index.ts, app.ts, or server.ts)
-   */
-  private findIndexFile(): string | null {
-    const possiblePaths = [
-      join(this.projectRoot, 'src', 'index.ts'),
-      join(this.projectRoot, 'src', 'app.ts'),
-      join(this.projectRoot, 'src', 'server.ts'),
-      join(this.projectRoot, 'index.ts'),
-      join(this.projectRoot, 'app.ts'),
-      join(this.projectRoot, 'server.ts')
-    ];
-
-    for (const path of possiblePaths) {
-      if (safePathExists(path)) {
-        return path;
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Inject route import and usage to index file
-   */
-  private injectRouteToFile(indexPath: string, moduleName: string, entityNameLower: string): void {
-    const readResult = safeReadFile(indexPath);
-
-    if (!readResult.success || !readResult.content) {
-      throw new Error(`Failed to read ${indexPath}`);
-    }
-
-    const content = readResult.content;
-    const lines = content.split('\n');
-
-    // Generate route variable name
-    const routeVariableName = `${entityNameLower}Route`;
-
-    // Check if route already exists
-    const routePattern = new RegExp(`app\\.use\\(['"]${this.baseUrl}/${moduleName}['"]`);
-    const hasRoute = lines.some(line => routePattern.test(line));
-
-    if (hasRoute) {
-      this.logInfo('Route already exists in index', { entityNameLower, indexPath });
-      return;
-    }
-
-    // Check if import already exists
-    const importPattern = new RegExp(`import.*from.*['"]\\./modules/${moduleName}/${moduleName}\\.routes['"]`);
-    const hasImport = lines.some(line => importPattern.test(line));
-
-    // Find insertion points
-    const lastImportIndex = this.findLastImportIndex(lines);
-    const lastAppUseIndex = this.findLastAppUseIndex(lines);
-
-    if (lastAppUseIndex === -1) {
-      throw new Error('Could not find a suitable location to add the route');
-    }
-
-    // Add import if needed
-    if (!hasImport && lastImportIndex !== -1) {
-      const importLine = `import ${routeVariableName} from './modules/${moduleName}/${moduleName}.routes';`;
-      lines.splice(lastImportIndex + 1, 0, importLine);
-    }
-
-    // Add route
-    const routeLine = `app.use('${this.baseUrl}/${moduleName}', ${routeVariableName});`;
-    const insertIndex = hasImport ? lastAppUseIndex + 1 : lastAppUseIndex + 2; // +2 if we added import
-    lines.splice(insertIndex, 0, routeLine);
-
-    // Write back
-    const newContent = lines.join('\n');
-    safeWriteFile(indexPath, newContent, { createBackup: false });
-
-    this.logInfo('Route injected', { routeLine, indexPath });
-  }
-
-  /**
-   * Find the last import statement index
-   */
   private findLastImportIndex(lines: string[]): number {
     let lastIndex = -1;
     for (let i = 0; i < lines.length; i++) {
-      if (lines[i].trim().startsWith('import ')) {
-        lastIndex = i;
-      }
+      if (lines[i].trim().startsWith('import ')) lastIndex = i;
     }
     return lastIndex;
   }
 
-  /**
-   * Find the last app.use index
-   */
+  /** Last `app.use('/…', …)` line (a router mount), so the new mount stays before error / docs handlers. */
   private findLastAppUseIndex(lines: string[]): number {
-    let lastIndex = -1;
-
-    // First, try to find app.use with Route
     for (let i = lines.length - 1; i >= 0; i--) {
-      if (lines[i].includes('app.use(') && lines[i].includes('Route')) {
-        lastIndex = i;
-        break;
-      }
+      if (/app\.use\(\s*['"]\//.test(lines[i])) return i;
     }
-
-    // If not found, look for app.use with /api
-    if (lastIndex === -1) {
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].includes('app.use') && lines[i].includes('/api')) {
-          lastIndex = i;
-        }
-      }
-    }
-
-    return lastIndex;
+    return -1;
   }
 }

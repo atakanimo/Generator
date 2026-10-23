@@ -4,11 +4,13 @@
  */
 
 import {
+  enumNumbersOf,
   enumValuesOf,
   tsStringLiteral,
   emitObjectZodLiteral,
   type TemplateField
 } from './schemaFieldTypes.js';
+import { DATE_ONLY_PATTERN, EMAIL_PATTERN, jsRegExpSource } from './fieldConstraints.js';
 import { kindFromTypeToken } from './fieldTypeToken.js';
 
 export type FieldKindName =
@@ -70,16 +72,42 @@ export function classifyField(field: TemplateField & Record<string, unknown>): C
   return { kind: 'opaque', field: f };
 }
 
-/** Inner Zod expression (no optional / array wrapper). */
+function zodRegex(pattern: string): string {
+  return `.regex(${jsRegExpSource(pattern)})`;
+}
+
+function numericEnumZod(numbers: readonly number[]): string {
+  const lits = numbers.map(n => `z.literal(${n})`);
+  return lits.length === 1 ? lits[0]! : `z.union([${lits.join(', ')}])`;
+}
+
+function isDateRangeFilter(field: Record<string, unknown>, mode: string): boolean {
+  return mode === 'filter' && String(field.filterType ?? '').toLowerCase() === 'date-range';
+}
+
+/**
+ * Inner Zod expression (no optional / array wrapper). `field.constraints` is already narrowed by `constraintsForField`
+ * (single strings / numbers only), so no array checks here.
+ */
 export function emitZodInner(field: TemplateField & Record<string, unknown>, mode: 'create' | 'update' | 'filter' | 'base'): string {
   const { kind } = classifyField(field);
   const t = typeToken(field);
+  const constraints = field.constraints;
 
   if (kind === 'map') {
     return 'z.record(z.string(), z.number())';
   }
   if (kind === 'decimal') {
-    return 'z.union([z.number(), z.string()])';
+    let expr = 'z.union([z.number(), z.string()])';
+    if (constraints?.min != null) expr += `.refine(v => Number(v) >= ${constraints.min})`;
+    if (constraints?.max != null) expr += `.refine(v => Number(v) <= ${constraints.max})`;
+    return expr;
+  }
+  const enumNumbers = enumNumbersOf(field);
+  if (enumNumbers) {
+    const zEnum = numericEnumZod(enumNumbers);
+    if (mode === 'filter' && !field.isArray) return `z.union([${zEnum}, z.array(${zEnum}).min(1)])`;
+    return zEnum;
   }
   const enumValues = enumValuesOf(field);
   if (enumValues) {
@@ -95,10 +123,18 @@ export function emitZodInner(field: TemplateField & Record<string, unknown>, mod
     // `objectIdString` is declared at the top of `schema.hbs`: a bad id is a 400, not a 500 in the filter builder.
     return mode === 'filter' ? 'objectIdString' : 'z.string()';
   }
-  if (t === 'number') return 'z.number()';
+  if (t === 'number') {
+    let expr = field.numberFormat === 'int' ? 'z.number().int()' : 'z.number()';
+    if (constraints?.min != null) expr += `.min(${constraints.min})`;
+    if (constraints?.max != null) expr += `.max(${constraints.max})`;
+    return expr;
+  }
   if (t === 'boolean') return 'z.boolean()';
   if (t === 'date') {
-    if (mode === 'filter' && String((field as { filterType?: string }).filterType || '').toLowerCase() === 'date-range') {
+    const rangeFilter = isDateRangeFilter(field, mode);
+    // Date-only: a `YYYY-MM-DD` string in and out (stored as that string in Mongo, see `mongooseModelContext`).
+    if (field.dateFormat === 'date' && !rangeFilter) return `z.string()${zodRegex(DATE_ONLY_PATTERN)}`;
+    if (rangeFilter) {
       return `z.union([
     z
       .object({
@@ -113,7 +149,13 @@ export function emitZodInner(field: TemplateField & Record<string, unknown>, mod
     return 'z.union([z.string(), z.date()])';
   }
   const required = mode === 'update' || mode === 'filter' ? false : Boolean(field.required);
-  return required ? "z.string().min(1)" : 'z.string()';
+  let expr = 'z.string()';
+  if (!field.isArray && field.format === 'email') expr += zodRegex(EMAIL_PATTERN);
+  if (constraints?.minLength != null) expr += `.min(${constraints.minLength})`;
+  else if (required) expr += '.min(1)';
+  if (constraints?.maxLength != null) expr += `.max(${constraints.maxLength})`;
+  if (constraints?.pattern) expr += zodRegex(constraints.pattern);
+  return expr;
 }
 
 /** Full Zod field expression including array + optional. */

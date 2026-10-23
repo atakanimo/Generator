@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import type { NormalizedModel } from '../../../shared/normalizedModel.js';
 import { findNormalMountPath } from '../../utils/backendAppFile.js';
+import { findDotnetHost } from '../../parsers/dotnet/dotnetHost.js';
 import { isGeneratorOwnedSource } from '../../utils/generatedFileOwnership.js';
 import { moduleNameFromEntity } from '../../utils/namingUtils.js';
 import { getTemplatesDir } from '../../utils/templateHelpers.js';
@@ -36,7 +37,7 @@ export interface ClientGenerateOptions {
   backendRoot?: string;
   /** Fallback base when a mount is not found, e.g. `/api`. */
   baseUrl?: string;
-  /** The BE writes `null` for empty optional fields (.NET). */
+  /** The BE writes `null` for empty optional fields; default: on when `backendRoot` is a .NET host. */
   optionalAsNull?: boolean;
   /** Layers to write (default: all). A module without normal operations gets only its service types. */
   layers?: Partial<Record<ClientLayer, boolean>>;
@@ -153,6 +154,7 @@ export function generateClientModules(options: ClientGenerateOptions): ClientGen
   const layer = (l: ClientLayer) => options.layers?.[l] !== false;
   const warnings: string[] = [];
   const notes: string[] = [];
+  const optionalAsNull = options.optionalAsNull ?? (backendRoot ? findDotnetHost(backendRoot) !== null : false);
   const files: ClientWrittenFile[] = [];
   const modules: ClientModuleContext[] = [];
 
@@ -167,7 +169,7 @@ export function generateClientModules(options: ClientGenerateOptions): ClientGen
         warnings.push(`${model.entityName}: normal route not found in the backend; using ${endpoint}`);
       }
     }
-    const ctx = buildClientModuleContext({ model, models: allModels, endpoint, preset, optionalAsNull: options.optionalAsNull === true });
+    const ctx = buildClientModuleContext({ model, models: allModels, endpoint, preset, optionalAsNull });
     modules.push(ctx);
     if (ctx.surface.dropped.length) {
       warnings.push(`${model.entityName}: closed by the contract, not generated: ${ctx.surface.dropped.join(', ')}`);

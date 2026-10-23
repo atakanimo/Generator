@@ -36,6 +36,11 @@ interface FieldCommon {
   writeOnly?: boolean;
   /** Tabloda kolon olarak gösterilir. */
   list?: boolean;
+  /**
+   * Kolonda sunucu sıralaması. `false` → kapalı (BE bu alana göre sıralamıyorsa). Varsayılan: skaler, dizi olmayan
+   * alanlarda açık; `true` ilişki / obje / dizi alanını sıralanabilir yapmaz.
+   */
+  sortable?: boolean;
   filter?: FilterType;
   /** Create formunun başlangıç değeri: sabit ya da form açılınca hesaplanan (`DynamicDefault`). */
   default?: string | number | boolean | null | DynamicDefault;
@@ -44,6 +49,23 @@ interface FieldCommon {
    * `image` → URL girişi + önizleme, tabloda küçük resim.
    */
   component?: 'textarea' | 'image';
+  /** `string`: e-posta. */
+  format?: 'email';
+  /** `number`: tam sayı. Yoksa ondalık serbest. */
+  numberFormat?: 'int' | 'float';
+  /** `datetime`: yalnızca takvim günü (`YYYY-MM-DD`). Yoksa tarih + saat. */
+  dateFormat?: 'date' | 'datetime';
+  /** İstek sınırları (Generator modelindeki `constraints`); yalnızca tekil alanlarda. */
+  constraints?: FieldConstraints;
+}
+
+/** Metin uzunluğu ve deseni (`string`), alt / üst sınır (`number`, `decimal`). Dizi alanlarında kullanılmaz. */
+export interface FieldConstraints {
+  minLength?: number;
+  maxLength?: number;
+  min?: number;
+  max?: number;
+  pattern?: string;
 }
 
 export interface ScalarFieldConfig extends FieldCommon {
@@ -54,6 +76,8 @@ export interface ScalarFieldConfig extends FieldCommon {
 export interface EnumFieldConfig extends FieldCommon {
   kind: 'enum';
   options: readonly string[];
+  /** Sayısal enum: `options[i]` etiketi, `numbers[i]` gönderilen / saklanan değer. */
+  numbers?: readonly number[];
 }
 
 export interface RelationFieldConfig extends FieldCommon {
@@ -91,7 +115,9 @@ export type FieldConfig = ScalarFieldConfig | EnumFieldConfig | RelationFieldCon
 
 type ScalarValue<K> = K extends 'number' ? number : K extends 'boolean' ? boolean : string;
 
-type BaseValue<F> = F extends { kind: 'enum'; options: readonly (infer O)[] }
+type BaseValue<F> = F extends { kind: 'enum'; numbers: readonly (infer N)[] }
+  ? N
+  : F extends { kind: 'enum'; options: readonly (infer O)[] }
   ? O
   : F extends { kind: 'relation'; populate: readonly (infer P extends string)[] }
     ? Id | PopulatedRef<P>
@@ -131,8 +157,8 @@ type FilterValueOf<F> = F extends { filter: 'regex' }
         ? boolean
         : F extends { filter: 'relation' }
           ? Id
-          : F extends { filter: 'enum'; options: readonly (infer O)[] }
-            ? O | O[]
+          : F extends { filter: 'enum' }
+            ? BaseValue<F> | BaseValue<F>[]
             : BaseValue<F>;
 
 /** `ListBody.filters` için tipli şekil: yalnızca `filter` tanımlı alanlar + `id`. */

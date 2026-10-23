@@ -31,8 +31,11 @@ function sizeFor(field: FieldConfig): Pick<GridColDef, 'width' | 'flex' | 'minWi
   }
 }
 
-/** Sunucu sıralaması yalnızca skaler, dizi olmayan alanlarda. */
-function isSortable(field: FieldConfig): boolean {
+/**
+ * Sunucu sıralaması yalnızca skaler, dizi olmayan alanlarda; resource ya da alan `sortable: false` ile kapatır.
+ */
+export function isColumnSortable(resource: Pick<AnyResource, 'sortable'>, field: FieldConfig): boolean {
+  if (resource.sortable === false || field.sortable === false) return false;
   return !field.isArray && field.kind !== 'relation' && field.kind !== 'object' && field.kind !== 'map' && field.kind !== 'json';
 }
 
@@ -53,6 +56,7 @@ export function buildColumns({ resource, texts, onOpenJson, renderActions, actio
       headerName: 'ID',
       width: 120,
       minWidth: 100,
+      sortable: resource.sortable !== false,
       renderCell: params => <IdCell id={String(params.row.id ?? '')} />
     }
   ];
@@ -63,7 +67,7 @@ export function buildColumns({ resource, texts, onOpenJson, renderActions, actio
     columns.push({
       field: field.name,
       headerName: texts.fieldLabel(fieldLabelKey(resource, [field.name]), field),
-      sortable: isSortable(field),
+      sortable: isColumnSortable(resource, field),
       ...sizeFor(field),
       renderCell: params =>
         Cell ? (

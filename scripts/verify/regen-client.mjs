@@ -102,7 +102,10 @@ for (const ctx of first.modules) {
 }
 
 // Ownership: existing files (old Generator-made ones included) stay — K files are created only when missing.
-for (const [f, content] of Object.entries(before)) check(readFileSync(f, 'utf8') === content, `${relative(copy, f)} was modified`);
+for (const [f, content] of Object.entries(before)) {
+  if (f.includes('.generated.')) continue; // G files are the Generator's to rewrite
+  check(readFileSync(f, 'utf8') === content, `${relative(copy, f)} was modified`);
+}
 const created = first.files.filter(f => f.action === 'created' && !f.path.includes('.generated.')).map(f => relative(copy, f.path));
 console.log(`  created user-owned files: ${created.join(', ') || '(none: all exist)'}`);
 for (const n of first.notes) console.log(`  note: ${n}`);

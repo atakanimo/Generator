@@ -57,3 +57,21 @@ export function dateRangeFilter(value: DateFilterValue): { $gte?: Date; $lt?: Da
   if (to) query.$lt = new Date(utcDayStart(to).getTime() + DAY_MS);
   return query.$gte || query.$lt ? query : undefined;
 }
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Date-only fields (`YYYY-MM-DD` strings): `{ from, to }` → `{ $gte: from, $lte: to }`; a single value → that day.
+ * The string form sorts like the date, so the bounds compare correctly. Non date-only values are ignored.
+ */
+export function dateOnlyRangeFilter(value: DateFilterValue): { $gte?: string; $lte?: string } | undefined {
+  if (value === undefined || value === null || value instanceof Date) return undefined;
+  const day = (v: string | Date | undefined) => (typeof v === 'string' && DATE_ONLY.test(v.trim()) ? v.trim() : undefined);
+  const isRange = typeof value === 'object';
+  const from = day(isRange ? value.from : value);
+  const to = day(isRange ? value.to : value);
+  const query: { $gte?: string; $lte?: string } = {};
+  if (from) query.$gte = from;
+  if (to) query.$lte = to;
+  return query.$gte || query.$lte ? query : undefined;
+}

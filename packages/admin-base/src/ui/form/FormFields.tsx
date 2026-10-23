@@ -13,14 +13,18 @@ import {
   Stack,
   Switch,
   TextField,
-  Tooltip
+  Tooltip,
+  type TextFieldProps
 } from '@mui/material';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import dayjs from 'dayjs';
 import { useState } from 'react';
 import { useController, useFieldArray, useFormContext } from 'react-hook-form';
-import type { AnyResource } from '../../schema/extend.js';
+import { useFieldOptions } from '../../react/hooks.js';
+import type { AnyResource, LoadOptions } from '../../schema/extend.js';
 import type { FieldConfig, MapFieldConfig, ObjectFieldConfig } from '../../schema/fields.js';
+import { enumChoices, enumLabelOf, enumValueFromInput } from '../enumChoices.js';
 import { isRecord } from '../format.js';
 import { RelationAutocomplete } from '../inputs/RelationAutocomplete.js';
 import { useAdminTexts } from '../useAdminTexts.js';
@@ -126,6 +130,43 @@ function ObjectArrayField({ resource, field, mode, path, label, labelPath, label
   );
 }
 
+interface OptionsSelectProps {
+  resource: AnyResource;
+  field: FieldConfig;
+  loadOptions?: LoadOptions;
+  common: TextFieldProps;
+  value: unknown;
+  onChange: (value: unknown) => void;
+}
+
+/** Enum ya da `loadOptions`'lı string alanı; seçenek sorgusu hook olduğu için ayrı bileşen. */
+function OptionsSelect({ resource, field, loadOptions, common, value, onChange }: OptionsSelectProps) {
+  const texts = useAdminTexts();
+  const loaded = useFieldOptions(resource.name, field, loadOptions);
+  const choices = enumChoices(field, loadOptions ? loaded : undefined);
+  // Seçenekler yüklenmeden gelen kayıt değeri listede yoksa yine seçilebilir kalır (MUI "out-of-range" uyarısı olmaz).
+  const known = new Set(choices.map(choice => String(choice.value)));
+  const current: unknown[] = field.isArray ? (Array.isArray(value) ? value : []) : value == null || value === '' ? [] : [value];
+  const missing = current
+    .filter(v => !known.has(String(v)))
+    .map(v => ({ value: v as string | number, label: enumLabelOf(field, v) }));
+  return (
+    <TextField {...common} select value={field.isArray ? (Array.isArray(value) ? value : []) : (value ?? '')}
+      onChange={e => {
+        const raw: unknown = e.target.value;
+        onChange(Array.isArray(raw) ? raw.map(v => enumValueFromInput(field, v)) : enumValueFromInput(field, raw));
+      }}
+      slotProps={{ select: { multiple: field.isArray } }}>
+      {!field.isArray && !field.required ? <MenuItem value=''>—</MenuItem> : null}
+      {[...choices, ...missing].map(choice => (
+        <MenuItem key={String(choice.value)} value={choice.value}>
+          {texts.enumLabel(resource, field.name, choice.label)}
+        </MenuItem>
+      ))}
+    </TextField>
+  );
+}
+
 function ControlledField({ resource, field, mode, path, label, topLevel }: FieldProps) {
   const texts = useAdminTexts();
   const { control } = useFormContext();
@@ -164,17 +205,10 @@ function ControlledField({ resource, field, mode, path, label, topLevel }: Field
       multiple={field.isArray} disabled={disabled} error={error} />;
   }
 
-  if (field.kind === 'enum') {
+  const loadOptions = topLevel ? resource.extensions?.fields?.[field.name]?.loadOptions : undefined;
+  if (field.kind === 'enum' || (field.kind === 'string' && loadOptions)) {
     return (
-      <TextField {...common} select value={field.isArray ? (Array.isArray(value) ? value : []) : (value ?? '')}
-        onChange={e => onChange(e.target.value)} slotProps={{ select: { multiple: field.isArray } }}>
-        {!field.isArray && !field.required ? <MenuItem value=''>—</MenuItem> : null}
-        {field.options.map(option => (
-          <MenuItem key={option} value={option}>
-            {texts.enumLabel(resource, field.name, option)}
-          </MenuItem>
-        ))}
-      </TextField>
+      <OptionsSelect resource={resource} field={field} loadOptions={loadOptions} common={common} value={value} onChange={onChange} />
     );
   }
 
@@ -206,16 +240,17 @@ function ControlledField({ resource, field, mode, path, label, topLevel }: Field
   }
 
   if (field.kind === 'datetime') {
-    return (
-      <DateTimePicker
-        label={label}
-        disabled={disabled}
-        value={value ? dayjs(value as string) : null}
-        onChange={v => onChange(v && v.isValid() ? v.toISOString() : null)}
-        inputRef={ref}
-        slotProps={{ textField: { size: 'small', fullWidth: true, error: Boolean(error), helperText: error, onBlur } }}
-      />
-    );
+    const pickerProps = {
+      label,
+      disabled,
+      value: value ? dayjs(value as string) : null,
+      inputRef: ref,
+      slotProps: { textField: { size: 'small' as const, fullWidth: true, error: Boolean(error), helperText: error, onBlur } }
+    };
+    if (field.dateFormat === 'date') {
+      return <DatePicker {...pickerProps} onChange={v => onChange(v && v.isValid() ? v.format('YYYY-MM-DD') : null)} />;
+    }
+    return <DateTimePicker {...pickerProps} onChange={v => onChange(v && v.isValid() ? v.toISOString() : null)} />;
   }
 
   if (field.component === 'image') {
@@ -236,11 +271,17 @@ function ControlledField({ resource, field, mode, path, label, topLevel }: Field
       {...common}
       value={value ?? ''}
       onChange={e => onChange(e.target.value)}
-      type={field.kind === 'number' ? 'number' : field.writeOnly ? 'password' : 'text'}
-      autoComplete={field.writeOnly ? 'new-password' : undefined}
+      type={field.format === 'email' ? 'email' : field.kind === 'number' ? 'number' : field.writeOnly ? 'password' : 'text'}
+      autoComplete={field.writeOnly ? 'new-password' : field.format === 'email' ? 'email' : undefined}
       multiline={field.component === 'textarea'}
       minRows={field.component === 'textarea' ? 3 : undefined}
-      slotProps={field.kind === 'decimal' ? { htmlInput: { inputMode: 'decimal' } } : undefined}
+      slotProps={
+        field.kind === 'decimal'
+          ? { htmlInput: { inputMode: 'decimal' as const } }
+          : field.kind === 'number' && field.numberFormat === 'int'
+            ? { htmlInput: { step: 1 } }
+            : undefined
+      }
     />
   );
 }

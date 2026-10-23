@@ -11,6 +11,7 @@ import {
   type NormalizedReference,
   type RelationType
 } from './normalizedModel.js';
+import { constraintsForField, isNumericEnum } from './fieldConstraints.js';
 import { filterFromToken, filterTokenOf, typeTokenOf, type FilterToken } from './fieldTypeToken.js';
 import { isMongooseSourceType } from './schemaFieldTypes.js';
 
@@ -182,6 +183,20 @@ export function enrichFieldWithUIConfig(field: NormalizedField): NormalizedField
   );
 }
 
+/**
+ * Enum values come from the model file. A numeric Mongoose enum (`enum: [0, 5]`) carries only the numbers; the labels
+ * come from the manifest, matched by number (not by position), so a reordered or extended enum keeps its labels.
+ */
+function mergeEnum(code: NormalizedField['enum'], saved: NormalizedField['enum']): NormalizedField['enum'] {
+  if (!code?.values.length) return undefined;
+  if (!isNumericEnum(code)) return { values: code.values };
+  const savedLabels = new Map<number, string>();
+  if (isNumericEnum(saved)) saved.numbers.forEach((n, i) => savedLabels.set(n, saved.values[i]));
+  const labelsFromFile = code.values.some((v, i) => v !== String(code.numbers[i]));
+  const values = labelsFromFile ? code.values : code.numbers.map(n => savedLabels.get(n) ?? String(n));
+  return { values, numbers: code.numbers };
+}
+
 function mergeField(code: NormalizedField, saved: NormalizedField): NormalizedField {
   const pick = <K extends keyof NormalizedReference>(key: K) =>
     code.reference?.[key] !== undefined ? code.reference[key] : saved.reference?.[key];
@@ -223,6 +238,11 @@ function mergeField(code: NormalizedField, saved: NormalizedField): NormalizedFi
     // Schema options come from the model file (P3): a stale saved `unique` would add a real DB index.
     trim: code.trim,
     unique: code.unique,
+    // File wins when it says (C# `int` / `DateOnly`, Mongoose `match`). Express keeps int / date-only only in the manifest.
+    numberFormat: code.kind === 'number' ? (code.numberFormat ?? saved.numberFormat) : undefined,
+    dateFormat: code.kind === 'date' ? (code.dateFormat ?? saved.dateFormat) : undefined,
+    format: code.kind === 'string' ? (code.format ?? saved.format) : undefined,
+    constraints: constraintsForField(code, code.constraints ?? saved.constraints),
     object: {
       // Embedded object sub-fields: parsed model wins when non-empty; empty [] must not wipe saved subs.
       fields:
@@ -235,7 +255,7 @@ function mergeField(code: NormalizedField, saved: NormalizedField): NormalizedFi
       schemaName: code.object?.schemaName ?? saved.object?.schemaName
     },
     // File-derived fidelity (P3): the parsed model is the source of truth, never a stale saved copy.
-    enum: code.enum,
+    enum: mergeEnum(code.enum, saved.enum),
     default: code.default
   };
 }

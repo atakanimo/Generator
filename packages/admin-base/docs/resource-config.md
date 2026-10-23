@@ -19,6 +19,7 @@ Her admin modülü iki dosyadan oluşur (host'ta `modules/<m>/`):
 | `label?` | Menü / başlık metni |
 | `fields` | `FieldConfig[]` |
 | `defaultSort?`, `pageSize?` | Liste varsayılanları |
+| `sortable?` | `false` → hiçbir kolon sıralanmaz, `defaultSort` yok sayılır (BE liste ucu sıralamıyorsa) |
 | `path?` | Route segmenti; yoksa `name` |
 | `menu?.order` | Sol menü sırası |
 | `operations?` | `create / update / delete` alt kümesi; yoksa hepsi, `[]` = salt okunur |
@@ -27,22 +28,23 @@ Her admin modülü iki dosyadan oluşur (host'ta `modules/<m>/`):
 
 ## Alanlar (`src/schema/fields.ts`)
 
-Ortak: `name`, `label`, `isArray`, `required`, `nullable`, `readonly`, `hideOnCreate`, `hideOnUpdate`, `writeOnly`, `list` (tablo kolonu), `filter`, `default`, `component`.
+Ortak: `name`, `label`, `isArray`, `required`, `nullable`, `readonly`, `hideOnCreate`, `hideOnUpdate`, `writeOnly`, `list` (tablo kolonu), `sortable`, `filter`, `default`, `component`, `format` (`email`), `numberFormat` (`int`), `dateFormat` (`date`), `constraints` (`{ minLength, maxLength, pattern }` tekil metinde, `{ min, max }` tekil sayıda; dizilerde yok).
 
 | `kind` | Ek alanlar | Tablo | Form | JSON |
 | --- | --- | --- | --- | --- |
-| `string` | `component?: 'textarea' \| 'image'` | metin / küçük resim | metin, çok satır, URL + önizleme | string |
-| `number` | — | sayı | sayı | number |
+| `string` | `component?: 'textarea' \| 'image'`, `format?: 'email'` | metin / küçük resim | metin, çok satır, URL + önizleme, e-posta | string |
+| `number` | `numberFormat?: 'int'` | sayı | sayı; `int` adım 1 | number |
 | `decimal` | — | metin | `inputmode=decimal` metin | string |
 | `boolean` | — | işaret | anahtar | boolean |
-| `datetime` | — | tarih | tarih seçici (dayjs) | ISO string |
-| `enum` | `options` | metin | select | string |
+| `datetime` | `dateFormat?: 'date'` | tarih | tarih + saat; `date` yalnızca gün (`YYYY-MM-DD`) | ISO string veya `YYYY-MM-DD` |
+| `enum` | `options`, `numbers?` | etiket | select; `numbers` varsa `numbers[i]` gönderir (açık değer) | string veya number |
 | `relation` | `ref`, `display?`, `populate?` | `display` alanı | autocomplete (hedefin `get-all`'u) | id ya da obje |
 | `object` | `fields`, `typeName?` | okunur özet + JSON penceresi | iç içe form (dizide satır ekle / sil) | obje |
 | `map` | `valueKind` | özet | anahtar / değer listesi | obje |
 | `json` | — | kısaltılmış JSON | JSON metni | serbest |
 
 - `filter`: `eq | regex | range | date-range | boolean | enum | relation`. Yalnızca `filter`'ı olan alanlar filtre çubuğunda çıkar.
+- `sortable`: kolon sunucu sıralaması. Varsayılan skaler, dizi olmayan alanlarda açık; `false` kapatır. `true` ilişki / obje / dizi alanını sıralanabilir yapmaz.
 - `default`: sabit değer ya da `{ dynamic: 'now' | 'uuid' | 'currentUserId' }` (create formu açılınca hesaplanır).
 - `writeOnly` (ör. şifre; model `hidden` + yazılabilir): cevapta gelmez, tabloda ve filtrede yok; formda gizli giriş, edit'te boş başlar ve boşsa gönderilmez; `required` yalnızca create'te.
 - Update body'si formdaki yazılabilir alanların tamamıdır (`toWriteBody`); `readonly` / `hideOnUpdate` alanlar ve şema dışı anahtarlar düşer, ilişkiler id'ye iner.
@@ -62,8 +64,21 @@ export const userSubscriptionsResource = extendResource(userSubscriptionsSchema,
       confirm: { title: 'Kullanıcı premium yapılsın mı?' },
     },
   ],
-  fields: { status: { cell: StatusChip } },
+    {
+      id: 'export-csv',
+      label: 'CSV indir',
+      placement: 'toolbar',
+      visible: ({ listBody }) => Boolean(listBody.filters?.status),   // yalnızca durum filtresiyle
+      run: ({ listBody }) => downloadCsv(listBody.filters),
+    },
+    { id: 'resync', label: 'Eşitle', placement: 'detail' },      // detay drawer'ının alt bölümünde
+  ],
+  fields: {
+    status: { cell: StatusChip },
+    provider: { loadOptions: ({ signal }) => fetchProviders(signal) },  // dinamik select
+  },
   slots: { aboveTable: Summary },
+  detail: { component: ReportResults },
 });
 ```
 
@@ -71,7 +86,10 @@ export const userSubscriptionsResource = extendResource(userSubscriptionsSchema,
 | --- | --- |
 | `icon` | Sol menü ikonu |
 | `actions` | `placement: 'row' \| 'detail'` → `POST {endpoint}/:id/actions/:id`; `'toolbar' \| 'bulk'` → `POST {endpoint}/actions/:id` (`{ ids, ...input }`). `run` verilirse çağrı yerine o çalışır. `input` küçük bir form, `confirm` onay diyaloğu. Başarı metni BE `uiMessage`'ından |
-| `fields` | Alan başına `cell` (tablo hücresi) ve `formField` (form bileşeni) override'ı |
+| `actions[].visible / disabled` | Satır / detay aksiyonunda `(row) => boolean`; toolbar / toplu aksiyonda `({ listBody, selectedIds }) => boolean` |
+| `fields` | Alan başına `cell` (tablo ve detay hücresi), `formField` (form bileşeni) ve `loadOptions` override'ı |
+| `fields.<ad>.loadOptions` | `({ signal }) => Promise<string[]>`: seçenekleri çalışma anında yükler (resource + alan başına önbellekli). `enum` alanında statik `options`'ın yerine geçer; `string` alanında formda select, `filter: 'enum'` ile filtrede seçim kutusu çıkarır. Etiket yine `admin.<resource>.enums.<alan>.<değer>` |
 | `slots` | `toolbarStart`, `aboveTable`, `belowTable` |
+| `detail` | Salt okunur detay drawer'ı; satırda "Detay" ikonu açar. `placement: 'detail'` aksiyonu varsa kendiliğinden açık; `true` ya da `{ fetch?, component?, hideFields? }`. `fetch` (varsayılan `true`) kaydı `getOne` ile çeker, `false` listedeki satırı gösterir. `component` alanların altına eklenir (`{ row, refresh, close }`). `false` → detay yok, `detail` aksiyonları satırda |
 
 Özel aksiyon, hücre ve slot'lar yalnızca `<m>.generated.ts`'e yazılır; `.generated.config.ts` her generate'te ezilir.

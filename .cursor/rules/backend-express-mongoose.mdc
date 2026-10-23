@@ -10,7 +10,7 @@ Source: `docs/backend/express-mongoose.md`. Contract: `docs/api-contract.md`.
 
 - Module files under `src/modules/<module>/` in order: model, crud, filters, types, service, service.admin, schema, routes, routes.admin (+ user-owned `hooks.ts` created once). Nothing under legacy `src/models|services|routes|types`.
 - Update mode: extract custom blocks → render → merge → write; broken markers stop that file. Markers come from `customBlockMarkers.ts`.
-- Business rules → `<m>.hooks.ts` (`beforeList`, `beforeGetById`, `beforeCreate`, `beforeUpdate`, `beforeDelete`, `defaultSort`); never outside custom blocks.
+- Business rules → `<m>.hooks.ts` (`beforeList`, `beforeGetById`, `beforeCreate`, `beforeUpdate`, `beforeDelete`, `afterCreate(row)`, `afterUpdate(row)`, `afterDelete(row)`, `mapRows(rows)`, `defaultSort`; contract in `@core/services/service-hooks`). `after*` cannot roll back the write; `mapRows` gets a whole page at once. Never outside custom blocks.
 - `_id` → `id` mapping only in `toWire` / `AtaResponse`; never in templates.
 - Core assets: create-if-missing, never overwrite; new asset → bootstrap list + closed imports.
 - Changing ownership to / from `self` changes every `<m>Crud` scope; check custom blocks.

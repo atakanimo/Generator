@@ -10,6 +10,7 @@ interface IApiResponse<T> {
   data?: T | null;
   uiMessage: string | null;
   errorData: { header?: string; message: string; code?: number } | null;
+  traceId?: string;
 }
 ```
 
@@ -18,6 +19,7 @@ interface IApiResponse<T> {
 | Başarı | 200 | `true` | sonuç | her zaman dolu (varsayılan `t('common.success')`) | `null` |
 | Hata | `errorData.code`, yoksa 500 | `false` | `null` | `null` | dolu |
 
+- `traceId` opsiyoneldir: isteğin kimliği. Gelen `X-Request-Id` (en çok 128 karakter) kullanılır, yoksa üretilir; yanıt başlığında da döner. Express: host'un istek bağlamındaki `requestId` (`@utils/requestContext`); .NET: `TraceIdMiddleware` (`HttpContext.TraceIdentifier` ile aynı). İstek dışında (job) yazılmaz.
 - `errorData.header` / `message` yerelleştirilmiş, kullanıcıya gösterilen metindir.
 - Hata kodları her stack'te aynı sayılardır. Tek kaynak `core/errors/error-codes.ts`: 400, 401, 403, 404, 408, 409, 422, 429, `EMAIL_NOT_VERIFIED` 463, 500, 503.
 - Generic asset'te projeye özel kod yok (ör. Varlik360'ın `PREMIUM_REQUIRED: 460` host'ta kalır).
@@ -81,9 +83,11 @@ type PaginatedList<T> = { items: T[]; total: number; hasMore: boolean; currentPa
 | Alan | JSON |
 | --- | --- |
 | kimlik | her stack'te `id: string`; JSON'da `_id` yok |
-| `createdAt`, `updatedAt`, `date` | ISO-8601 UTC string |
+| `createdAt`, `updatedAt`, `date` | ISO-8601 UTC string. `dateFormat: 'date'` ise yalnızca `YYYY-MM-DD` (Mongo'da da bu string olarak saklanır; aralık filtresi string karşılaştırmasıyla `from ≤ x ≤ to`) |
+| `number` | number. `numberFormat: 'int'` tam sayı, yoksa ondalık serbest |
 | `decimal` | string (`"1234.56"`), giriş ve çıkışta |
-| `enum` | string |
+| `enum` | string. Sayısal enum'da (`enum.numbers`) number: modeldeki açık değer, sıra numarası değil |
+| `string` + `format: 'email'` | string; şema e-posta biçimini doğrular |
 | `reference` | populate edilmiş `{ id, ...alanlar }` ya da `"<id>"`; dizilerde `id[]` / obje[] |
 | `object` / `object[]` / `map` | düz JSON |
 

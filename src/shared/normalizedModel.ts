@@ -28,6 +28,35 @@ export type FieldKind =
 
 export type FilterType = 'eq' | 'regex' | 'range' | 'date-range' | 'boolean' | 'enum' | 'reference';
 
+/** `number` storage. Absent → `float` (JSON number; C# `double`). Editor shows this only for C# and Python. */
+export type NumberFormat = 'int' | 'float';
+/** `date` storage. Absent → `datetime` (ISO-8601). `date` → calendar day (`YYYY-MM-DD`; C# `DateOnly`). */
+export type DateFormat = 'datetime' | 'date';
+/** `string` wire format. Absent → plain text. */
+export type StringFormat = 'email';
+/**
+ * Enum definition. `values` are the labels (string enums: also the stored / JSON value).
+ * `numbers` → numeric enum: `numbers[i]` is the stored / JSON value of `values[i]` (C# `Name = 5`, Python `IntEnum`,
+ * Mongoose `enum: [0, 5]`). Explicit, so reordering or inserting labels never changes stored numbers.
+ */
+export interface NormalizedEnum {
+  values: string[];
+  numbers?: number[];
+}
+
+/**
+ * Request limits. Written into the BE schema and the admin form rules. Only on single (non-array) fields:
+ * `minLength` / `maxLength` / `pattern` on strings (text length), `min` / `max` on number / decimal.
+ * `constraintsForField` (`fieldConstraints.ts`) drops the rest.
+ */
+export interface FieldConstraints {
+  minLength?: number;
+  maxLength?: number;
+  min?: number;
+  max?: number;
+  pattern?: string;
+}
+
 export type RelationType = 'oneToOne' | 'oneToMany' | 'manyToOne' | 'manyToMany';
 
 /** Normal (mobile) API endpoints a model exposes (contract §2.1, G3). */
@@ -129,9 +158,16 @@ export interface NormalizedField {
   nullable?: boolean;
   unique?: boolean;
   trim?: boolean;
+  /** Set only for `kind: 'number'`. Absent → float. */
+  numberFormat?: NumberFormat;
+  /** Set only for `kind: 'date'`. Absent → datetime. */
+  dateFormat?: DateFormat;
+  /** Set only for `kind: 'string'`. */
+  format?: StringFormat;
+  constraints?: FieldConstraints;
   native?: NativeType;
-  /** Enum values — filled from P3 (parser `enum: [...]`). */
-  enum?: { values: string[] };
+  /** Enum values — filled from P3 (parser `enum: [...]`). `numbers` → numeric enum (see `NormalizedEnum`). */
+  enum?: NormalizedEnum;
   /** Schema default — filled from P3 (parser `default:`). */
   default?: string | number | boolean | null;
   reference?: NormalizedReference;
@@ -222,11 +258,33 @@ export function canonicalField(f: NormalizedField): NormalizedField {
       native: sub(f.native, ['type'], true),
       reference: sub(f.reference, ['include', 'target', 'display', 'populate', 'displayObjectFields', 'relationType']),
       object: sub({ ...f.object, fields: f.object?.fields?.map(canonicalSubField) }, ['fields', 'typeName', 'schemaName']),
+      enum: sub(f.enum, ['values', 'numbers']),
+      constraints: sub(f.constraints, ['minLength', 'maxLength', 'min', 'max', 'pattern']),
       filter: sub(f.filter, ['searchable', 'type', 'nativeType']),
       access: sub(f.access, ['readonly', 'hiddenFromCreate', 'hiddenFromUpdate', 'hidden', 'adminOnly']),
       ui: sub(f.ui, ['label', 'list', 'component', 'defaultValue'])
     },
-    ['name', 'kind', 'isArray', 'required', 'nullable', 'unique', 'trim', 'native', 'enum', 'default', 'reference', 'object', 'filter', 'access', 'ui']
+    [
+      'name',
+      'kind',
+      'isArray',
+      'required',
+      'nullable',
+      'unique',
+      'trim',
+      'numberFormat',
+      'dateFormat',
+      'format',
+      'constraints',
+      'native',
+      'enum',
+      'default',
+      'reference',
+      'object',
+      'filter',
+      'access',
+      'ui'
+    ]
   );
 }
 

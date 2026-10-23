@@ -19,6 +19,9 @@ export { adminBaseTexts, adminBaseTextsEn, humanize, type AdminTextKey, type Tra
 export { useAdminTexts, fieldLabelKey } from './ui/useAdminTexts.js';
 export { ResourcePage, type ResourcePageProps } from './ui/ResourcePage.js';
 export { ResourceFormDrawer, type ResourceFormDrawerProps } from './ui/form/ResourceFormDrawer.js';
+export { ResourceDetailDrawer, type ResourceDetailDrawerProps } from './ui/detail/ResourceDetailDrawer.js';
+export { isColumnSortable } from './ui/table/columns.js';
+export { enumChoices, enumLabelOf, enumValueFromInput, type EnumChoice } from './ui/enumChoices.js';
 export { FormFields, type FormFieldsProps } from './ui/form/FormFields.js';
 export { formValuesToBody, initialFormValues, isFieldVisible, type FormMode } from './ui/form/values.js';
 export { validateField } from './ui/form/rules.js';

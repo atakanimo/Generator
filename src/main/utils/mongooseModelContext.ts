@@ -3,6 +3,7 @@
  * Shared by backend generation (`BackendGenerator`) and model creation (`modelCreator`, R6).
  */
 import type { NormalizedField as V2Field, NormalizedModel as V2Model, RelationType } from '../../shared/normalizedModel.js';
+import { constraintsForField, DATE_ONLY_PATTERN, EMAIL_PATTERN, isNumericEnum, jsRegExpSource } from '../../shared/fieldConstraints.js';
 import { filterNamedNestedNotOwnedByCustomTypes } from './namedNestedSchemaEmit.js';
 import { filterTokenOf, kindFromTypeToken, templateScalarToken, typeTokenOf, type TemplateScalarToken } from '../../shared/fieldTypeToken.js';
 
@@ -16,6 +17,12 @@ export type BeFieldType = 'string' | 'number' | 'boolean' | 'date' | 'schema' | 
 export interface BeField {
 /** Fidelity (P3), from v2: enum / literal default / verbatim options / declared TS type, `?`, JSDoc. */
 enumValues?: string[];
+/** Numeric enum: stored / JSON value of `enumValues[i]`. */
+enumNumbers?: number[];
+numberFormat?: 'int' | 'float';
+dateFormat?: 'datetime' | 'date';
+format?: 'email';
+constraints?: { minLength?: number; maxLength?: number; min?: number; max?: number; pattern?: string };
 schemaDefault?: string | number | boolean | null;
 nativeOptions?: string[];
 tsTypeOverride?: string;
@@ -79,6 +86,12 @@ doc?: string;
 tsTypeOverride?: string;
 /** Rendered `'a', 'b'` (P3, R2). */
 enumLiteral?: string;
+minLength?: number;
+maxLength?: number;
+minimum?: number;
+maximum?: number;
+/** Rendered `new RegExp("…")`. */
+matchLiteral?: string;
 /** Rendered literal, e.g. `'none'`, `false`, `0`, `null` (P3, R2). */
 defaultLiteral?: string;
 /** Verbatim options, e.g. `uppercase: true` (P3). */
@@ -246,6 +259,11 @@ export function normalizeField(field: V2Field): BeField {
     nestedTypeName: nestedNames?.nestedTypeName,
     nestedSchemaName: nestedNames?.nestedSchemaName,
     enumValues: field.enum?.values,
+    enumNumbers: isNumericEnum(field.enum) ? field.enum.numbers : undefined,
+    numberFormat: field.numberFormat,
+    dateFormat: field.dateFormat,
+    format: field.format,
+    constraints: constraintsForField(field, field.constraints),
     schemaDefault: field.default,
     nativeOptions: field.native?.options,
     tsTypeOverride: field.native?.tsType,
@@ -451,7 +469,29 @@ export function toMongooseModelFields(fields: BeField[], sourceType: SourceTypeL
     const out: MongooseFieldShape = { ...shape, optional: field.tsOptional ?? !field.required };
     if (field.doc) out.doc = field.doc;
     if (field.tsTypeOverride) out.tsTypeOverride = field.tsTypeOverride;
-    if (field.enumValues?.length) out.enumLiteral = field.enumValues.map(quote).join(', ');
+    if (field.enumNumbers?.length) {
+      out.enumLiteral = field.enumNumbers.join(', ');
+      out.mongooseType = field.isArray ? '[Number]' : 'Number';
+      const union = field.enumNumbers.join(' | ');
+      out.tsType = field.isArray ? `(${union})[]` : union;
+    } else if (field.enumValues?.length) {
+      out.enumLiteral = field.enumValues.map(quote).join(', ');
+    }
+    // Date-only: BSON has no calendar-day type; a `YYYY-MM-DD` string keeps the wire value and sorts correctly.
+    if (field.type === 'date' && field.dateFormat === 'date') {
+      out.mongooseType = field.isArray ? '[String]' : 'String';
+      out.tsType = field.isArray ? 'string[]' : 'string';
+      delete out.tsTypeOverride; // a declared `Date` from an earlier datetime version no longer fits
+      out.matchLiteral = jsRegExpSource(DATE_ONLY_PATTERN);
+    }
+    // `constraints` is already narrowed to single strings / numbers (`constraintsForField` in `normalizeField`).
+    const limits = field.constraints;
+    if (limits?.minLength != null) out.minLength = limits.minLength;
+    if (limits?.maxLength != null) out.maxLength = limits.maxLength;
+    if (limits?.min != null) out.minimum = limits.min;
+    if (limits?.max != null) out.maximum = limits.max;
+    if (!field.isArray && field.format === 'email') out.matchLiteral = jsRegExpSource(EMAIL_PATTERN);
+    else if (limits?.pattern) out.matchLiteral = jsRegExpSource(limits.pattern);
     if (field.schemaDefault !== undefined) out.defaultLiteral = renderLiteral(field.schemaDefault);
     if (field.nativeOptions?.length) out.nativeOptions = field.nativeOptions;
     return out;

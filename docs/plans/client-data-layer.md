@@ -1,6 +1,6 @@
 # Plan: İstemci veri katmanı (mobil / web)
 
-Durum: **C0–C3 tamam (2026-10-21; C3 simülatör kontrolü bekliyor).** Referans istemci: Varlik360 `apps/mobile`. Nasıl çalıştığı: [frontend/client-data-layer.md](../frontend/client-data-layer.md). Kapı: `node scripts/verify/regen-client.mjs`. Sıradaki: C3 simülatör kontrolü (kullanıcı), C4 (Generator arayüzü).
+Durum: **C0–C3 ve C5 tamam (2026-10-21; C3 simülatör, C5 tarayıcı kontrolü bekliyor).** Referans istemci: Varlik360 `apps/mobile`. Nasıl çalıştığı: [frontend/client-data-layer.md](../frontend/client-data-layer.md). Kapı: `node scripts/verify/regen-client.mjs`. Sıradaki: C3 / C5 uçtan uca kontrol, C4 (Generator arayüzü).
 
 ## 1. Hedef
 
@@ -61,7 +61,7 @@ Durum: **C0–C3 tamam (2026-10-21; C3 simülatör kontrolü bekliyor).** Refera
 | C2 ✅ | Thunk + slice (fabrika + parçalar) | Aynı harness, birim testler (reducer'lar) |
 | C3 ✅ | Varlik360 mobile taşıma: 8 üretilmiş modülün elle değişiklikleri K dosyalarına | mobile `tsc` taban çizgisi aynı; simülatör en son |
 | C4 | Generator arayüzü: hedef listesi (BE / Admin / istemciler), model başına istemci + katman seçimi, generate bildirimi | Electron'da elle |
-| C5 | SharedFrame web (.NET arkası): ikinci preset ya da preset seçenekleri, `mappers.ts`'nin daralması | web `tsc` + Docker API'ye karşı smoke |
+| C5 ✅ | SharedFrame web (.NET arkası): `redux-web` preset, web tamamen Generator düzenine | web `tsc` + build; tarayıcı kontrolü bekliyor |
 
 ## 5. Varlik360 mobile envanteri (2026-10-21)
 
@@ -101,6 +101,19 @@ Mobile'da 8 modül yeni düzende; eski üretilmiş dosyalar scratchpad'de (`mobi
 - Davranış farkları (simülatörde bakılacak): update sonrası satır birleştirilir (eskiden cevapla değişiyordu, populate edilmiş ilişkiler id'ye dönüyordu); delete kaydı listeden gerçekten siler (eskiden `data` `null` olduğu için silmiyordu, liste yenilemesi gizliyordu); `read-all` URL'ine baştaki `/` eklendi.
 - Mobile'a özel (Generator dışı) düzenleme: `/api/v1/alpha/*`'a giden 7 servis / 7 thunk / 7 slice tek `alpha.service.ts` / `alpha.thunk.ts` / `alpha.slice.ts`'e birleştirildi (tek düz `AlphaState`, `GetAlphaState`); mobile kuralı `Varlik360/.cursor/rules/frontend.mobile.mdc` yeni düzene göre yazıldı (`pending` istisnası: `skipLoading` isteklerinin yerel yükleniyor bayrağı).
 - Bulunan: RTK aynı action için ikinci `addCase`'te fırlatır; ilk taşımada notifications / userWatchList'te vardı, `addMatcher`'a çevrildi, harness'e çalışma anı kontrolü eklendi.
+
+## 6b. C5 sonucu: SharedFrame web (2026-10-21, commit yok)
+
+Karar (kullanıcı): web tamamen Generator düzenine döner (klasör, adlandırma, API şekli); web'de admin API yok.
+
+- Preset `redux-web`; üretilen modüller: EventTypes, Events, UserMemberships, Documents (servis + thunk + slice), MediaItems (yalnız servis: galeri özel uçtan gelir).
+- Özel modüller Generator adlandırmasına taşındı: `auth.service/thunk/slice`, `public.service/thunk/slice`, `common.slice`; `mappers.ts` kalktı (özel uçların dönüşümü kendi servislerinde: auth oturumu, public galeri adresleri).
+- Silinen: model tipleri (`types/{event,eventType,template,membershipPlan,userMembership,document}.types.ts`), eski servis / thunk / slice'lar; Templates ve MembershipPlans (ekranda kullanılmıyordu); admin API çağrıları (15; hiçbiri ekrandan çağrılmıyordu).
+- Ekranlar API şeklinde: `event.eventTypeId.name`, `membership.membershipPlanId.name`; public etkinlik `IPublicEvent` (`eventType` / `ownerName` string). Form: `EventForm` + `toEventInput` (`activeUntil` = `eventDate` yer tutucu, BE hesaplar).
+- `baseURL` yalnız origin: `.env.development` `http://localhost:5080`, `.env.production` boş, `docker-compose.yml` web build arg'ı; bütün çağrılar `/api/...`.
+- Eksik API yok: medya silme / yükleme, QR, public uçlar BE'de özel uç olarak var.
+- Review sonrası (2026-10-21): Documents ve MediaItems yalnız servis katmanı (`layers`), eski `UserData` / `GetAuthState` / `UploadMediaRequest` tipleri silindi, şifre değiştirme thunk'a alındı (tek seferlik okumalar bileşenden servis çağrısı olarak kalır: galeri kapakları, doküman metni). SharedFrame MediaItems normal list / getOne kapatıldı (backlog #1: satır misafir IP'si ve `storageKey` taşıyordu); `features-smoke.mjs` güncellendi. .NET yeniden üretiminde tüm modüllerden `createdAt` / `updatedAt` tarih filtresi düştü: manifest bunları `searchable: false` tutuyor, eski üretim bu ayarı yok sayıyordu; hiçbir istemci göndermiyor, sıralama duruyor.
+- Dokümanlar: web `README.md` ve `docs/ARCHITECTURE.md` yeniden yazıldı, web dokümanları `apps/web/docs/` altında (`ARCHITECTURE.md`, `REDESIGN-PLAN.md`); eski görev ve Vercel dokümanları kaldırıldı; SharedFrame `docs/overview.md`, `api.md`, `backlog.md` güncel.
 
 ## 7. Açık sorular
 

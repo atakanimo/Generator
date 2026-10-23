@@ -25,11 +25,14 @@ public sealed class {{name}}
 {{/each}}
 {{#each enums}}
 
+{{#if numeric}}
+[NumericEnum]
+{{/if}}
 public enum {{name}}
 {
 {{#each members}}
     [JsonStringEnumMemberName({{{literal}}})]
-    {{name}},
+    {{name}}{{#if ../numeric}} = {{number}}{{/if}},
 {{/each}}
 }
 {{/each}}

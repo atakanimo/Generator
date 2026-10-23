@@ -9,6 +9,8 @@ import { extractListPagination, resolveListSort } from '../../src/generator-asse
 import { toWire } from '../../src/generator-assets/express-mongoose/response/wire.ts';
 import { resolveCrudProjection, stripHiddenFields } from '../../src/generator-assets/express-mongoose/services/crud-projection.ts';
 import { applyAuthScope } from '../../src/generator-assets/express-mongoose/services/crud-scope.ts';
+import { dateOnlyRangeFilter } from '../../src/generator-assets/express-mongoose/filters/filter-query.helper.ts';
+import { mapListRows, mapOneRow, runAfterWrite } from '../../src/generator-assets/express-mongoose/services/service-hooks.ts';
 
 const requireFromHost = createRequire('/Users/atakanatabey/Projects/VarlikALL/Varlik360/package.json');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -178,3 +180,52 @@ describe('crud-scope (§2.1, G5)', () => {
   });
 });
 
+describe('dateOnlyRangeFilter (dateFormat: date)', () => {
+  it('string bounds, inclusive', () => {
+    assert.deepEqual(dateOnlyRangeFilter({ from: '2026-10-01', to: '2026-10-31' }), { $gte: '2026-10-01', $lte: '2026-10-31' });
+    assert.deepEqual(dateOnlyRangeFilter('2026-10-22'), { $gte: '2026-10-22', $lte: '2026-10-22' });
+  });
+
+  it('ignores values that are not calendar days', () => {
+    assert.equal(dateOnlyRangeFilter({ from: '2026-10-01T10:00:00Z' }), undefined);
+    assert.equal(dateOnlyRangeFilter(new Date()), undefined);
+    assert.equal(dateOnlyRangeFilter(null), undefined);
+  });
+});
+
+describe('service-hooks (shared hook contract)', () => {
+  const ok = <T>(data: T) => ({ isSuccess: true, data, uiMessage: 'ok', errorData: null });
+
+  it('mapListRows: one call with the whole page, item with own `items` untouched elsewhere', async () => {
+    let calls = 0;
+    const page = ok({ items: [{ a: 1 }, { a: 2 }], total: 2, hasMore: false, currentPage: 1, currentLimit: 50 });
+    const out = await mapListRows(page, rows => {
+      calls++;
+      return rows.map(r => ({ ...r, b: true }));
+    });
+    assert.equal(calls, 1);
+    assert.deepEqual((out.data as { items: unknown[] }).items, [{ a: 1, b: true }, { a: 2, b: true }]);
+  });
+
+  it('mapOneRow: a record with its own `items` array is a single row', async () => {
+    const out = await mapOneRow(ok({ items: [1, 2], name: 'x' }), rows => rows.map(r => ({ ...r, mapped: true })));
+    assert.deepEqual(out.data, { items: [1, 2], name: 'x', mapped: true });
+  });
+
+  it('no hook / failed response → unchanged', async () => {
+    const failed = { isSuccess: false, data: null, uiMessage: null, errorData: { message: 'x' } };
+    assert.equal(await mapListRows(failed, rows => rows), failed);
+    const page = ok({ items: [] });
+    assert.equal(await mapListRows(page, undefined), page);
+  });
+
+  it('runAfterWrite: runs on success, a throw becomes the error response', async () => {
+    const seen: unknown[] = [];
+    const written = ok({ _id: '1' });
+    assert.equal(await runAfterWrite(written, row => void seen.push(row), 'ctx'), written);
+    assert.deepEqual(seen, [{ _id: '1' }]);
+    const broken = await runAfterWrite(written, () => { throw new Error('boom'); }, 'm.afterCreate');
+    assert.equal(broken.isSuccess, false);
+    assert.equal(broken.errorData?.message, 'boom');
+  });
+});

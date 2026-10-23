@@ -34,7 +34,9 @@ export const AtaResponse = <T>(res: Response, response: IApiResponse<T>) => {
     errorCode: response.errorData?.code ?? null,
     durationMs
   });
-  res.status(statusCode).json({ ...response, data: toWire(response.data) });
+  // `traceId` = the request id of the host's request context (`x-request-id` or generated; set by its middleware).
+  const traceId = ctx?.requestId;
+  res.status(statusCode).json({ ...response, ...(traceId ? { traceId } : {}), data: toWire(response.data) });
 };
 
 export const SuccessResponse = <T>(data: T, uiMessage?: string): IApiResponse<T> => {

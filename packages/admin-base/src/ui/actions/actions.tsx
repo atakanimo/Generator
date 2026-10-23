@@ -1,13 +1,14 @@
 import BoltOutlinedIcon from '@mui/icons-material/BoltOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import { Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, IconButton, Tooltip } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import type { Id, ListBody } from '../../contract/api.js';
 import { resourceKeys, useResourceApi } from '../../react/hooks.js';
-import type { AnyResource, CollectionAction, ResourceAction, RowAction } from '../../schema/extend.js';
+import type { AnyResource, CollectionAction, CollectionActionState, ResourceAction, RowAction } from '../../schema/extend.js';
 import { FormFields } from '../form/FormFields.js';
 import { formValuesToBody, initialFormValues } from '../form/values.js';
 import { useAdminTexts } from '../useAdminTexts.js';
@@ -20,6 +21,25 @@ export type PendingAction =
 
 export function isRowAction(action: ResourceAction<Row>): action is RowAction<Row> {
   return action.placement === 'row' || action.placement === 'detail';
+}
+
+export interface SplitActions {
+  rowActions: RowAction<Row>[];
+  detailActions: RowAction<Row>[];
+  toolbarActions: CollectionAction<Row>[];
+  bulkActions: CollectionAction<Row>[];
+}
+
+/** `detail` aksiyonları detay drawer'ı varsa orada, yoksa satırda. */
+export function splitActions(actions: readonly ResourceAction<Row>[], hasDetailView: boolean): SplitActions {
+  const rowLike = actions.filter(isRowAction);
+  const collection = actions.filter((a): a is CollectionAction<Row> => !isRowAction(a));
+  return {
+    rowActions: rowLike.filter(a => a.placement === 'row' || !hasDetailView),
+    detailActions: hasDetailView ? rowLike.filter(a => a.placement === 'detail') : [],
+    toolbarActions: collection.filter(a => a.placement === 'toolbar'),
+    bulkActions: collection.filter(a => a.placement === 'bulk')
+  };
 }
 
 /** `run` yoksa sözleşmedeki action endpoint'i çağrılır; sonra resource sorguları yenilenir. */
@@ -135,13 +155,15 @@ export function ActionInputDialog({ resource, action, onSubmit, onClose }: Actio
 export interface RowActionsProps {
   row: Row;
   actions: readonly RowAction<Row>[];
+  /** Detay drawer'ını açar. */
+  onView?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
   onAction: (action: RowAction<Row>) => void;
 }
 
 /** Satır işlemleri: `IconButton size="small"` (admin-ui kuralı). */
-export function RowActions({ row, actions, onEdit, onDelete, onAction }: RowActionsProps) {
+export function RowActions({ row, actions, onView, onEdit, onDelete, onAction }: RowActionsProps) {
   const texts = useAdminTexts();
   const icon = (title: string, node: ReactNode, onClick: () => void, disabled?: boolean) => (
     <Tooltip title={title} key={title}>
@@ -158,6 +180,7 @@ export function RowActions({ row, actions, onEdit, onDelete, onAction }: RowActi
 
   return (
     <Box sx={{ display: 'flex', justifyContent: 'flex-start', width: '100%' }}>
+      {onView ? icon(texts.text('detail'), <VisibilityOutlinedIcon fontSize='small' />, onView) : null}
       {actions
         .filter(action => action.visible?.(row) ?? true)
         .map(action =>
@@ -168,6 +191,11 @@ export function RowActions({ row, actions, onEdit, onDelete, onAction }: RowActi
       {onDelete ? icon(texts.text('delete'), <DeleteOutlineIcon fontSize='small' />, onDelete) : null}
     </Box>
   );
+}
+
+/** Toolbar / toplu aksiyon görünürlüğü ve kilidi (`visible` / `disabled`). */
+export function collectionActionState(action: CollectionAction<Row>, state: CollectionActionState): { visible: boolean; disabled: boolean } {
+  return { visible: action.visible?.(state) ?? true, disabled: action.disabled?.(state) ?? false };
 }
 
 export function rowActionsWidth(actionCount: number): number {

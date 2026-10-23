@@ -15,12 +15,12 @@ namespace __App__.Application.Common.Services;
 /// </summary>
 public abstract class CrudServiceBase<TEntity, TRow, TCreate, TUpdate, TFilters>(
     IAppDbContext db,
-    IServiceHooks<TEntity, TFilters, TCreate, TUpdate> hooks) : ICrudService<TRow, TCreate, TUpdate, TFilters>
+    IServiceHooks<TEntity, TFilters, TCreate, TUpdate, TRow> hooks) : ICrudService<TRow, TCreate, TUpdate, TFilters>
     where TEntity : class, IEntity, ITimestamped
     where TFilters : class
 {
     protected IAppDbContext Db => db;
-    protected IServiceHooks<TEntity, TFilters, TCreate, TUpdate> Hooks => hooks;
+    protected IServiceHooks<TEntity, TFilters, TCreate, TUpdate, TRow> Hooks => hooks;
 
     protected abstract DbSet<TEntity> Set { get; }
     protected abstract Expression<Func<TEntity, TRow>> Row { get; }
@@ -56,7 +56,8 @@ public abstract class CrudServiceBase<TEntity, TRow, TCreate, TUpdate, TFilters>
     {
         var query = ApplyFilters(hooks.BeforeList(Scope(Set.AsNoTracking()), body), body.Filters)
             .ApplySort(body.SortBy, body.SortOrder, Sort, q => hooks.DefaultSort(q) ?? q.OrderByDefault());
-        return Result.Ok(await query.Select(Row).ToPaginatedListAsync(body.Page, body.Limit, cancellationToken));
+        var page = await query.Select(Row).ToPaginatedListAsync(body.Page, body.Limit, cancellationToken);
+        return Result.Ok(page with { Items = await hooks.MapRows(page.Items, cancellationToken) });
     }
 
     public virtual async Task<Result<TRow>> GetByIdAsync(Guid id, CancellationToken cancellationToken)
@@ -65,7 +66,13 @@ public abstract class CrudServiceBase<TEntity, TRow, TCreate, TUpdate, TFilters>
             .Where(x => x.Id == id)
             .Select(Row)
             .FirstOrDefaultAsync(cancellationToken);
-        return row is null ? Error.NotFound() : Result.Ok(row);
+        if (row is null)
+        {
+            return Error.NotFound();
+        }
+
+        var mapped = await hooks.MapRows([row], cancellationToken);
+        return Result.Ok(mapped[0]);
     }
 
     public virtual async Task<Result<TRow>> CreateAsync(TCreate body, CancellationToken cancellationToken)
@@ -84,6 +91,7 @@ public abstract class CrudServiceBase<TEntity, TRow, TCreate, TUpdate, TFilters>
 
         Set.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
+        await hooks.AfterCreate(entity, cancellationToken);
         return Result.Ok(await ReadRowAsync(entity.Id, cancellationToken), Messages.Created);
     }
 
@@ -108,6 +116,7 @@ public abstract class CrudServiceBase<TEntity, TRow, TCreate, TUpdate, TFilters>
         }
 
         await db.SaveChangesAsync(cancellationToken);
+        await hooks.AfterUpdate(entity, cancellationToken);
         return Result.Ok(await ReadRowAsync(entity.Id, cancellationToken), Messages.Updated);
     }
 
@@ -126,6 +135,7 @@ public abstract class CrudServiceBase<TEntity, TRow, TCreate, TUpdate, TFilters>
 
         Set.Remove(entity);
         await db.SaveChangesAsync(cancellationToken);
+        await hooks.AfterDelete(entity, cancellationToken);
         return Result.Ok(Messages.Deleted);
     }
 

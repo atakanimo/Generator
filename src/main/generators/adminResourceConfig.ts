@@ -2,7 +2,8 @@
  * NormalizedModel v2 → `@atakanimo/ata-admin-base` `ResourceSchema` (contract §8.4, plan 6 §2).
  * Pure: no file system. The admin FE is config only; the package renders pages, tables and forms.
  */
-import type { NormalizedField, NormalizedModel, NormalizedObjectSubField } from '../../shared/normalizedModel.js';
+import type { FieldConstraints, NormalizedField, NormalizedModel, NormalizedObjectSubField } from '../../shared/normalizedModel.js';
+import { constraintsForField, isNumericEnum } from '../../shared/fieldConstraints.js';
 import { moduleNameFromEntity } from '../utils/namingUtils.js';
 
 /** Mirrors `@atakanimo/ata-admin-base` `FieldConfig` (package `src/schema/fields.ts`). */
@@ -30,6 +31,14 @@ export interface AdminFieldConfig {
   filter?: AdminFilterType;
   default?: string | number | boolean | null | AdminDynamicDefault;
   component?: 'textarea' | 'image';
+  /** `email` on strings. `int` on numbers (absent → float). `date` on datetimes (absent → date+time). */
+  format?: 'email';
+  numberFormat?: 'int';
+  dateFormat?: 'date';
+  /** Request limits, as in the model (single strings / numbers only). */
+  constraints?: FieldConstraints;
+  /** Numeric enum: `numbers[i]` is the submitted value of `options[i]`. */
+  numbers?: readonly number[];
   options?: readonly string[];
   ref?: string;
   display?: string;
@@ -166,7 +175,15 @@ function fieldConfig(field: NormalizedField, skipped: SkippedField[]): AdminFiel
     if (field.ui?.component === 'ImageField') out.component = 'image';
   }
 
-  if (kind === 'enum') out.options = field.enum?.values ?? [];
+  if (kind === 'enum') {
+    out.options = field.enum?.values ?? [];
+    if (isNumericEnum(field.enum)) out.numbers = field.enum.numbers;
+  }
+  if (field.kind === 'string' && !field.isArray && field.format === 'email') out.format = 'email';
+  if (field.kind === 'number' && field.numberFormat === 'int') out.numberFormat = 'int';
+  if (field.kind === 'date' && field.dateFormat === 'date') out.dateFormat = 'date';
+  const constraints = constraintsForField(field, field.constraints);
+  if (constraints) out.constraints = constraints;
   if (kind === 'relation') {
     const target = field.reference?.target;
     if (!target) {

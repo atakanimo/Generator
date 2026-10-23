@@ -1,11 +1,11 @@
 /** Login formunun saf kısmı: doğrulama ve "beni hatırla" saklama (test edilebilir, React'siz). */
+import { EMAIL_PATTERN } from '../patterns.js';
 
 export interface LoginErrors {
   email?: string;
   password?: string;
 }
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function validateLogin(
   values: { email: string; password: string },
@@ -14,7 +14,7 @@ export function validateLogin(
   const errors: LoginErrors = {};
   const email = values.email.trim();
   if (!email) errors.email = messages.required;
-  else if (!EMAIL.test(email)) errors.email = messages.emailInvalid;
+  else if (!EMAIL_PATTERN.test(email)) errors.email = messages.emailInvalid;
   if (!values.password) errors.password = messages.required;
   return errors;
 }

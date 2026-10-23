@@ -1,7 +1,8 @@
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline';
+import SyncOutlinedIcon from '@mui/icons-material/SyncOutlined';
 import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
-import { Chip } from '@mui/material';
+import { Box, Chip } from '@mui/material';
 import { defineResourceSchema, extendResource, type AnyResource } from '../src/index.js';
 
 // --- <m>.generated.config.ts (Generator'ın yazacağı) -------------------------------------
@@ -59,7 +60,7 @@ export const userSubscriptionsSchema = defineResourceSchema({
     { name: 'provider', kind: 'enum', options: ['none', 'revenuecat', 'manual'], required: true, list: true, filter: 'enum', default: 'none' },
     { name: 'willRenew', kind: 'boolean', list: true, filter: 'boolean' },
     { name: 'currentPeriodEnd', kind: 'datetime', list: true, filter: 'date-range' },
-    { name: 'deepDiveDailyUsed', kind: 'number', readonly: true, list: true }
+    { name: 'deepDiveDailyUsed', kind: 'number', readonly: true, list: true, sortable: false }
   ]
 });
 
@@ -88,10 +89,37 @@ export const userSubscriptionsResource = extendResource(userSubscriptionsSchema,
         const page = await api.list({ ...listBody, page: 1, limit: 100 });
         console.info('[playground] CSV satırları', page.items.length);
       }
+    },
+    {
+      id: 'expire-filtered',
+      label: 'Filtrelenenleri sonlandır',
+      placement: 'toolbar',
+      // Yalnızca durum filtresi uygulanmışken görünür.
+      visible: ({ listBody }) => Boolean(listBody.filters?.status),
+      confirm: { title: 'Filtrelenen abonelikler sonlandırılsın mı?' },
+      run: ({ listBody }) => console.info('[playground] sonlandır', listBody.filters)
+    },
+    {
+      id: 'resync',
+      label: 'Sağlayıcıyla eşitle',
+      icon: <SyncOutlinedIcon fontSize='small' />,
+      placement: 'detail',
+      run: ({ row }) => console.info('[playground] eşitle', row.id)
     }
   ],
   fields: {
-    status: { cell: ({ row }) => <Chip size='small' label={row.status} color={statusColor[row.status]} /> }
+    status: { cell: ({ row }) => <Chip size='small' label={row.status} color={statusColor[row.status]} /> },
+    // Seçenekler "BE'den" gelir (gecikmeli).
+    provider: {
+      loadOptions: () => new Promise(resolve => setTimeout(() => resolve(['none', 'revenuecat', 'manual']), 300))
+    }
+  },
+  detail: {
+    component: ({ row }) => (
+      <Box sx={{ p: 1.5, bgcolor: 'action.hover', borderRadius: 1, fontSize: '0.8125rem' }}>
+        Ek içerik (detail.component): {String(row.id)}
+      </Box>
+    )
   }
 });
 

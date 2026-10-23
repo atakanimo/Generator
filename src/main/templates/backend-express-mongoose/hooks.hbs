@@ -1,6 +1,7 @@
-// Business rules of the generated `{{moduleName}}` services, called before each CRUD operation.
+// Business rules of the generated `{{moduleName}}` services. Contract: `@core/services/service-hooks`.
 // Created once by the Generator and never overwritten (no generator header): edit freely.
-// A hook returning an error response stops the operation; that response is sent to the client.
+// `before*` returning an error response stops the operation. `after*` runs after the write and cannot undo it.
+// `mapRows` gets all rows of a list page (or the getOne row) in one call.
 import type { {{entityName}}ServiceHooks } from './{{moduleName}}.types';
 
 /** Normal (mobile) API service (`{{moduleName}}.service.ts`). */

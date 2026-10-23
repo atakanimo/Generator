@@ -28,6 +28,7 @@ import {
   EDITOR_FIELD_TYPES,
   EDITOR_SUB_FIELD_TYPES,
   editorSubTypeOf,
+  editorShowsNumberFormat,
   editorTypeHasDefault,
   editorTypeOf,
   isReservedFieldName,
@@ -37,7 +38,10 @@ import {
   subReferenceOf,
   withEditorSubType,
   withEditorType,
+  withConstraint,
+  withEnumNumbers,
   withEnumValues,
+  withPattern,
   withReferenceTarget,
   withSubReference,
   type EditorFieldType,
@@ -50,7 +54,7 @@ interface AddModelModalProps {
   onClose: () => void;
   onSave: (draft: ModelDraft) => Promise<void>;
   projectPath: string;
-  sourceType: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null;
+  sourceType: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | 'python-fastapi' | null;
   initialData?: ModelDraft | null;
   isEditMode?: boolean;
   modelFilePath?: string;
@@ -555,6 +559,149 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
                       )}
                       sx={{ minWidth: 260, flex: 1 }}
                     />
+                  )}
+
+                  {editorShowsNumberFormat(sourceType) && field.kind === 'number' && !field.isArray && (
+                    <FormControl size='small' sx={{ minWidth: 150 }}>
+                      <InputLabel>Number format</InputLabel>
+                      <Select
+                        value={field.numberFormat === 'int' ? 'int' : 'float'}
+                        label='Number format'
+                        onChange={e =>
+                          updateField(index, f => {
+                            const out = { ...f };
+                            if (e.target.value === 'int') out.numberFormat = 'int';
+                            else delete out.numberFormat;
+                            return out;
+                          })
+                        }
+                      >
+                        <MenuItem value='float'>float</MenuItem>
+                        <MenuItem value='int'>int</MenuItem>
+                      </Select>
+                    </FormControl>
+                  )}
+
+                  {type === 'Date' && field.kind === 'date' && (
+                    <FormControl size='small' sx={{ minWidth: 160 }}>
+                      <InputLabel>Date format</InputLabel>
+                      <Select
+                        value={field.dateFormat === 'date' ? 'date' : 'datetime'}
+                        label='Date format'
+                        onChange={e =>
+                          updateField(index, f => {
+                            const out = { ...f };
+                            if (e.target.value === 'date') out.dateFormat = 'date';
+                            else delete out.dateFormat;
+                            return out;
+                          })
+                        }
+                      >
+                        <MenuItem value='datetime'>Date + time</MenuItem>
+                        <MenuItem value='date'>Date only</MenuItem>
+                      </Select>
+                    </FormControl>
+                  )}
+
+                  {type === 'String' && !field.enum?.values?.length && (
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={field.format === 'email'}
+                          onChange={e =>
+                            updateField(index, f => {
+                              const out = { ...f };
+                              if (e.target.checked) out.format = 'email';
+                              else delete out.format;
+                              return out;
+                            })
+                          }
+                        />
+                      }
+                      label='Email'
+                    />
+                  )}
+
+                  {(field.enum?.values?.length ?? 0) > 0 && (
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={Boolean(field.enum?.numbers)}
+                          onChange={e => updateField(index, f => withEnumNumbers(f, e.target.checked ? [] : undefined))}
+                        />
+                      }
+                      label='Numeric enum'
+                    />
+                  )}
+
+                  {field.enum?.numbers && (
+                    <TextField
+                      // Committed on blur: a half-typed list ("1,") must not be parsed while typing.
+                      key={field.enum.numbers.join(',')}
+                      size='small'
+                      label='Numbers (one per value, in order)'
+                      defaultValue={field.enum.numbers.join(', ')}
+                      helperText={field.enum.values.map((v, i) => `${v} = ${field.enum?.numbers?.[i]}`).join(', ')}
+                      onBlur={e => {
+                        const numbers = e.target.value
+                          .split(',')
+                          .map(part => part.trim())
+                          .filter(Boolean)
+                          .map(Number);
+                        if (numbers.every(Number.isInteger) && new Set(numbers).size === numbers.length) {
+                          updateField(index, f => withEnumNumbers(f, numbers));
+                        }
+                      }}
+                    />
+                  )}
+
+                  {type === 'String' && !field.enum?.values?.length && (
+                    <>
+                      <TextField
+                        label='Min length'
+                        size='small'
+                        type='number'
+                        value={field.constraints?.minLength ?? ''}
+                        onChange={e => updateField(index, f => withConstraint(f, 'minLength', e.target.value))}
+                        sx={{ width: 120 }}
+                      />
+                      <TextField
+                        label='Max length'
+                        size='small'
+                        type='number'
+                        value={field.constraints?.maxLength ?? ''}
+                        onChange={e => updateField(index, f => withConstraint(f, 'maxLength', e.target.value))}
+                        sx={{ width: 120 }}
+                      />
+                      <TextField
+                        label='Pattern'
+                        size='small'
+                        value={field.constraints?.pattern ?? ''}
+                        onChange={e => updateField(index, f => withPattern(f, e.target.value))}
+                        sx={{ minWidth: 180, flex: 1 }}
+                      />
+                    </>
+                  )}
+
+                  {(field.kind === 'number' || field.kind === 'decimal') && !field.isArray && (
+                    <>
+                      <TextField
+                        label='Min'
+                        size='small'
+                        type='number'
+                        value={field.constraints?.min ?? ''}
+                        onChange={e => updateField(index, f => withConstraint(f, 'min', e.target.value))}
+                        sx={{ width: 110 }}
+                      />
+                      <TextField
+                        label='Max'
+                        size='small'
+                        type='number'
+                        value={field.constraints?.max ?? ''}
+                        onChange={e => updateField(index, f => withConstraint(f, 'max', e.target.value))}
+                        sx={{ width: 110 }}
+                      />
+                    </>
                   )}
 
                   {editorTypeHasDefault(type) && (

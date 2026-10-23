@@ -9,7 +9,7 @@
  */
 import { readFileSync } from 'fs';
 import { basename, dirname } from 'path';
-import type { FieldKind, NormalizedField, NormalizedModel, NormalizedObjectSubField } from '../../../shared/normalizedModel.js';
+import type { FieldKind, NormalizedEnum, NormalizedField, NormalizedModel, NormalizedObjectSubField } from '../../../shared/normalizedModel.js';
 import { NORMALIZED_MODEL_VERSION } from '../../../shared/normalizedModel.js';
 import { camelCase, pluralize } from '../../utils/namingUtils.js';
 
@@ -22,7 +22,8 @@ const SCALARS: Record<string, FieldKind> = {
   decimal: 'decimal',
   bool: 'boolean',
   DateTimeOffset: 'date',
-  DateTime: 'date'
+  DateTime: 'date',
+  DateOnly: 'date'
 };
 
 const PROPERTY =
@@ -55,9 +56,26 @@ function classBody(content: string, header: RegExp): string | null {
   return null;
 }
 
-function enums(content: string): Map<string, string[]> {
-  const out = new Map<string, string[]>();
+/** C# enum member values: explicit `= n`, otherwise previous + 1 (first 0), as the compiler assigns them. */
+function memberNumbers(body: string): number[] {
+  const numbers: number[] = [];
+  let next = 0;
+  for (const raw of body.replace(/\[[^\]]*\]/g, '').split(',')) {
+    const [name, value] = raw.split('=').map((x) => x.trim());
+    if (!name || !/^\w+$/.test(name)) continue;
+    const n = value !== undefined && /^-?\d+$/.test(value) ? Number(value) : next;
+    numbers.push(n);
+    next = n + 1;
+  }
+  return numbers;
+}
+
+function enums(content: string): Map<string, NormalizedEnum> {
+  const out = new Map<string, NormalizedEnum>();
   for (const m of content.matchAll(/public\s+enum\s+(\w+)\s*\{([\s\S]*?)\}/g)) {
+    const before = content.slice(0, m.index ?? 0);
+    const head = before.slice(before.lastIndexOf('}'));
+    const numeric = /\[NumericEnum\]/.test(head);
     // `[JsonStringEnumMemberName("…")]` holds the JSON value; without it the member name (camelCase) is the value.
     const named = [...m[2].matchAll(/JsonStringEnumMemberName\("((?:[^"\\]|\\.)*)"\)/g)].map((x) => JSON.parse(`"${x[1]}"`) as string);
     const members = m[2]
@@ -66,7 +84,7 @@ function enums(content: string): Map<string, string[]> {
       .map((x) => x.trim().split('=')[0].trim())
       .filter((x) => /^\w+$/.test(x));
     const values = named.length ? named : members.map(camelCase);
-    out.set(m[1], values);
+    out.set(m[1], numeric ? { values, numbers: memberNumbers(m[2]) } : { values });
   }
   return out;
 }
@@ -154,9 +172,11 @@ export function parseDotnetEntity(filePath: string, entityFolders: Map<string, s
       if (navType) field.reference = { target: targetOf(navType) };
     } else if (SCALARS[inner]) {
       field.kind = SCALARS[inner];
+      if (inner === 'int' || inner === 'long') field.numberFormat = 'int';
+      if (inner === 'DateOnly') field.dateFormat = 'date';
     } else if (enumMap.has(inner)) {
       field.kind = 'enum';
-      field.enum = { values: enumMap.get(inner)! };
+      field.enum = enumMap.get(inner)!;
     } else if (complexMap.has(inner)) {
       field.kind = 'object';
       field.object = { typeName: inner, fields: complexMap.get(inner)!.map(subField) };

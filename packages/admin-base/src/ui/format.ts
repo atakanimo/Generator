@@ -14,6 +14,12 @@ export function formatDateTime(value: unknown): string {
   return d.isValid() ? d.format('DD.MM.YYYY HH:mm') : String(value);
 }
 
+export function formatDate(value: unknown): string {
+  if (isEmptyValue(value)) return '';
+  const d = dayjs(value as string);
+  return d.isValid() ? d.format('DD.MM.YYYY') : String(value);
+}
+
 /** Tablo hücresi için tek satırlık JSON önizlemesi. */
 export function jsonPreview(value: unknown, max = 60): string {
   const raw = JSON.stringify(value);

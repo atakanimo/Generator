@@ -10,17 +10,19 @@ import { trTR } from '@mui/x-data-grid/locales';
 import { useMemo, useState } from 'react';
 import type { Id, ListBody } from '../contract/api.js';
 import { useResourceList, useResourceMutations } from '../react/hooks.js';
-import type { AnyResource, CollectionAction, RowAction } from '../schema/extend.js';
+import { detailViewOptions, type AnyResource, type CollectionAction, type RowAction } from '../schema/extend.js';
 import { canPerform } from '../schema/resource.js';
 import {
   ActionInputDialog,
   ConfirmDialog,
   RowActions,
-  isRowAction,
+  collectionActionState,
   rowActionsWidth,
+  splitActions,
   useExecuteAction,
   type PendingAction
 } from './actions/actions.js';
+import { ResourceDetailDrawer } from './detail/ResourceDetailDrawer.js';
 import { FilterBar } from './filters/FilterBar.js';
 import { ResourceFormDrawer } from './form/ResourceFormDrawer.js';
 import type { FormMode } from './form/values.js';
@@ -45,24 +47,24 @@ export function ResourcePage({ resource }: ResourcePageProps) {
   const texts = useAdminTexts();
   const { text } = texts;
   const slots = resource.extensions?.slots ?? {};
+  const detail = useMemo(() => detailViewOptions(resource.extensions), [resource.extensions]);
   const declaredActions = resource.extensions?.actions;
-  const { rowActions, toolbarActions, bulkActions } = useMemo(() => {
-    const all = declaredActions ?? [];
-    return {
-      rowActions: all.filter(isRowAction),
-      toolbarActions: all.filter((a): a is CollectionAction<Row> => a.placement === 'toolbar'),
-      bulkActions: all.filter((a): a is CollectionAction<Row> => a.placement === 'bulk')
-    };
-  }, [declaredActions]);
+  const { rowActions, detailActions, toolbarActions, bulkActions } = useMemo(
+    () => splitActions(declaredActions ?? [], detail !== null),
+    [declaredActions, detail]
+  );
 
   const [pagination, setPagination] = useState<GridPaginationModel>({ page: 0, pageSize: resource.pageSize ?? 25 });
   const [sortModel, setSortModel] = useState<GridSortModel>(
-    resource.defaultSort ? [{ field: resource.defaultSort.field, sort: resource.defaultSort.order }] : []
+    resource.defaultSort && resource.sortable !== false
+      ? [{ field: resource.defaultSort.field, sort: resource.defaultSort.order }]
+      : []
   );
   const [filters, setFilters] = useState<Record<string, unknown>>({});
   const [selection, setSelection] = useState<GridRowSelectionModel>(EMPTY_SELECTION);
   const [form, setForm] = useState<{ mode: FormMode; row?: Row } | null>(null);
   const [deleting, setDeleting] = useState<Row | null>(null);
+  const [viewing, setViewing] = useState<Row | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [json, setJson] = useState<JsonDialogState | null>(null);
 
@@ -107,13 +109,14 @@ export function ResourcePage({ resource }: ResourcePageProps) {
         resource,
         texts,
         onOpenJson: (title, value) => setJson({ title, value }),
-        actionsWidth: rowActionsWidth(rowActions.length + (canUpdate ? 1 : 0) + (canDelete ? 1 : 0)),
+        actionsWidth: rowActionsWidth(rowActions.length + (detail ? 1 : 0) + (canUpdate ? 1 : 0) + (canDelete ? 1 : 0)),
         renderActions:
-          rowActions.length > 0 || canUpdate || canDelete
+          rowActions.length > 0 || detail || canUpdate || canDelete
             ? row => (
                 <RowActions
                   row={row}
                   actions={rowActions}
+                  onView={detail ? () => setViewing(row) : undefined}
                   onEdit={canUpdate ? () => setForm({ mode: 'edit', row }) : undefined}
                   onDelete={canDelete ? () => setDeleting(row) : undefined}
                   onAction={(action: RowAction<Row>) => startAction({ action, row })}
@@ -122,8 +125,19 @@ export function ResourcePage({ resource }: ResourcePageProps) {
             : undefined
       }),
     // startAction `body`'yi kapsar; kolonlar liste isteği değişince yeniden kurulur.
-    [resource, texts, rowActions, canUpdate, canDelete, body]
+    [resource, texts, rowActions, detail, canUpdate, canDelete, body]
   );
+
+  const actionState = { listBody: body, selectedIds };
+  const collectionButton = (action: CollectionAction<Row>) => {
+    const { visible, disabled } = collectionActionState(action, actionState);
+    return visible ? (
+      <Button key={action.id} variant='outlined' startIcon={action.icon} disabled={disabled}
+        onClick={() => startAction({ action, selectedIds })}>
+        {texts.literal(action.label)}
+      </Button>
+    ) : null;
+  };
 
   const applyFilters = (next: Record<string, unknown>) => {
     setFilters(next);
@@ -151,20 +165,10 @@ export function ResourcePage({ resource }: ResourcePageProps) {
           {selectedIds.length > 0 ? (
             <>
               <Chip size='small' label={text('selected', { count: selectedIds.length })} />
-              {bulkActions.map(action => (
-                <Button key={action.id} variant='outlined' startIcon={action.icon}
-                  onClick={() => startAction({ action, selectedIds })}>
-                  {texts.literal(action.label)}
-                </Button>
-              ))}
+              {bulkActions.map(collectionButton)}
             </>
           ) : null}
-          {toolbarActions.map(action => (
-            <Button key={action.id} variant='outlined' startIcon={action.icon}
-              onClick={() => startAction({ action, selectedIds })}>
-              {texts.literal(action.label)}
-            </Button>
-          ))}
+          {toolbarActions.map(collectionButton)}
           {canCreate ? (
             <Button variant='contained' startIcon={<AddIcon />} onClick={() => setForm({ mode: 'create' })}>
               {text('create')}
@@ -223,6 +227,24 @@ export function ResourcePage({ resource }: ResourcePageProps) {
 
       {BelowTable ? <BelowTable /> : null}
 
+      {detail ? (
+        // Form ve onay pencereleri bundan sonra render edilir: drawer açıkken üstte kalırlar.
+        <ResourceDetailDrawer
+          resource={resource}
+          row={viewing}
+          options={detail}
+          actions={detailActions}
+          onAction={(action, row) => startAction({ action, row })}
+          onEdit={canUpdate ? row => {
+            setViewing(null);
+            setForm({ mode: 'edit', row });
+          } : undefined}
+          onDelete={canDelete ? row => setDeleting(row) : undefined}
+          onOpenJson={(title, value) => setJson({ title, value })}
+          onClose={() => setViewing(null)}
+        />
+      ) : null}
+
       <ResourceFormDrawer
         resource={resource}
         open={form !== null}
@@ -241,7 +263,11 @@ export function ResourcePage({ resource }: ResourcePageProps) {
         title={text('deleteTitle')}
         description={text('deleteDescription')}
         confirmLabel={text('delete')}
-        onConfirm={() => remove.mutateAsync(deleting!.id)}
+        onConfirm={async () => {
+          const id = deleting!.id;
+          await remove.mutateAsync(id);
+          setViewing(prev => (prev?.id === id ? null : prev));
+        }}
         onClose={() => setDeleting(null)}
       />
 

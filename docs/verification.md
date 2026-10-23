@@ -14,7 +14,7 @@ Varlik360 BE: `/Users/atakanatabey/Projects/VarlikALL/Varlik360/src/modules/**/*
 
 | Komut | Kontrol | Süre |
 | --- | --- | --- |
-| `node scripts/verify/test-core-assets.mjs` | Core asset birim testleri (`toWire`, `extractListPagination`, id / sort eşlemesi, gizli alan strip, auth scope) | saniyeler |
+| `node scripts/verify/test-core-assets.mjs` | Core asset birim testleri (`toWire`, `extractListPagination`, id / sort eşlemesi, gizli alan strip, auth scope, `dateOnlyRangeFilter`, ortak hook yardımcıları `service-hooks`) | saniyeler |
 | `node scripts/verify/smoke-varlik360.mjs` | Golden set: parse → field kind → model editörü taslağı → `model.hbs` | saniyeler |
 | `node scripts/verify/admin-config-check.mjs [--keep]` | Bütün modeller → admin config, `apps/admin` içinde `tsc` + eşleme kontrolleri | ~1 dk |
 | `node scripts/verify/regen-varlik360.mjs --manifest` | Manifest v3 round trip; eski manifest yok sayılır, tercihler korunur, bir kez yedeklenir | saniyeler |
@@ -23,6 +23,7 @@ Varlik360 BE: `/Users/atakanatabey/Projects/VarlikALL/Varlik360/src/modules/**/*
 | `node scripts/verify/regen-varlik360.mjs <etiket> --planned --core-overlay` | Kopyaya 15 modül update mode'da üretilir, Varlik360'a göre drift, kopyada `tsc --noEmit` | uzun; arka planda çalıştır |
 | `node scripts/verify/regen-varlik360.mjs --compare <sol> <sağ>` | İki regen etiketi arasında dosya farkı (`<sol>..<sağ>.patch`); 0 = aynı | saniyeler |
 | `node scripts/verify/regen-varlik360.mjs --core-assets <etiket> [assetDir]` | Host kopyasında core asset'ler değiştirilip `tsc` | dakikalar |
+| `node scripts/verify/express-py1-e2e.mjs [--keep]` | PY1 biçimleri Express'te: `Reminders` fixture modeli (`fixtures/dotnet/models.json`) Varlik360 kopyasına üretilir, `src/app.ts`'e bağlanır, kopyada `tsc` (yalnız yeni modülün çeviri anahtarları hariç), Docker'da Mongo + HTTP uygulaması → `dotnet-py1-formats-smoke.mjs` (.NET ile aynı 17 senaryo). Docker gerekir | ~1 dk |
 | `node scripts/verify/migrate-module.mjs <m> --ops list,getOne,… [--no-admin] [--no-auth] [--be-only\|--fe-only]` | Bir modülü arayüzle aynı çağrılarla taşır (manifest kaydı + BE + FE config). **Varlik360'a yazar** | saniyeler |
 
 `--planned`: plandaki işlem setleri, gizli alanlar ve `users` için `self` + adminOnly birleşik modele uygulanır. `--core-overlay`: güncel şablonların istediği core asset'ler kopyaya önce kopyalanır. `out/regen/` altında karşılaştırma tabanı olarak son geçerli etiket saklanır (bugün `gate7`).
@@ -33,7 +34,7 @@ Varlik360 BE: `/Users/atakanatabey/Projects/VarlikALL/Varlik360/src/modules/**/*
 | --- | --- |
 | Her değişiklik | Generator `npx tsc --noEmit -p tsconfig.json`: `src/generator-assets` dışı hata sayısı artmaz (bugün 3). `npm run build:electron` başarılı |
 | Parser, `modelCreator`, `mongooseModelContext`, field kind / token, `normalizedModel*`, `modelMerge`, manifest | smoke 15 / 15, `--manifest`, `--p5`, `--resave-models` + `--compare` |
-| BE şablonları / `BackendGenerator` | regen `--planned --core-overlay` → tabana göre `--compare` yalnızca beklenen fark, kopyada `tsc` artmaz, custom blok içerikleri birebir |
+| BE şablonları / `BackendGenerator` | `express-py1-e2e` (tip bilgileri, kısıtlar, `traceId`); regen `--planned --core-overlay` → tabana göre `--compare` yalnızca beklenen fark, kopyada `tsc` artmaz, custom blok içerikleri birebir |
 | Core asset'ler | `test-core-assets` + `--core-assets` |
 | Admin config | `admin-config-check` |
 | `packages/admin-base` | `npm run typecheck`, `npm test`, `npm run build` |
@@ -57,7 +58,7 @@ Atlas'a asla bağlanılmaz.
 
 ## .NET EF Core
 
-Ayrıntı: [backend/dotnet-efcore.md](backend/dotnet-efcore.md). Çıktılar `scripts/verify/out/dotnet/<etiket>/`. Model kaynakları `scripts/verify/fixtures/dotnet/models.json` (EventTypes, Documents, MembershipPlans, Templates, Users, UserNotes: bütün kind'lar, ilişkiler, ownership) ve golden set (`varlik360.manifest.v3.json`).
+Ayrıntı: [backend/dotnet-efcore.md](backend/dotnet-efcore.md). `dotnet-e2e` fixture host'unda `dotnet-py1-formats-smoke.mjs` de koşar (`Reminders`: sayısal enum açık değerleri, sadece tarih, kısıtlar, e-posta, `traceId`). Çıktılar `scripts/verify/out/dotnet/<etiket>/`. Model kaynakları `scripts/verify/fixtures/dotnet/models.json` (EventTypes, Documents, MembershipPlans, Templates, Users, UserNotes: bütün kind'lar, ilişkiler, ownership) ve golden set (`varlik360.manifest.v3.json`).
 
 | Komut | Kontrol | Süre |
 | --- | --- | --- |

@@ -23,7 +23,11 @@ Generator'daki **tek** model tipi: `NormalizedModel` (`src/shared/normalizedMode
 | `kind` | `string \| number \| decimal \| boolean \| date \| enum \| reference \| object \| map \| json \| unknown` |
 | `isArray` | Değiştirici; `array` bir kind değildir |
 | `required`, `nullable?`, `unique?`, `trim?` | Doğrulama bayrakları |
-| `enum?.values`, `default?` | Kaynaktaki enum değerleri ve sabit default |
+| `numberFormat?` | `number` için `int` \| `float`. Yoksa `float`. Editörde yalnızca C# ve Python |
+| `dateFormat?` | `date` için `datetime` \| `date`. Yoksa `datetime` (saatli). `date` → `YYYY-MM-DD`, C# `DateOnly` |
+| `format?` | `string` için `email` |
+| `constraints?` | `minLength`, `maxLength`, `pattern` (tekil `string`: metin uzunluğu) ve `min`, `max` (tekil `number` / `decimal`). Dizi alanlarında yok. BE şemasında ve admin form kuralında; kural tek yerde: `constraintsForField` (`src/shared/fieldConstraints.ts`) |
+| `enum?.values`, `enum?.numbers?`, `default?` | Enum etiketleri / değerleri. `numbers` varsa sayısal enum: `numbers[i]`, `values[i]`'nin saklanan ve JSON'daki değeri (C# `Name = 5`, Python `IntEnum`, Mongoose `enum: [0, 5]`). Açık değer: etiket sırası değişse de saklanan sayı değişmez. `default` sabit |
 | `reference?` | `target`, `display`, `populate[]`, `include`, `relationType` |
 | `object?` | `fields?` (yoksa opak obje), `typeName?`, `schemaName?` |
 | `filter?` | `searchable`, `type` (`eq \| regex \| range \| date-range \| boolean \| enum \| reference`) |
@@ -65,11 +69,11 @@ Generator'daki **tek** model tipi: `NormalizedModel` (`src/shared/normalizedMode
 | `kind` | Mongoose | Prisma (PG) | EF Core (PG) | JSON |
 | --- | --- | --- | --- | --- |
 | `string` | `String` | `String` | `string` | string |
-| `number` | `Number` | `Float` / `Int` | `double` / `int` | number |
+| `number` | `Number` (`int` → Zod `.int()`) | `Float` / `Int` | `double`; `numberFormat: 'int'` → `int` | number |
 | `decimal` | `Decimal128` | `Decimal` | `decimal` | string |
 | `boolean` | `Boolean` | `Boolean` | `bool` | boolean |
-| `date` | `Date` | `DateTime` | `DateTimeOffset` | ISO string |
-| `enum` | `String` + `enum` | `enum X` | `enum` (string dönüşümü) | string |
+| `date` | `Date`; `dateFormat: 'date'` → `String` (`YYYY-MM-DD`, `match` deseni) | `DateTime` | `DateTimeOffset`; `dateFormat: 'date'` → `DateOnly` | ISO string; `date` → `YYYY-MM-DD` |
+| `enum` | `String` + `enum`; `numbers` → `Number` + `enum: [numbers]` | `enum X` | string dönüşümü; `numbers` → `Name = n` + sayı | string veya number |
 | `reference` | `ObjectId` + `ref` | relation + FK | FK + navigation | id / obje |
 | `object` / `object[]` | alt şema | `Json` | owned type `ToJson()` | obje / obje[] |
 | `map` | `Map` | `Json` | `Dictionary` (jsonb) | obje |

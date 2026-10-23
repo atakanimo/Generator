@@ -18,6 +18,8 @@ export interface ApiResponse<T> {
   data?: T | null;
   uiMessage?: string | null;
   errorData?: ApiErrorData | null;
+  /** İstek kimliği. Middleware doldurur; yoksa zarfta yoktur. */
+  traceId?: string;
 }
 
 export type SortOrder = 'asc' | 'desc';

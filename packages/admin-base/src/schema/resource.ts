@@ -17,6 +17,8 @@ export interface ResourceSchema<Fs extends readonly FieldConfig[] = readonly Fie
   label?: string;
   fields: Fs;
   defaultSort?: { field: string; order: SortOrder };
+  /** `false` → hiçbir kolon sıralanmaz, `defaultSort` yok sayılır (BE liste ucu sıralama desteklemiyorsa). */
+  sortable?: boolean;
   pageSize?: number;
   /** Route path segmenti; yoksa `name`. */
   path?: string;

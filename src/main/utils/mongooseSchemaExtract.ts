@@ -1,3 +1,5 @@
+import { DATE_ONLY_PATTERN, EMAIL_PATTERN } from '../../shared/fieldConstraints.js';
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -429,9 +431,26 @@ export function parseLiteral(text: string): Literal | undefined {
 
 export interface MongooseFieldExtras {
   enumValues?: string[];
+  /** Numeric enum (`enum: [0, 5]`): the numbers. Labels come from the manifest (`mergeEnum`, matched by number). */
+  enumNumbers?: number[];
+  /** `match` is the date-only pattern: a `dateFormat: 'date'` field stored as `YYYY-MM-DD` (see `toMongooseModelFields`). */
+  dateOnly?: boolean;
+  constraints?: { minLength?: number; maxLength?: number; min?: number; max?: number; pattern?: string };
+  format?: 'email';
   schemaDefault?: Literal;
   hidden?: boolean;
   nativeOptions?: string[];
+}
+
+/** `new RegExp("…")` or `/…/` → the pattern source. Flags are ignored. */
+function parseMatchPattern(value: string): string | undefined {
+  const ctor = /^new RegExp\(([\s\S]*)\)$/.exec(value.trim());
+  if (ctor) {
+    const literal = parseLiteral(ctor[1].trim());
+    return typeof literal === 'string' ? literal : undefined;
+  }
+  const slash = /^\/((?:\\\/|[^/])*)\/[a-z]*$/.exec(value.trim());
+  return slash ? slash[1].replace(/\\\//g, '/') : undefined;
 }
 
 /** Options the parser models elsewhere when their value is a plain literal (see `parseMongooseFieldModifiers`, `ref`). */
@@ -456,10 +475,35 @@ export function parseMongooseFieldExtras(fieldBlock: string): MongooseFieldExtra
     if (MODELED_BOOLEAN_OPTIONS.has(key) && (value === 'true' || value === 'false' || value === '1' || value === '0')) continue;
     if (key === 'ref' && typeof parseLiteral(value) === 'string') continue;
     if (key === 'of' && value === 'Number') continue; // Map of Number is what model.hbs emits
-    if (key === 'enum' && value.startsWith('[') && value.endsWith(']')) {
-      const items = splitTopLevelEntries(value.slice(1, -1)).map(parseLiteral);
-      if (items.every((v): v is string => typeof v === 'string')) {
-        extras.enumValues = items;
+    if (key === 'enum' && value.replace(/\/\/.*$/, '').trim().startsWith('[')) {
+      const arrayText = value.replace(/\/\/.*$/, '').trim();
+      if (arrayText.endsWith(']')) {
+        const items = splitTopLevelEntries(arrayText.slice(1, -1)).map(parseLiteral);
+        if (items.every((v): v is string => typeof v === 'string')) {
+          extras.enumValues = items;
+          continue;
+        }
+        if (items.every((v): v is number => typeof v === 'number' && Number.isInteger(v))) {
+          extras.enumValues = items.map(String);
+          extras.enumNumbers = items;
+          continue;
+        }
+      }
+    }
+    if (key === 'minlength' || key === 'maxlength' || key === 'min' || key === 'max') {
+      const n = parseLiteral(value);
+      if (typeof n === 'number') {
+        const name = key === 'minlength' ? 'minLength' : key === 'maxlength' ? 'maxLength' : key;
+        extras.constraints = { ...extras.constraints, [name]: n };
+        continue;
+      }
+    }
+    if (key === 'match') {
+      const pattern = parseMatchPattern(value);
+      if (pattern !== undefined) {
+        if (pattern === EMAIL_PATTERN) extras.format = 'email';
+        else if (pattern === DATE_ONLY_PATTERN) extras.dateOnly = true;
+        else extras.constraints = { ...extras.constraints, pattern };
         continue;
       }
     }

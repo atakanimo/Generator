@@ -2,6 +2,7 @@
 {{beTypesMongooseImportLine sourceType fields}}
 import type { ListPaginationBody } from '@core/pagination/pagination.helper';
 import type { IApiResponse } from '@core/types/api-contract';
+import type { ServiceHooks } from '@core/services/service-hooks';
 
 // <custom-imports>
 // </custom-imports>
@@ -37,19 +38,8 @@ export type Get{{entityName}}Query = Get{{entityName}}Filters;
 
 export type {{entityName}}ListBody = ListPaginationBody & { filters?: Get{{entityName}}Filters };
 
-/**
- * Optional business-rule hooks of the generated services (`{{moduleName}}.hooks.ts`). A hook that returns an error
- * response stops the operation; `beforeList` may rewrite the list filters.
- */
-export interface {{entityName}}ServiceHooks {
-  /** List sort when the request sends no `sortBy` (default `{ createdAt: -1, _id: -1 }`). */
-  defaultSort?: Record<string, 1 | -1>;
-  beforeList?(filters: Get{{entityName}}Filters): Get{{entityName}}Filters | Promise<Get{{entityName}}Filters>;
-  beforeGetById?(id: string): Promise<IApiResponse<unknown> | undefined> | IApiResponse<unknown> | undefined;
-  beforeCreate?(data: I{{entityName}}Input): Promise<IApiResponse<unknown> | undefined> | IApiResponse<unknown> | undefined;
-  beforeUpdate?(id: string, data: Partial<I{{entityName}}Input>): Promise<IApiResponse<unknown> | undefined> | IApiResponse<unknown> | undefined;
-  beforeDelete?(id: string): Promise<IApiResponse<unknown> | undefined> | IApiResponse<unknown> | undefined;
-}
+/** Business-rule hooks of the generated services (`{{moduleName}}.hooks.ts`); contract in `@core/services/service-hooks`. */
+export type {{entityName}}ServiceHooks = ServiceHooks<Get{{entityName}}Filters, I{{entityName}}Input>;
 
 // <custom-types>
 // </custom-types>

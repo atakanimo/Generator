@@ -10,6 +10,7 @@ import { {{camelEntityName}}AdminCrud } from './{{moduleName}}.crud';
 {{/if}}
 import type { CrudFindListOptions } from '@core/services/base-crud.service';
 import type { IApiResponse } from '@core/types/api-contract';
+import { mapListRows, mapOneRow, runAfterWrite } from '@core/services/service-hooks';
 import { {{camelEntityName}}AdminHooks as hooks } from './{{moduleName}}.hooks';
 
 // <custom-imports>
@@ -26,17 +27,18 @@ export async function getAll(filters?: {{entityName}}ListBody) {
     hooks.beforeList ? await hooks.beforeList(listFilters) : listFilters
   ) as FilterQuery<I{{entityName}}Model>;
 
-  return crud.getAllPaginated(filtersQuery, {
+  const result = await crud.getAllPaginated(filtersQuery, {
     limit,
     page,
     sort: resolveListSort(sortBy, sortOrder, hooks.defaultSort ?? { createdAt: -1, _id: -1 }){{beServicePopulateOptionLine fields}}
   });
+  return mapListRows(result, hooks.mapRows?.bind(hooks));
 }
 
 export async function getById(id: string) {
   const blocked = await hooks.beforeGetById?.(id);
   if (blocked) return blocked;
-  return crud.getById(id{{beServiceGetByIdPopulateArgs fields}});
+  return mapOneRow(await crud.getById(id{{beServiceGetByIdPopulateArgs fields}}), hooks.mapRows?.bind(hooks));
 }
 
 export async function find<T = I{{entityName}}Model>(
@@ -49,7 +51,7 @@ export async function find<T = I{{entityName}}Model>(
 export async function create(data: I{{entityName}}Input) {
   const blocked = await hooks.beforeCreate?.(data);
   if (blocked) return blocked;
-  return crud.create({ ...data } as Record<string, unknown>);
+  return runAfterWrite(await crud.create({ ...data } as Record<string, unknown>), hooks.afterCreate?.bind(hooks), '{{moduleName}}.admin.afterCreate');
 }
 
 export async function update(id: string, data: Partial<I{{entityName}}Input>) {
@@ -57,16 +59,17 @@ export async function update(id: string, data: Partial<I{{entityName}}Input>) {
   if (blocked) return blocked;
 {{#if adminOwnershipInBody}}
   // Admin may reassign the owner (`userId` is kept in the update body).
-  return crud.updateById(id, { ...data } as Record<string, unknown>, {}, undefined, { allowUserIdInPayload: true });
+  const result = await crud.updateById(id, { ...data } as Record<string, unknown>, {}, undefined, { allowUserIdInPayload: true });
 {{else}}
-  return crud.updateById(id, { ...data } as Record<string, unknown>, {});
+  const result = await crud.updateById(id, { ...data } as Record<string, unknown>, {});
 {{/if}}
+  return runAfterWrite(result, hooks.afterUpdate?.bind(hooks), '{{moduleName}}.admin.afterUpdate');
 }
 
 export async function delete{{entityName}}(id: string) {
   const blocked = await hooks.beforeDelete?.(id);
   if (blocked) return blocked;
-  return crud.deleteById(id);
+  return crud.deleteById(id, {}, undefined, { onDeleted: hooks.afterDelete?.bind(hooks), context: '{{moduleName}}.admin.afterDelete' });
 }
 
 // <custom-methods>
