@@ -37,11 +37,21 @@ interface IApiResponse<T> {
 | delete | `DELETE {endpoint}/:id` | — | `null` |
 | satır aksiyonu | `POST {endpoint}/:id/actions/:actionId` | aksiyon girdisi | serbest |
 | toplu aksiyon | `POST {endpoint}/actions/:actionId` | `{ ids?, ...input }` | serbest |
+| export (admin, seçilirse) | `POST {endpoint}/export` | ExportBody | — (`text/csv`, zarfsız) |
 | autocomplete | hedefin `get-all`'u | `{ filters: { [display]: "…" }, limit: 20 }` | `PaginatedList<Row>` |
 
 ### Admin API
 
 - Varsayılan tam CRUD. `api.adminOperations` verilirse yalnız o işlemler açılır; `list` her zaman açık (admin ekranı listedir). Kapalı işlemin ucu yoktur (404 / 405); admin config `operations` (create / update / delete) aynı listeden üretilir. Kural tek yerde: `resolveAdminOperations` (`src/shared/normalizedModel.ts`); üç stack aynı.
+
+### Export (admin, PY12)
+
+- Yalnız `api.adminOperations` `export` içeriyorsa üretilir (varsayılan "hepsi açık" kuralı export'u kapsamaz). Kural: `adminExportEnabled` (`src/shared/normalizedModel.ts`). Admin config `operations` listesine `export` yazılır; admin-base toolbar'da "Dışa aktar" penceresini yalnız o zaman gösterir.
+- **ExportBody** (strict, bilinmeyen anahtar 400): `{ filters?, sortBy?, sortOrder?, fields?: string[], headers?: string[] }`. `filters` / `sortBy` / `sortOrder` liste isteğiyle aynı kurallar (§3); sayfalama yok.
+- **Kolonlar:** `fields` boş ya da yoksa dışa aktarılabilen bütün kolonlar: `id`, model sırasıyla alanlar, varsa `createdAt`, `updatedAt`. Dışa aktarılabilen = satırda dönebilen her alan (`hidden` hariç); `detailOnly` ve `computed` dahil (seçilirse okunur). Bilinmeyen ya da `hidden` alan 400. `headers` verilirse `fields` ile aynı uzunlukta olmalı (değilse 400) ve başlık satırıdır (FE yerelleştirilmiş kolon adlarını gönderir); yoksa başlık alan adlarıdır.
+- **Satırlar:** liste sorgusunun aynısı (filtre, kapsam / ownership, `before_list` hook'u, varsayılan sıra), populate ve `mapRows` dahil. Toplam **50.000**'i aşarsa 400 (mesajda sınır; filtre daraltılır).
+- **Hücre:** `null` boş; metin olduğu gibi; sayı noktalı ondalık; boolean `true` / `false`; tarih ve decimal satırdaki (wire) metin; tekil ilişki hedefin `reference.display` alanı (yoksa id); dizi (ilişki dizisi dahil: display değerleri), obje, map, json tek hücrede sıkışık JSON. Formül enjeksiyonu: `=`, `+`, `-`, `@`, sekme ya da CR ile başlayan **metin** hücrenin başına `'` eklenir; sayılar ve sayı gibi görünen metin (`^-?\d+(\.\d+)?$`, ör. decimal `-12.50`) değişmez.
+- **Dosya:** RFC 4180 (`,` ayırıcı, `\r\n` satır sonu; `,` / `"` / CR / LF içeren hücre çift tırnakta, `"` → `""`), UTF-8 BOM'lu. Cevap `200 text/csv; charset=utf-8`, `Content-Disposition: attachment; filename="<modül>-<YYYY-MM-DD>.csv"` (UTC tarih; modül = model adının kebab hali, ör. `subscription-plans`). Hata cevapları normal zarf (400 / 401 / 403).
 
 ### Normal (mobil) API
 
@@ -134,6 +144,7 @@ Axios interceptor **host** projededir, pakette değil. Paketin beklediği:
 5. `axios.isCancel(error)` → toast yok (loading sayacı yine azalır).
 6. Token ve 401 yönetimi host'un işidir.
 7. Bayraklar **header değil, axios config alanıdır**; sunucuya gitmez.
+8. `responseType: 'blob'` (export): başarıda axios yanıtını döner (zarf yok; `data` Blob, `headers['content-disposition']` dosya adı); hata gövdesi Blob'daki JSON zarftan `LocalResponse`'a çevrilip reject edilir. Paket her iki biçimi (yanıt nesnesi ya da çıplak Blob) kabul eder.
 
 ```ts
 declare module 'axios' {
@@ -146,6 +157,7 @@ declare module 'axios' {
 | list, getOne | `skipSuccessToast` |
 | autocomplete | `skipSuccessToast`, `skipLoading` |
 | create, update, delete, aksiyon | yok (global loading + BE `uiMessage` toast'u) |
+| export | `skipSuccessToast`, `responseType: 'blob'` (global loading açık) |
 
 Paket kendi hata ya da toast'unu göstermez.
 

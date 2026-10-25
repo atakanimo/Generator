@@ -64,7 +64,13 @@ export const adminBaseTexts = {
     loginForgotPassword: 'Şifrenizi mi unuttunuz?',
     loginEmailInvalid: 'Geçerli bir e-posta adresi girin',
     loginLanguage: 'Dil',
-    loginTheme: 'Tema'
+    loginTheme: 'Tema',
+    export: 'Dışa aktar',
+    exportTitle: 'CSV olarak dışa aktar',
+    exportHint: 'Geçerli filtreler ve sıralama uygulanır.',
+    exportColumns: 'Kolonlar',
+    exportSelectAll: 'Tümünü seç',
+    exportDownload: 'İndir'
   }
 } as const;
 
@@ -133,7 +139,13 @@ export const adminBaseTextsEn: { ataAdmin: Record<AdminTextKey, string> } = {
     loginForgotPassword: 'Forgot your password?',
     loginEmailInvalid: 'Enter a valid email address',
     loginLanguage: 'Language',
-    loginTheme: 'Theme'
+    loginTheme: 'Theme',
+    export: 'Export',
+    exportTitle: 'Export as CSV',
+    exportHint: 'The current filters and sort order apply.',
+    exportColumns: 'Columns',
+    exportSelectAll: 'Select all',
+    exportDownload: 'Download'
   }
 };
 

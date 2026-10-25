@@ -91,6 +91,10 @@ export const EXPRESS_CORE_BOOTSTRAP_FILES: readonly CoreBootstrapFile[] = [
   {
     sourceRelativePath: 'src/generator-assets/express-mongoose/services/merge-patch.ts',
     targetRelativePath: 'src/core/services/merge-patch.ts'
+  },
+  {
+    sourceRelativePath: 'src/generator-assets/express-mongoose/services/export-csv.ts',
+    targetRelativePath: 'src/core/services/export-csv.ts'
   }
 ];
 

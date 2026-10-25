@@ -314,3 +314,31 @@ async def test_list_paging_filter_sort(client, h, refs) -> None:
     assert [i["id"] for i in page["items"]] == {{#if test.sort.firstIsFirst}}[first["id"], second["id"]]{{else}}[second["id"], first["id"]]{{/if}}
 {{/if}}
 {{/if}}
+{{#if adminOps.export}}
+
+
+async def test_export_csv(client, h, refs) -> None:
+    """`POST /export` (api-contract §2 "Export"): CSV, BOM, başlık satırı, kolon seçimi, liste filtresi; hatalar zarflı."""
+    first = await create(client, h, body(0, refs))
+    url = f"{BASE}/export"
+    error(await client.post(url, json={}), 401)
+    payload = {"fields": ["id", "createdAt"], "headers": ["ID", "Oluşturma"]}
+    resp = await client.post(url, json=payload, headers=h)
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"].startswith("text/csv")
+    assert resp.headers["content-disposition"].startswith('attachment; filename="{{exportModule}}-')
+    text = resp.content.decode("utf-8")
+    assert text.startswith("﻿")
+    lines = text.lstrip("﻿").split("\r\n")
+    assert lines[0] == "ID,Oluşturma" and lines[1].startswith(f"{first['id']},") and lines[-1] == ""
+    assert len(lines) == 3
+    full = await client.post(url, json={}, headers=h)
+    assert full.status_code == 200 and full.content.decode("utf-8").lstrip("﻿").startswith("id,")
+    empty = await client.post(url, json={"filters": {"id": str(ObjectId())}, "fields": ["id"]}, headers=h)
+    assert empty.status_code == 200 and empty.content.decode("utf-8") == "﻿id\r\n"
+    error(await client.post(url, json={"fields": ["__unknown__"]}, headers=h), 400)
+    error(await client.post(url, json={"fields": ["id"], "headers": ["a", "b"]}, headers=h), 400)
+    error(await client.post(url, json={"page": 1}, headers=h), 400)
+    for field in HIDDEN:
+        error(await client.post(url, json={"fields": [field]}, headers=h), 400)
+{{/if}}

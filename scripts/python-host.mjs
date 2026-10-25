@@ -19,7 +19,9 @@
  *   node scripts/python-host.mjs admin-config <dir> <feDir> <Entity[,Entity…]>
  *                                                               admin FE config (IPC `generateFrontend`) of manifest
  *                                                               modules into an admin-base host (`<feDir>/src/modules`);
- *                                                               endpoint read from the host's admin routers
+ *                                                               a relative <feDir> is resolved against <dir> (e.g.
+ *                                                               `apps/admin`), an absolute one is used as is; endpoint
+ *                                                               read from the host's admin routers
  *
  * Output is short on purpose (one line per file / field); the full model only with `show`.
  */
@@ -127,13 +129,14 @@ if (command === 'bootstrap') {
   console.log(JSON.stringify(row.model, null, 2));
 } else if (command === 'admin-config') {
   if (!extra || !extra2) usage('FE klasörü ve entity listesi gerekli (ör. apps/admin SubscriptionPlans,IpBlacklist).');
+  const feDir = resolve(dir, extra); // relative → <dir>/<feDir>; absolute stays as is
   const rows = gen.readWorkspaceManifest(dir)?.models ?? [];
   for (const name of extra2.split(',').map((n) => n.trim()).filter(Boolean)) {
     const row = rows.find((m) => m.model.entityName === name);
     if (!row) usage(`Manifest'te ${name} yok.`);
-    const res = gen.generateFrontend(row.model, resolve(extra), dir);
+    const res = gen.generateFrontend(row.model, feDir, dir);
     if (!res.success) usage(`${name}: ${res.errors.join('; ')}`);
-    console.log(`admin-config: ${name} → ${res.files.config.slice(resolve(extra).length + 1)}${res.files.extension ? ' (+ .generated.ts)' : ''}`);
+    console.log(`admin-config: ${name} → ${res.files.config.slice(feDir.length + 1)}${res.files.extension ? ' (+ .generated.ts)' : ''}`);
     for (const w of res.warnings ?? []) console.log(`  uyarı: ${w}`);
   }
 } else {

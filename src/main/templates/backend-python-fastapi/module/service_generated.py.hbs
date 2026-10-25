@@ -43,6 +43,9 @@ if TYPE_CHECKING:
 {{#if service.detailOnlyLine}}
     {{{service.detailOnlyLine}}}
 {{/if}}
+{{#each service.exportBlock}}
+{{{this}}}
+{{/each}}
 
 {{{service.mapCreateDef}}}
 {{#if service.mapCreateAfter.length}}

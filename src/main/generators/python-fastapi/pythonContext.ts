@@ -12,7 +12,7 @@
  * target is in the list (as in .NET).
  */
 import type { FilterType, NormalizedField, NormalizedModel, NormalizedObjectSubField } from '../../../shared/normalizedModel.js';
-import { resolveAdminOperations, updateNullClears, type NormalOperation } from '../../../shared/normalizedModel.js';
+import { adminExportEnabled, resolveAdminOperations, updateNullClears, type NormalOperation } from '../../../shared/normalizedModel.js';
 import { constraintsForField, EMAIL_PATTERN, isNumericEnum } from '../../../shared/fieldConstraints.js';
 import { kebabCase, pascalCase, singularize } from '../../utils/namingUtils.js';
 import { PYTHON_KEYWORDS } from './pythonLayout.js';
@@ -95,8 +95,10 @@ export interface PythonModuleContext extends PythonModuleNames {
   hasAdmin: boolean;
   /** `DETAIL_ONLY` tuple of the module test (`access.detailOnly` fields: `None` in list rows). */
   detailOnlyTuple: string;
-  /** Admin router endpoints (`api.adminOperations`; `list` always). */
-  adminOps: Record<NormalOperation, boolean> & { all: boolean };
+  /** Admin router endpoints (`api.adminOperations`; `list` always; `export` only when listed, PY12). */
+  adminOps: Record<NormalOperation | 'export', boolean> & { all: boolean };
+  /** Export file name module (api-contract §2: `kebabCase(entityName)`). */
+  exportModule: string;
   model: {
     imports: string;
     enums: Array<{ name: string; base: string; members: string[] }>;
@@ -124,6 +126,8 @@ export interface PythonModuleContext extends PythonModuleNames {
     uniqueLine?: string;
     hiddenLine?: string;
     detailOnlyLine?: string;
+    /** Export columns and relation display fields (api-contract §2 "Export"); empty when export is off. */
+    exportBlock: string[];
     relationBlock: string[];
     populateBlock: string[];
     mapCreateDef: string;
@@ -143,6 +147,8 @@ export interface PythonModuleContext extends PythonModuleNames {
     updateDecorator: string;
     updateDef: string;
     deleteDecorator: string;
+    exportDecorator: string;
+    exportDef: string;
     deleteDef: string;
   };
   k: {
@@ -817,6 +823,16 @@ function buildModuleContext(pkg: string, info: ModelInfo, infos: Map<string, Mod
   if (relationLines.length) serviceImports.add(crud, 'RelationField');
   if (populateLines.length) serviceImports.add(crud, 'PopulateField');
   const hiddenNames = fields.filter((f) => f.hidden).map((f) => pyStr(f.name));
+  // Export (PY12): every row column in order; populated references show the target's `reference.display`.
+  const exportBlock: string[] = [];
+  if (adminExportEnabled(model.api)) {
+    const columns = ['id', ...visible.map((f) => f.name), 'createdAt', 'updatedAt'].map((n) => `        ${pyStr(n)},`);
+    exportBlock.push(...tupleBlock('export_fields: ClassVar[tuple[str, ...]]', columns));
+    const displays = visible
+      .filter((f) => refClassOf.has(f) && f.source.reference?.display)
+      .map((f) => `        ${pyStr(f.name)}: ${pyStr(f.source.reference!.display!)},`);
+    if (displays.length) exportBlock.push('    export_display: ClassVar[Mapping[str, str]] = {', ...displays, '    }');
+  }
   const detailOnlyNames = visible.filter((f) => f.source.access?.detailOnly === true).map((f) => pyStr(f.name));
 
   const servicePreamble = usesDay
@@ -834,8 +850,9 @@ function buildModuleContext(pkg: string, info: ModelInfo, infos: Map<string, Mod
   const adminOpList = resolveAdminOperations(model.api);
   const adminOps = Object.fromEntries(
     (['list', 'getOne', 'create', 'update', 'delete'] as const).map((op) => [op, adminOpList.includes(op)])
-  ) as Record<NormalOperation, boolean> & { all: boolean };
+  ) as Record<NormalOperation | 'export', boolean> & { all: boolean };
   adminOps.all = adminOpList.length === 5;
+  adminOps.export = adminExportEnabled(model.api);
   const routerImports = new PyImports()
     .add('typing', 'Annotated')
     .add('fastapi', 'APIRouter', 'Body', 'Depends')
@@ -854,6 +871,9 @@ function buildModuleContext(pkg: string, info: ModelInfo, infos: Map<string, Mod
     )
     .add(mod('service'), service, `build_${folder}_service`);
   if (adminOps.create || adminOps.update || adminOps.delete) routerImports.add(`${crud}.messages`, 'crud_text');
+  if (adminOps.export) {
+    routerImports.add('fastapi.responses', 'Response').add(crud, 'ExportBody').add(`${crud}.export`, 'export_filename');
+  }
   const row = `ContractResponse[${entity}Row]`;
   const page = `ContractResponse[PaginatedList[${entity}Row]]`;
   const deco = (method: string, path: string, response: string) => pyCall(`@router.${method}`, [pyStr(path), `response_model=${response}`]);
@@ -899,6 +919,7 @@ function buildModuleContext(pkg: string, info: ModelInfo, infos: Map<string, Mod
     ...names,
     hasAdmin: model.api?.admin !== false,
     adminOps,
+    exportModule: kebabCase(model.entityName),
     detailOnlyTuple: `(${detailOnlyNames.join(', ')}${detailOnlyNames.length === 1 ? ',' : ''})`,
     model: {
       imports: modelImports.render(),
@@ -930,6 +951,7 @@ function buildModuleContext(pkg: string, info: ModelInfo, infos: Map<string, Mod
       sortEntries,
       uniqueLine: uniqueFields.length ? `unique_fields = (${uniqueFields.map((f) => pyStr(f.name)).join(', ')}${uniqueFields.length === 1 ? ',' : ''})` : undefined,
       hiddenLine: hiddenNames.length ? `hidden_fields = (${hiddenNames.join(', ')}${hiddenNames.length === 1 ? ',' : ''})` : undefined,
+      exportBlock,
       detailOnlyLine: detailOnlyNames.length
         ? `detail_only_fields = (${detailOnlyNames.join(', ')}${detailOnlyNames.length === 1 ? ',' : ''})`
         : undefined,
@@ -958,7 +980,13 @@ function buildModuleContext(pkg: string, info: ModelInfo, infos: Map<string, Mod
       updateDecorator: deco('post', '/update/{id}', row),
       updateDef: pyDef(`async def update_${singular}`, ['id: str', `body: ${entity}Update`, '_: AdminDep', 'service: ServiceDep'], row),
       deleteDecorator: deco('delete', '/{id}', 'ContractResponse[None]'),
-      deleteDef: pyDef(`async def delete_${singular}`, ['id: str', '_: AdminDep', 'service: ServiceDep'], 'ContractResponse[None]')
+      deleteDef: pyDef(`async def delete_${singular}`, ['id: str', '_: AdminDep', 'service: ServiceDep'], 'ContractResponse[None]'),
+      exportDecorator: pyCall('@router.post', [pyStr('/export'), 'response_class=Response']),
+      exportDef: pyDef(
+        `async def export_${folder}`,
+        ['_: AdminDep', 'service: ServiceDep', `body: Annotated[ExportBody[${entity}Filters] | None, Body()] = None`],
+        'Response'
+      )
     },
     k: {
       modelImport: new PyImports().add(mod('model_generated'), ...modelExports).render(),

@@ -50,6 +50,7 @@ function moduleFiles(root: string, ctx: DotnetModuleContext): WrittenFile[] {
       hooks: `I${entity}Hooks`,
       summary: serviceSummary(ctx),
       ownership: ctx.ownership,
+      exportOn: false,
       ...ctx.normal
     },
     {
@@ -59,6 +60,7 @@ function moduleFiles(root: string, ctx: DotnetModuleContext): WrittenFile[] {
       hooks: `I${entity}AdminHooks`,
       summary: 'Admin API.',
       ownership: undefined,
+      exportOn: ctx.adminOps.export,
       ...ctx.admin
     }
   ];

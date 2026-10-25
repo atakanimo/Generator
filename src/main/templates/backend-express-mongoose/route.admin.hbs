@@ -2,6 +2,9 @@
 import express, { Router } from 'express';
 import * as {{entityNameLower}}ServiceAdmin from './{{moduleName}}.service.admin';
 import { AtaResponse } from '@core/response/response.helper';
+{{#if adminOps.export}}
+import { sendCsv } from '@core/services/export-csv';
+{{/if}}
 import { authMiddleware, adminAuthMiddleware } from '@middlewares';
 import { validate } from '@core';
 import * as TSchema from './{{moduleName}}.schema';
@@ -52,6 +55,14 @@ router.post(
 router.delete('/:id', validate({ params: TSchema.{{entityName}}IdParamSchema }), async (req, res) => {
   const result = await {{entityNameLower}}ServiceAdmin.delete{{entityName}}(req.params.id);
   AtaResponse(res, result);
+});
+{{/if}}
+{{#if adminOps.export}}
+
+router.post('/export', validate({ body: TSchema.{{entityName}}ExportBodySchema }), async (req, res) => {
+  const result = await {{entityNameLower}}ServiceAdmin.exportCsv(req.body);
+  if (!result.isSuccess || result.data == null) return AtaResponse(res, result);
+  sendCsv(res, '{{adminRoute}}', result.data);
 });
 {{/if}}
 

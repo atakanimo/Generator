@@ -19,7 +19,10 @@ const tr = {
     updateFailed: 'Kayıt güncellenemedi',
     deleteFailed: 'Kayıt silinemedi',
     notFound: 'Kayıt bulunamadı veya yetkisiz erişim',
-    deleteSuccess: 'Kayıt başarıyla silindi'
+    deleteSuccess: 'Kayıt başarıyla silindi',
+    exportUnknownField: 'Bu alan dışa aktarılamaz: {{field}}',
+    exportHeaders: '`headers`, `fields` ile aynı sayıda olmalı.',
+    exportTooMany: 'Dışa aktarılacak çok fazla kayıt var; en fazla {{limit}}. Filtreleri daraltın.'
   },
   auth: {
     noToken: 'Token sağlanmadı',

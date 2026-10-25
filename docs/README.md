@@ -27,7 +27,6 @@ Model dosyası → Parser (stack'e özel) → NormalizedModel v2 → manifest v3
 | [plans/backend-python-fastapi.md](plans/backend-python-fastapi.md) | Python + FastAPI: kararlar, aşamalar (PY0–PY12), StockExchange geçişi, açık işler |
 | [plans/backend-dotnet-database-providers.md](plans/backend-dotnet-database-providers.md) | .NET'te seçilebilir veritabanı (PostgreSQL / MongoDB) ve id tipi (PY10) |
 | [plans/client-data-layer.md](plans/client-data-layer.md) | Mobil / web istemci veri katmanı (tipler, servis, thunk, slice) üretimi |
-| [plans/GeneratorTest.md](plans/GeneratorTest.md) | Üretilebilen her alan türü / ayar için altı stack'te test planı (senaryo tabloları, bulgular) |
-| [plans/AlphaFeTests.md](plans/AlphaFeTests.md) | StockExchange (AlphaTerminal) üretilen FE dosyalarının test planı (Cursor'a verilir) |
+| Açık işler ve testler | StockExchange `documents/KalanIsler.md`, `documents/TestPlan.md` (Generator dahil tek liste / tek test planı) |
 
 AI kuralları `.cursor/rules/*.mdc` altında; her kural ilgili dokümana bağlanır.

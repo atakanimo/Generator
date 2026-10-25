@@ -53,3 +53,16 @@ router = APIRouter(
     await service.delete(id)
     return contract_ok(None, crud_text("deleted"))
 {{/if}}
+{{#if adminOps.export}}
+
+
+{{{router.exportDecorator}}}
+{{{router.exportDef}}}
+    csv = await service.export_csv(body or ExportBody[{{entity}}Filters]())
+    filename = export_filename("{{exportModule}}")
+    return Response(
+        csv,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+{{/if}}

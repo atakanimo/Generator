@@ -19,7 +19,10 @@ const en = {
     updateFailed: 'Failed to update the record',
     deleteFailed: 'Failed to delete the record',
     notFound: 'Record not found or unauthorized',
-    deleteSuccess: 'Record deleted successfully'
+    deleteSuccess: 'Record deleted successfully',
+    exportUnknownField: 'Cannot export this field: {{field}}',
+    exportHeaders: '`headers` must have as many items as `fields`.',
+    exportTooMany: 'Too many records to export; at most {{limit}}. Narrow the filters.'
   },
   auth: {
     noToken: 'No token provided',

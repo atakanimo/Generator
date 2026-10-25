@@ -1,4 +1,5 @@
 import AddIcon from '@mui/icons-material/Add';
+import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import { Box, Button, Chip, Stack, Typography } from '@mui/material';
 import {
   DataGrid,
@@ -22,6 +23,7 @@ import {
   useExecuteAction,
   type PendingAction
 } from './actions/actions.js';
+import { ExportDialog } from './actions/ExportDialog.js';
 import { ResourceDetailDrawer } from './detail/ResourceDetailDrawer.js';
 import { FilterBar } from './filters/FilterBar.js';
 import { ResourceFormDrawer } from './form/ResourceFormDrawer.js';
@@ -67,6 +69,7 @@ export function ResourcePage({ resource }: ResourcePageProps) {
   const [viewing, setViewing] = useState<Row | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [json, setJson] = useState<JsonDialogState | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const body: ListBody = useMemo(() => {
     const sort = sortModel[0];
@@ -94,6 +97,7 @@ export function ResourcePage({ resource }: ResourcePageProps) {
   const canCreate = canPerform(resource, 'create');
   const canUpdate = canPerform(resource, 'update');
   const canDelete = canPerform(resource, 'delete');
+  const canExport = canPerform(resource, 'export');
 
   const startAction = (next: PendingAction) => {
     if (next.action.input?.length || next.action.confirm) {
@@ -169,6 +173,11 @@ export function ResourcePage({ resource }: ResourcePageProps) {
             </>
           ) : null}
           {toolbarActions.map(collectionButton)}
+          {canExport ? (
+            <Button variant='outlined' startIcon={<FileDownloadOutlinedIcon />} onClick={() => setExporting(true)}>
+              {text('export')}
+            </Button>
+          ) : null}
           {canCreate ? (
             <Button variant='contained' startIcon={<AddIcon />} onClick={() => setForm({ mode: 'create' })}>
               {text('create')}
@@ -290,6 +299,8 @@ export function ResourcePage({ resource }: ResourcePageProps) {
           onClose={() => setPending(null)}
         />
       ) : null}
+
+      {exporting ? <ExportDialog resource={resource} listBody={body} onClose={() => setExporting(false)} /> : null}
 
       <JsonDialog state={json} onClose={() => setJson(null)} />
     </Box>

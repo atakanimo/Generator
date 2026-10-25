@@ -20,6 +20,7 @@ import { ensureExpressCoreAssets } from './expressCoreAssets.js';
 import {
   NORMAL_OPERATIONS,
   NORMAL_WRITE_OPERATIONS,
+  adminExportEnabled,
   resolveAdminOperations,
   type NormalizedModel as V2Model,
   type NormalOperation
@@ -522,10 +523,28 @@ export class BackendGenerator extends BaseGenerator {
     }
     const hasAdminOnly = model.fields.some(field => field.adminOnly === true);
     const adminOpList = resolveAdminOperations(model.source.api);
+    const exportOn = adminExportEnabled(model.source.api);
+    // Export columns (api-contract §2 "Export"): row fields in order (`hidden` never); a populated reference shows
+    // its `display` field.
+    const visibleFields = model.fields.filter(field => field.hidden !== true && !['_id', 'id', 'createdAt', 'updatedAt'].includes(field.name));
+    const timestamps = model.source.timestamps ?? { createdAt: true, updatedAt: true };
+    const exportFields = [
+      'id',
+      ...visibleFields.map(field => field.name),
+      ...(timestamps.createdAt ? ['createdAt'] : []),
+      ...(timestamps.updatedAt ? ['updatedAt'] : [])
+    ];
+    const exportDisplay = visibleFields
+      .filter(field => field.relation?.displayField && (field.relationPopulateFields?.length || field.relation.displayField))
+      .map(field => ({ name: field.name, display: field.relation!.displayField! }));
     return {
       normalOps,
-      /** Admin routes (`api.adminOperations`; `list` always). */
-      adminOps: Object.fromEntries(NORMAL_OPERATIONS.map(op => [op, adminOpList.includes(op)])),
+      /** Admin routes (`api.adminOperations`; `list` always; `export` only when listed, PY12). */
+      adminOps: { ...Object.fromEntries(NORMAL_OPERATIONS.map(op => [op, adminOpList.includes(op)])), export: exportOn },
+      exportFieldsLiteral: exportOn ? exportFields.map(name => `'${name}'`).join(', ') : '',
+      exportDisplay,
+      /** Export file name module (api-contract §2: `kebabCase(entityName)`). */
+      adminRoute: kebabCase(model.source.entityName),
       hasNormalOps: Object.values(normalOps).some(Boolean),
       authScope: canWrite ? (isSelf ? "'self'" : 'true') : 'false',
       hiddenFields: model.fields.filter(field => field.hidden === true).map(field => field.name),

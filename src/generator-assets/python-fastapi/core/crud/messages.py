@@ -20,12 +20,27 @@ _CATALOG: dict[str, dict[str, str]] = {
     "not_found_header": {"tr": "Bulunamadı", "en": "Not found"},
     "not_found": {"tr": "Kayıt bulunamadı.", "en": "Record not found."},
     "method_not_allowed_header": {"tr": "Desteklenmeyen yöntem", "en": "Method not allowed"},
-    "method_not_allowed": {"tr": "Bu uç bu yöntemi desteklemiyor.", "en": "This endpoint does not support this method."},
+    "method_not_allowed": {
+        "tr": "Bu uç bu yöntemi desteklemiyor.",
+        "en": "This endpoint does not support this method.",
+    },
     "conflict_header": {"tr": "Çakışma", "en": "Conflict"},
     "duplicate": {"tr": "Bu değer zaten kullanılıyor: {field}", "en": "Value already in use: {field}"},
     "reference_not_found": {
         "tr": "İlişkili kayıt bulunamadı: {field}",
         "en": "Related record not found: {field}",
+    },
+    "export_unknown_field": {
+        "tr": "Bu alan dışa aktarılamaz: {field}",
+        "en": "Cannot export this field: {field}",
+    },
+    "export_headers": {
+        "tr": "`headers`, `fields` ile aynı sayıda olmalı.",
+        "en": "`headers` must have as many items as `fields`.",
+    },
+    "export_too_many": {
+        "tr": "Dışa aktarılacak çok fazla kayıt var ({total}); en fazla {limit}. Filtreleri daraltın.",
+        "en": "Too many records to export ({total}); at most {limit}. Narrow the filters.",
     },
     "internal_header": {"tr": "Sunucu hatası", "en": "Server error"},
     "internal": {"tr": "Beklenmeyen bir hata oluştu.", "en": "An unexpected error occurred."},

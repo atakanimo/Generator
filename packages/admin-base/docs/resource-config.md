@@ -22,7 +22,9 @@ Her admin modülü iki dosyadan oluşur (host'ta `modules/<m>/`):
 | `sortable?` | `false` → hiçbir kolon sıralanmaz, `defaultSort` yok sayılır (BE liste ucu sıralamıyorsa) |
 | `path?` | Route segmenti; yoksa `name` |
 | `menu?.order` | Sol menü sırası |
-| `operations?` | `create / update / delete` alt kümesi; yoksa hepsi, `[]` = salt okunur |
+| `operations?` | `create / update / delete / export` alt kümesi; yoksa bütün yazma işlemleri (export hariç), `[]` = salt okunur. `export` opt-in: yalnız listedeyse toolbar'da "Dışa aktar" (aşağıda) |
+
+**Export (CSV, sözleşme §2 "Export"):** `operations` `export` içeriyorsa toolbar'da "Dışa aktar" düğmesi `ExportDialog`'u açar: kolon seçimi (`id` + `writeOnly` olmayan alanlar; varsayılan işaretli `id` + `list: true` alanlar, "Tümünü seç"), başlıklar yerelleştirilmiş alan etiketleri. İstek `DataProvider.exportCsv` → `POST {endpoint}/export` (`{ filters, sortBy, sortOrder, fields, headers }`, tablonun geçerli filtre ve sırası; sayfa yok), `responseType: 'blob'`; dosya adı `Content-Disposition`'dan (yoksa `<name>.csv`). Hata host toast'unda, pencere açık kalır. Generator, model `api.adminOperations` `export` içeriyorsa config'e yazar.
 
 `defineResourceSchema` literal tipleri korur; `InferRow<typeof schema>` satır tipini verir (`row.status` tiplidir).
 

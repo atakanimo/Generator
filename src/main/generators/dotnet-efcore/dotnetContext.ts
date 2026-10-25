@@ -12,7 +12,7 @@ import type {
   NormalizedModel,
   NormalizedObjectSubField
 } from '../../../shared/normalizedModel.js';
-import { NORMAL_OPERATIONS, resolveAdminOperations, updateNullClears } from '../../../shared/normalizedModel.js';
+import { NORMAL_OPERATIONS, adminExportEnabled, resolveAdminOperations, updateNullClears } from '../../../shared/normalizedModel.js';
 import { constraintsForField, EMAIL_PATTERN, isNumericEnum } from '../../../shared/fieldConstraints.js';
 import { kebabCase, moduleNameFromEntity, pascalCase, pluralize, singularize } from '../../utils/namingUtils.js';
 import type { DotnetRegistryModule } from './DotnetHostBootstrap.js';
@@ -131,8 +131,13 @@ export interface DotnetModuleContext {
   ops: Record<NormalOperation, boolean>;
   normalAuth: 'anonymous' | 'authenticated';
   hasAdmin: boolean;
-  /** Admin endpoints (`api.adminOperations`; `list` always). */
-  adminOps: Record<NormalOperation, boolean>;
+  /** Admin endpoints (`api.adminOperations`; `list` always; `export` only when listed, PY12). */
+  adminOps: Record<NormalOperation | 'export', boolean>;
+  /** Export columns (`id`, visible fields in order, timestamps) and populated reference → `reference.display`. */
+  exportFields: string[];
+  exportDisplay: Array<{ name: string; display: string }>;
+  /** Export file name module (api-contract §2: `kebabCase(entityName)`). */
+  exportModule: string;
   usesSerialization: boolean;
   usesJson: boolean;
 }
@@ -825,7 +830,15 @@ function buildModuleContext(app: string, info: ModelInfo, infos: Map<string, Mod
     // Default is authenticated (as Express: `moduleApiDetect` → `requiresAuth: true`); anonymous only when asked for.
     normalAuth: model.api?.requiresAuth === false && !writes && !ownership ? 'anonymous' : 'authenticated',
     hasAdmin: model.api?.admin !== false,
-    adminOps: Object.fromEntries(NORMAL_OPERATIONS.map((op) => [op, resolveAdminOperations(model.api).includes(op)])) as Record<NormalOperation, boolean>,
+    adminOps: {
+      ...(Object.fromEntries(NORMAL_OPERATIONS.map((op) => [op, resolveAdminOperations(model.api).includes(op)])) as Record<NormalOperation, boolean>),
+      export: adminExportEnabled(model.api)
+    },
+    exportFields: ['id', ...visible.map((f) => f.json), 'createdAt', 'updatedAt'],
+    exportDisplay: visible
+      .filter((f) => f.populate?.length && f.source.reference?.display)
+      .map((f) => ({ name: f.json, display: f.source.reference!.display! })),
+    exportModule: kebabCase(model.entityName),
     usesSerialization: enums.length > 0,
     usesJson
   };

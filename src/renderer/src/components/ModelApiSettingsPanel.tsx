@@ -1,5 +1,5 @@
 import { Alert, Box, Checkbox, FormControl, FormControlLabel, FormGroup, InputLabel, MenuItem, Select, Switch, Typography } from '@mui/material';
-import { resolveAdminOperations, type NormalOperation } from '@shared/normalizedModel';
+import { adminExportEnabled, resolveAdminOperations, type AdminOperation, type NormalOperation } from '@shared/normalizedModel';
 import type { ModelApiSettings } from '../features/project/modelEdits';
 
 /**
@@ -67,10 +67,14 @@ const ModelApiSettingsPanel = ({ api, fields, source, defaultAdmin = false, onCh
   };
 
   const adminOps = resolveAdminOperations(api);
+  const adminExport = adminExportEnabled(api);
+  const storeAdminOperations = (ops: NormalOperation[], exportOn: boolean) => {
+    // Every CRUD operation open and no export → no stored list (generators default to all CRUD).
+    const next: AdminOperation[] = [...ops, ...(exportOn ? (['export'] as const) : [])];
+    onChange({ adminOperations: ops.length === OPERATIONS.length && !exportOn ? undefined : next });
+  };
   const toggleAdminOperation = (op: NormalOperation, checked: boolean) => {
-    const next = OPERATIONS.map(o => o.op).filter(o => (o === op ? checked : adminOps.includes(o)));
-    // Every operation open → no stored list (generators default to all).
-    onChange({ adminOperations: next.length === OPERATIONS.length ? undefined : next });
+    storeAdminOperations(OPERATIONS.map(o => o.op).filter(o => (o === op ? checked : adminOps.includes(o))), adminExport);
   };
 
   const changeOwnership = (choice: OwnershipChoice) => {
@@ -104,6 +108,18 @@ const ModelApiSettingsPanel = ({ api, fields, source, defaultAdmin = false, onCh
               sx={{ mr: 3 }}
             />
           ))}
+          <FormControlLabel
+            control={<Checkbox size='small' checked={adminExport} onChange={e => storeAdminOperations(adminOps, e.target.checked)} />}
+            label={
+              <Box>
+                <Typography variant='body2'>Export</Typography>
+                <Typography variant='caption' color='text.secondary'>
+                  POST /export (CSV)
+                </Typography>
+              </Box>
+            }
+            sx={{ mr: 3 }}
+          />
         </FormGroup>
       )}
       <Typography variant='subtitle1' sx={{ fontWeight: 600, mt: 2, mb: 0.5 }}>

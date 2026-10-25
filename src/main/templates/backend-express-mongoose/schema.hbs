@@ -40,6 +40,19 @@ export const {{entityName}}GetAllBodyAdminSchema = ListPaginationBodySchema.exte
 }).strict();
 {{/if}}
 
+{{#if adminOps.export}}
+/** Export body (api-contract §2 "Export"): the list body's filters and sort, no paging, plus the columns. */
+export const {{entityName}}ExportBodySchema = z
+  .object({
+    filters: {{#if adminSchemaVariant}}{{entityName}}GetAllFilterAdminSchema{{else}}{{entityName}}GetAllFilterSchema{{/if}}.optional(),
+    sortBy: z.string().min(1).optional(),
+    sortOrder: z.enum(['asc', 'desc']).optional(),
+    fields: z.array(z.string().min(1)).optional(),
+    headers: z.array(z.string()).optional()
+  })
+  .strict();
+
+{{/if}}
 export const {{entityName}}IdParamSchema = z
   .object({
     id: objectIdString

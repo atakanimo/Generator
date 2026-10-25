@@ -119,6 +119,10 @@ Marker'lar (`// <ad>` … `// </ad>`, kaynak `utils/customBlockMarkers.ts`):
 - `userId` / `self` kapsamlı modüllerde job kodu admin crud'u (`<entity>AdminCrud`) kullanır; kapsamlı crud istek auth bağlamı ister.
 - `adminOnly` alanlar normal create / update şemasında yoktur.
 
+## Export (CSV, PY12)
+
+`api.adminOperations` `export` içeriyorsa (opt-in) admin router'a `POST /export` gelir (api-contract §2 "Export"): `<E>ExportBodySchema` (strict), servis `exportCsv` liste sorgusunun aynısını (filtre, scope, hook'lar, sıra, populate, `mapRows`) sayfasız okur (`limit: EXPORT_ROW_LIMIT + 1`, fazlası 400). Biçim core asset `services/export-csv.ts` (`resolveExportColumns`, `cellText`, `renderCsv`, `sendCsv`); kolonlar ve ilişki display alanları route şablonunda literal. Dosya adı `kebabCase(entityName)-<YYYY-MM-DD>.csv`. Host locale'lerinde `crud.exportUnknownField`, `crud.exportHeaders`, `crud.exportTooMany` (yoksa İngilizce varsayılan).
+
 ## Update ve `null` (JSON Merge Patch)
 
 Sözleşme §5: gönderilmeyen alan değişmez, opsiyonel alana `null` alanı temizler, zorunlu alana ya da diziye `null` 400 (zod). `BaseCrudService.updateById` gövdeyi `toMergePatch` (`core/services/merge-patch.ts`) ile `{ $set, $unset }`'e çevirir: `null` → `$unset` (satırda alan kalmaz; istemci `null` okur), `undefined` düşer. Custom kodda `<m>Crud.updateById`'e verilen `null` da alanı siler.

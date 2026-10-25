@@ -24,13 +24,17 @@ export interface ResourceSchema<Fs extends readonly FieldConfig[] = readonly Fie
   path?: string;
   /** Sol menü sırası (küçük önce). */
   menu?: { order?: number };
-  /** Admin'de açık yazma işlemleri; verilmezse hepsi. Ör. loglar için `[]`. */
+  /**
+   * Admin'de açık işlemler; verilmezse bütün yazma işlemleri (export hariç). Ör. loglar için `[]`. `export` (CSV,
+   * `POST {endpoint}/export`) opt-in: yalnız listede varsa açık.
+   */
   operations?: ReadonlyArray<ResourceOperation>;
 }
 
-export type ResourceOperation = 'create' | 'update' | 'delete';
+export type ResourceOperation = 'create' | 'update' | 'delete' | 'export';
 
 export function canPerform(resource: Pick<ResourceSchema, 'operations'>, operation: ResourceOperation): boolean {
+  if (operation === 'export') return resource.operations?.includes('export') ?? false;
   return resource.operations === undefined || resource.operations.includes(operation);
 }
 

@@ -1,6 +1,6 @@
 import type { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { describe, expect, it, vi } from 'vitest';
-import { createAtaRestProvider } from '../src/index.js';
+import { canPerform, createAtaRestProvider, filenameFromDisposition } from '../src/index.js';
 
 const resource = { name: 'user-subscriptions', endpoint: '/api/userSubscriptions/admin/' };
 
@@ -66,5 +66,44 @@ describe('createAtaRestProvider', () => {
     const failed = { isSuccess: false, errorData: { message: 'x' } };
     const bad = fakeHttp(failed);
     await expect(createAtaRestProvider(bad).getOne(resource, '1')).rejects.toBe(failed);
+  });
+
+  it('exportCsv: POST export, blob, okuma bayrakları; dosya adı başlıktan', async () => {
+    const blob = new Blob(['id\r\n']);
+    const { http, request } = fakeHttp({ data: blob, headers: { 'content-disposition': 'attachment; filename="user-subscriptions-2026-10-25.csv"' } });
+    const body = { filters: { status: 'active' }, fields: ['id'], headers: ['ID'] };
+    const file = await createAtaRestProvider({ http }).exportCsv(resource, body);
+    expect(request.mock.calls[0][0]).toMatchObject({
+      method: 'POST',
+      url: '/api/userSubscriptions/admin/export',
+      data: body,
+      responseType: 'blob',
+      skipSuccessToast: true
+    });
+    expect(file).toEqual({ blob, filename: 'user-subscriptions-2026-10-25.csv' });
+  });
+
+  it('exportCsv: çıplak Blob kabul edilir (ad: <name>.csv); zarf dönerse reject', async () => {
+    const blob = new Blob(['x']);
+    await expect(createAtaRestProvider(fakeHttp(blob)).exportCsv(resource, {})).resolves.toEqual({ blob, filename: 'user-subscriptions.csv' });
+    const failed = { isSuccess: false, errorData: { message: 'x' } };
+    await expect(createAtaRestProvider(fakeHttp(failed)).exportCsv(resource, {})).rejects.toBe(failed);
+  });
+
+  it('filenameFromDisposition: tırnaklı, tırnaksız, filename*', () => {
+    expect(filenameFromDisposition('attachment; filename="a.csv"')).toBe('a.csv');
+    expect(filenameFromDisposition('attachment; filename=b.csv')).toBe('b.csv');
+    expect(filenameFromDisposition("attachment; filename*=UTF-8''%C3%A7.csv")).toBe('ç.csv');
+    expect(filenameFromDisposition(undefined)).toBeUndefined();
+  });
+});
+
+describe('canPerform', () => {
+  it('export opt-in: yalnız operations listesinde varsa', () => {
+    expect(canPerform({}, 'export')).toBe(false);
+    expect(canPerform({}, 'create')).toBe(true);
+    expect(canPerform({ operations: ['delete'] }, 'export')).toBe(false);
+    expect(canPerform({ operations: ['delete', 'export'] }, 'export')).toBe(true);
+    expect(canPerform({ operations: ['export'] }, 'create')).toBe(false);
   });
 });

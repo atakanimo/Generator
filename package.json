@@ -33,6 +33,7 @@
         "electron": "^28.0.0",
         "electron-builder": "^24.9.1",
         "esbuild": "^0.19.8",
+        "playwright": "^1.64.1",
         "prettier-plugin-handlebars": "^0.0.1",
         "typescript": "^5.3.3",
         "vite": "^5.0.8",

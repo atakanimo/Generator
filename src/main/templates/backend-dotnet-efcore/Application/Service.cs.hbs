@@ -6,9 +6,15 @@ using {{app}}.Application.Common.Abstractions;
 {{#if usesErrors}}
 using {{app}}.Application.Common.Errors;
 {{/if}}
+{{#if exportOn}}
+using {{app}}.Application.Common.Export;
+{{/if}}
 using {{app}}.Application.Common.Pagination;
 {{#if populateLoads.length}}
 using {{app}}.Application.Common.Relations;
+{{/if}}
+{{#if exportOn}}
+using {{app}}.Application.Common.Results;
 {{/if}}
 using {{app}}.Application.Common.Services;
 using {{app}}.Domain.{{folder}};
@@ -128,6 +134,28 @@ public sealed partial class {{className}}(IAppDbContext db, {{hooks}} hooks{{#if
 
     protected override IQueryable<{{entity}}> ForUpdate(IQueryable<{{entity}}> query) =>
         query{{#each updateIncludes}}{{{this}}}{{/each}};
+{{/if}}
+{{#if exportOn}}
+
+    /// <summary>CSV export: liste sorgusunun aynısı (filtre, kapsam, <c>BeforeList</c>, sıra; populate + <c>MapRows</c>), sayfasız.</summary>
+    public async Task<Result<ExportRows<{{entity}}Row>>> ExportAsync(ExportBody<{{entity}}Filters> body, CancellationToken cancellationToken)
+    {
+        if (ExportRules.ResolveColumns(body, {{entity}}Export.Fields, Sort.Keys, out var fields, out var headers) is { } invalid)
+        {
+            return invalid;
+        }
+
+        var rows = await ApplyFilters(Hooks.BeforeList(Scope(Set.AsNoTracking()), body.ToListBody()), body.Filters)
+            .ApplySort(body.SortBy, body.SortOrder, Sort, q => Hooks.DefaultSort(q) ?? q.OrderByDefault())
+            .ToRowListAsync(Row, ExportRules.RowLimit + 1, cancellationToken);
+        if (rows.Count > ExportRules.RowLimit)
+        {
+            return ExportRules.TooMany();
+        }
+
+        var mapped = await Hooks.MapRows(await PopulateAsync(rows, cancellationToken), cancellationToken);
+        return Result.Ok(new ExportRows<{{entity}}Row>(mapped, fields, headers));
+    }
 {{/if}}
 {{#each relationLoaders}}
 

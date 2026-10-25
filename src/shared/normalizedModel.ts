@@ -62,6 +62,8 @@ export type RelationType = 'oneToOne' | 'oneToMany' | 'manyToOne' | 'manyToMany'
 /** Normal (mobile) API endpoints a model exposes (contract §2.1, G3). */
 export type NormalOperation = 'list' | 'getOne' | 'create' | 'update' | 'delete';
 export const NORMAL_OPERATIONS: readonly NormalOperation[] = ['list', 'getOne', 'create', 'update', 'delete'];
+/** Admin-only operation (PY12, api-contract §2 "Export"): CSV of the filtered list. Opt-in, never part of "all". */
+export type AdminOperation = NormalOperation | 'export';
 export const NORMAL_WRITE_OPERATIONS: readonly NormalOperation[] = ['create', 'update', 'delete'];
 
 /**
@@ -203,14 +205,22 @@ export interface NormalizedApi {
   requiresAuth?: boolean;
   /** Admin API (`*.routes.admin.ts` / `*.service.admin.ts`). */
   admin?: boolean;
-  /** Admin API operations. Absent → every operation; `list` is always on (the admin screen is a list). */
-  adminOperations?: NormalOperation[];
+  /**
+   * Admin API operations. Absent → every CRUD operation; `list` is always on (the admin screen is a list). `export`
+   * (CSV, PY12) only when listed.
+   */
+  adminOperations?: AdminOperation[];
 }
 
 /** Admin operations a model exposes (`api.adminOperations`, `list` forced); every BE generator and the admin config read this. */
 export function resolveAdminOperations(api: NormalizedApi | undefined): NormalOperation[] {
   const requested = api?.adminOperations;
   return NORMAL_OPERATIONS.filter(op => op === 'list' || requested === undefined || requested.includes(op));
+}
+
+/** `POST {endpoint}/export` is generated (api-contract §2 "Export"): only when `api.adminOperations` lists it. */
+export function adminExportEnabled(api: NormalizedApi | undefined): boolean {
+  return api?.adminOperations?.includes('export') ?? false;
 }
 
 export interface NormalizedModel {

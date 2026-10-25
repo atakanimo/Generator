@@ -6,6 +6,7 @@ import {
   type NormalizedFilter,
   type NormalizedModel,
   type NormalizedReference,
+  type AdminOperation,
   type NormalizedUi,
   type NormalOperation
 } from '@shared/normalizedModel';
@@ -35,8 +36,8 @@ export interface ModelApiSettings {
   ownership?: 'field' | 'self';
   requiresAuth?: boolean;
   admin?: boolean;
-  /** Admin API operations; absent → all (`list` always on). */
-  adminOperations?: NormalOperation[];
+  /** Admin API operations; absent → all CRUD (`list` always on); `export` only when listed. */
+  adminOperations?: AdminOperation[];
 }
 
 export function modelApiSettings(model: NormalizedModel): ModelApiSettings {

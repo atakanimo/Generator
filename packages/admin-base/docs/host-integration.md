@@ -38,8 +38,9 @@ import { resources } from '@/modules/resources.generated';
 3. `config.skipSuccessToast` → başarı toast'u yok.
 4. `axios.isCancel(error)` → toast yok.
 5. Token ve 401 host'un işi. Bayraklar header değil axios config alanıdır.
+6. `responseType: 'blob'` (export): başarıda axios yanıtını (`data` Blob, `headers['content-disposition']`) ya da çıplak Blob'u döner; hatada Blob'daki JSON zarfı `LocalResponse`'a çevirip reject eder. Çıplak Blob'da dosya adı `<name>.csv` olur. BE farklı origin'deyse `Access-Control-Expose-Headers: Content-Disposition` gerekir.
 
-Paketin koyduğu bayraklar: list / getOne `skipSuccessToast`; autocomplete `skipSuccessToast` + `skipLoading`; yazma ve aksiyonlar bayraksız.
+Paketin koyduğu bayraklar: list / getOne `skipSuccessToast`; autocomplete `skipSuccessToast` + `skipLoading`; export `skipSuccessToast` + `responseType: 'blob'`; yazma ve aksiyonlar bayraksız.
 
 ## 4. Route + menü
 

@@ -142,6 +142,10 @@ Hook seti üç stack'te aynı (snake_case): `default_sort`, `before_list`, `befo
 
 Diğer kurallar: gövdeler strict (`extra="forbid"`: bilinmeyen alan, `readonly` / `hiddenFromCreate` / `hiddenFromUpdate` alanı 400), liste `POST get-all` (`page ≥ 1`, `limit` varsayılan 50 / en çok 100, `sortBy` beyaz liste dışı 400, filtresi olmayan alan 400), varsayılan sıralama `createdAt desc, _id desc`, `hidden` alan satırda / filtrede / sıralamada / populate'te yok ve okumalarda projection ile hiç okunmaz, `adminOnly` admin gövdesinde yazılabilir. Zorunlu = `required && !nullable`; create'te varsayılanı olan ya da opsiyonel alan `null` kabul eder, varsayılanı `map_create` yazar. Opsiyonel unique alan boşsa dokümana yazılmaz (sparse index). Gövdeler Pydantic lax modunda (`"1"` → `1`).
 
+## Export (CSV, PY12)
+
+`api.adminOperations` `export` içeriyorsa (opt-in) admin router'a `POST …/export` gelir (api-contract §2 "Export"). Gövde `ExportBody[<E>Filters]` (strict; `filters`, `sortBy`, `sortOrder`, `fields`, `headers`), satırlar `CrudService.export_csv`: liste sorgusunun aynısı (filtre, `scope`, `before_list`, sıra, populate, `map_rows`), sayfasız, 50.000 üstü 400. Kolonlar `export_fields` (`id`, `hidden` olmayan alanlar sırayla, `createdAt`, `updatedAt`), ilişki kolonları `export_display` (populate edilen ilişkinin `reference.display`'i); ikisi de `service_generated.py`'de. Biçim asset `core/crud/export.py` (`cell_text`, `render_csv`, `export_filename`); dosya adı `kebabCase(entityName)-<YYYY-MM-DD>.csv`. Core asset'ler create-once: var olan host'a `export.py` gelir, `service.py` / `messages.py` / `__init__.py` değişikliği elle taşınır. Modül testi `test_export_csv`.
+
 ## Update ve `null` (JSON Merge Patch)
 
 api-contract §5: gönderilmeyen alan değişmez; opsiyonel tekil alana `null` alanı siler (`$unset`; satırda `null`); zorunlu alana ve diziye `null` 400 (`NotNull[T]`, `core/crud/patch.py`); dizi `[]` ile boşalır. Kural tek yerde: `updateNullClears` (`src/shared/normalizedModel.ts`); üç stack ve admin-base 0.1.8 aynı.

@@ -3,7 +3,7 @@
  * Pure: no file system. The admin FE is config only; the package renders pages, tables and forms.
  */
 import type { FieldConstraints, NormalizedField, NormalizedModel, NormalizedObjectSubField } from '../../shared/normalizedModel.js';
-import { resolveAdminOperations } from '../../shared/normalizedModel.js';
+import { adminExportEnabled, resolveAdminOperations } from '../../shared/normalizedModel.js';
 import { constraintsForField, isNumericEnum } from '../../shared/fieldConstraints.js';
 import { moduleNameFromEntity } from '../utils/namingUtils.js';
 
@@ -14,7 +14,7 @@ export interface AdminDynamicDefault {
   dynamic: 'now' | 'uuid' | 'currentUserId';
 }
 export type AdminFilterType = 'eq' | 'regex' | 'range' | 'date-range' | 'boolean' | 'enum' | 'relation';
-export type AdminOperation = 'create' | 'update' | 'delete';
+export type AdminOperation = 'create' | 'update' | 'delete' | 'export';
 
 export interface AdminFieldConfig {
   name: string;
@@ -265,9 +265,11 @@ export function toAdminResourceConfig(input: AdminResourceInput): { config: Admi
   };
   // Model's admin operations (`api.adminOperations`) narrowed by the Generator UI table features.
   const open = resolveAdminOperations(model.api);
-  const operations = (['create', 'update', 'delete'] as const).filter(
+  const operations: AdminOperation[] = (['create', 'update', 'delete'] as const).filter(
     op => open.includes(op) && (op === 'delete' ? features?.deletable !== false : features?.updatable !== false)
   );
-  if (operations.length < 3) config.operations = operations;
+  // Export is opt-in (admin-base: only when listed), so the list is written out whenever it is on.
+  if (adminExportEnabled(model.api)) config.operations = [...operations, 'export'];
+  else if (operations.length < 3) config.operations = operations;
   return { config, skipped };
 }

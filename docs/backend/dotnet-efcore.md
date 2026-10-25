@@ -138,6 +138,10 @@ Veritabanında saklama sağlayıcıya göre:
 
 Diğer kurallar: strict body (`UnmappedMemberHandling.Disallow`; `id` / `_id` → 400), liste `POST get-all` (`limit` 100'e kırpılır, `page < 1` → 400, `sortBy` beyaz liste dışı → 400), varsayılan sıralama `createdAt desc, id desc`, tarih çıkışı `…​.fffZ`, `hidden` alan Row'da / populate'te / filtrede / sıralamada yok, `adminOnly` yalnızca admin body'de, doldurulmamış opsiyonel alan `null`. Kısmi update JSON Merge Patch'tir (api-contract §5): gönderilmeyen alan değişmez, opsiyonel alana `null` `NULL` yazar, zorunlu alana / listeye `null` 400; update gövdesi `PatchBody`'den türer, `Has(nameof(X))` alanın gönderildiğini söyler.
 
+## Export (CSV, PY12)
+
+`api.adminOperations` `export` içeriyorsa (opt-in) admin endpoint'lerine `POST …/export` gelir (api-contract §2 "Export"). `I<E>AdminService.ExportAsync(ExportBody<<E>Filters>)` (G servis; `CrudServiceBase` değişmez): `ExportRules.ResolveColumns` (bilinmeyen kolon / başlık sayısı / `sortBy` → 400) → liste sorgusunun aynısı (`Scope`, `BeforeList`, filtre, sıra) → `ToRowListAsync(Row, RowLimit + 1)` (50.000 üstü 400) → `PopulateAsync` + `MapRows`. Kolonlar ve ilişki display alanları `<E>Export.Fields` / `<E>Export.Display` (`I<E>Service.cs`). Asset'ler: `Application/Common/Export/` (`ExportBody`, `ExportRows`, `ExportRules`; `ExportQuery` ilişkiselde `Select(row).Take(n)`, MongoDB sağlayıcı katmanında entity okuyup satırı bellekte kurar), `Api/Common/CsvExportResult.cs` (`ToCsv`: hata zarf; satırlar JSON ayarlarıyla wire'a çevrilip hücre kuralları `JsonElement` üzerinden, BOM'lu RFC 4180, `Content-Disposition` elle). Dosya adı `kebabCase(entityName)-<YYYY-MM-DD>.csv`.
+
 ## Model kaynağı ve parser
 
 Bir modülün modeli = entity dosyası + manifest satırı (`mergeModel`): tip, `required`, `isArray`, `unique`, `trim`, enum, default, alt alanlar ve reference hedefi dosyadan; filtre, erişim, UI ve API manifest'ten. Model editörü (`writeDotnetModel`) taslağı önce manifest satırı olarak yazar, sonra generate eder.

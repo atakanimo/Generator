@@ -11,6 +11,18 @@ import { {{camelEntityName}}AdminCrud } from './{{moduleName}}.crud';
 import type { CrudFindListOptions } from '@core/services/base-crud.service';
 import type { IApiResponse } from '@core/types/api-contract';
 import { mapListRows, mapOneRow, runAfterWrite } from '@core/services/service-hooks';
+{{#if adminOps.export}}
+import type { HookRow } from '@core/services/service-hooks';
+import { SuccessResponse } from '@core/response/response.helper';
+import {
+  EXPORT_ROW_LIMIT,
+  exportTooMany,
+  renderCsv,
+  resolveExportColumns,
+  type ExportColumns,
+  type ExportRequest
+} from '@core/services/export-csv';
+{{/if}}
 import { {{camelEntityName}}AdminHooks as hooks } from './{{moduleName}}.hooks';
 
 // <custom-imports>
@@ -36,6 +48,34 @@ export async function getAll(filters?: {{entityName}}ListBody) {
   return mapListRows(result, hooks.mapRows?.bind(hooks));
 }
 
+{{#if adminOps.export}}
+/** Export columns (api-contract §2 "Export"): row fields in order; populated references show their `display`. */
+const exportColumns: ExportColumns = {
+  fields: [{{{exportFieldsLiteral}}}],
+  display: {{#if exportDisplay.length}}{ {{#each exportDisplay}}{{name}}: '{{display}}'{{#unless @last}}, {{/unless}}{{/each}} }{{else}}{}{{/if}}
+};
+
+/** The list query without paging (filters, `beforeList`, sort, populate, `mapRows`); CSV text or the 400 response. */
+export async function exportCsv(
+  body?: ExportRequest & { filters?: Get{{entityName}}Filters; sortBy?: string; sortOrder?: 'asc' | 'desc' }
+): Promise<IApiResponse<string>> {
+  const columns = resolveExportColumns(body ?? {}, exportColumns);
+  if ('isSuccess' in columns) return columns;
+  const listFilters = body?.filters ?? ({} as Get{{entityName}}Filters);
+  const filtersQuery = build{{entityName}}FilterQuery(
+    hooks.beforeList ? await hooks.beforeList(listFilters) : listFilters
+  ) as FilterQuery<I{{entityName}}Model>;
+  const found = await crud.find(filtersQuery, {
+    sort: resolveListSort(body?.sortBy, body?.sortOrder, hooks.defaultSort ?? { createdAt: -1, _id: -1 }){{beServicePopulateOptionLine fields}},
+    limit: EXPORT_ROW_LIMIT + 1
+  });
+  if (!found.isSuccess || found.data == null) return found as unknown as IApiResponse<string>;
+  if (found.data.length > EXPORT_ROW_LIMIT) return exportTooMany();
+  const rows = hooks.mapRows ? await hooks.mapRows(found.data as HookRow[]) : found.data;
+  return SuccessResponse(renderCsv(rows, columns.fields, columns.headers, exportColumns.display));
+}
+
+{{/if}}
 export async function getById(id: string) {
   const blocked = await hooks.beforeGetById?.(id);
   if (blocked) return blocked;
