@@ -183,7 +183,9 @@ const SchemaDesignPage = () => {
 
   // Per-model API settings (P5): auth and admin come from the model, not from workspace prefs.
   const apiSettings = modelApiSettings(selectedModelSchema);
-  const modelApi = resolveModelApi(apiSettings, selectedModelSchema.fields);
+  // Python generates only the admin API: on unless the model turned it off (the Python generator's own default).
+  const defaultAdmin = sourceType === 'python-fastapi';
+  const modelApi = resolveModelApi(apiSettings, selectedModelSchema.fields, defaultAdmin);
   const isProtectedRoute = modelApi.requiresAuth;
   const isAdminUser = modelApi.admin;
   /** Schema as stored / generated: the API set exactly as the generator will apply it. */
@@ -231,6 +233,14 @@ const SchemaDesignPage = () => {
 
   const handleAdminOnlyChange = (fieldIndex: number, adminOnly: boolean) => {
     dispatch(updateFieldConfig({ fieldIndex, updates: { access: { adminOnly: adminOnly || undefined } } }));
+  };
+
+  const handleComputedChange = (fieldIndex: number, computed: boolean) => {
+    dispatch(updateFieldConfig({ fieldIndex, updates: { access: { computed: computed || undefined } } }));
+  };
+
+  const handleDetailOnlyChange = (fieldIndex: number, detailOnly: boolean) => {
+    dispatch(updateFieldConfig({ fieldIndex, updates: { access: { detailOnly: detailOnly || undefined } } }));
   };
 
   // HiddenFromCreate / HiddenFromUpdate controls removed (Task 51)
@@ -581,6 +591,7 @@ const SchemaDesignPage = () => {
             api={apiSettings}
             fields={selectedModelSchema.fields}
             source={selectedModelApiSource}
+            defaultAdmin={defaultAdmin}
             onChange={patch => dispatch(updateModelApi(patch))}
           />
         </Box>
@@ -607,7 +618,14 @@ const SchemaDesignPage = () => {
             değildir; komut generate sonrası gösterilir.
           </Alert>
         )}
-        {(generationMode === 'backend' || generationMode === 'fullstack') && sourceType !== 'dotnet-ef' && (
+        {(generationMode === 'backend' || generationMode === 'fullstack') && sourceType === 'python-fastapi' && (
+          <Alert severity='info' sx={{ mt: 2 }}>
+            Python: modülün G dosyaları (<code>*_generated.py</code>) ve <code>api/routers_generated.py</code> /{' '}
+            <code>indexes_generated.py</code> her seferinde yeniden yazılır; <code>model.py</code>, <code>repository.py</code>,{' '}
+            <code>hooks.py</code>, <code>service.py</code> bir kez oluşturulur. Model kaynağı manifest'tir.
+          </Alert>
+        )}
+        {(generationMode === 'backend' || generationMode === 'fullstack') && sourceType !== 'dotnet-ef' && sourceType !== 'python-fastapi' && (
           <Box sx={{ mt: 2 }}>
             <FormControlLabel
               control={
@@ -888,6 +906,12 @@ const SchemaDesignPage = () => {
                 <TableCell align='center' title='Normal (mobil) API create / update gövdesine girmez; admin yazar'>
                   <strong>Admin only</strong>
                 </TableCell>
+                <TableCell align='center' title='Okurken hesaplanır (ör. canlı fiyat): saklanmaz, gövdede yok, filtre / sıralama yok; map_rows hook doldurur'>
+                  <strong>Computed</strong>
+                </TableCell>
+                <TableCell align='center' title='Ağır gövde (ör. analiz blobu): liste sayfasında okunmaz (null), detayda (getOne) döner'>
+                  <strong>Detail only</strong>
+                </TableCell>
                 <TableCell>
                   <strong>Required</strong>
                 </TableCell>
@@ -1007,6 +1031,24 @@ const SchemaDesignPage = () => {
                       </Typography>
                     ) : (
                       <Switch checked={field.access?.adminOnly === true} onChange={e => handleAdminOnlyChange(index, e.target.checked)} color='warning' />
+                    )}
+                  </TableCell>
+                  <TableCell align='center'>
+                    {isSystemField(field.name) ? (
+                      <Typography variant='body2' color='text.secondary'>
+                        -
+                      </Typography>
+                    ) : (
+                      <Switch checked={field.access?.computed === true} onChange={e => handleComputedChange(index, e.target.checked)} color='info' />
+                    )}
+                  </TableCell>
+                  <TableCell align='center'>
+                    {isSystemField(field.name) ? (
+                      <Typography variant='body2' color='text.secondary'>
+                        -
+                      </Typography>
+                    ) : (
+                      <Switch checked={field.access?.detailOnly === true} onChange={e => handleDetailOnlyChange(index, e.target.checked)} color='info' />
                     )}
                   </TableCell>
                   <TableCell>

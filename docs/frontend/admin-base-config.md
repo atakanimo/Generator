@@ -35,6 +35,9 @@ Host `createAdminRoutes(resources)`'u route + menü dizisine bir kez ekler. Yeni
 - Resource etiketi entity adından (`SymbolTypes` → `Symbol Types`).
 - `operations`: Enable Update / Delete'ten; ikisi de açıksa yazılmaz.
 - Admin alanı olmayan kind'lar (`unknown`) yorum + uyarıyla atlanır.
+- Alt objesi olmayan (opak) obje → `json`. İkinci seviye obje / map alt alanı → `json` alt alan (admin tek iç içe seviye çizer). Alt alan ilişkisinde `reference.display` varsa `display` yazılır.
+- Uzantı dosyası (ilk oluşturulurken) admin API'de getOne ya da `detailOnly` alan varsa `extendResource(…, { detail: true })` yazar; host'taki admin-base 0.1.6'dan eskiyse yazmaz.
+- Python host'ta endpoint `modules/<m>/admin_router_generated.py` prefix'i + `core/config.py` `API_PREFIX`'ten okunur; headless üretim `node scripts/python-host.mjs admin-config <host> <adminFe> <Entity,…>`.
 
 ## Endpoint
 

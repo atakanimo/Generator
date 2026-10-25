@@ -3,13 +3,19 @@
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
+import { DOTNET_DATABASE_PACKAGES, type BackendDatabase, type BackendIdType } from '../../../shared/backendDatabase.js';
 
 export interface DotnetHost {
   root: string;
   app: string;
   solutionFile: string;
-  /** Npgsql / EF Core packages found (Directory.Packages.props or a project file). */
-  efCorePostgres: boolean;
+  /**
+   * Database whose EF Core provider package is referenced (Directory.Packages.props or the Infrastructure project);
+   * undefined when none or more than one provider package is found.
+   */
+  database?: BackendDatabase;
+  /** `<Using Include="…" Alias="EntityId" />` in Directory.Build.props (`System.Guid` → uuid-v7, ObjectId → objectid). */
+  idType?: BackendIdType;
 }
 
 export interface DotnetEntityFile {
@@ -47,7 +53,32 @@ export function findDotnetHost(root: string): DotnetHost | null {
     readIfExists(join(root, 'Directory.Packages.props')),
     readIfExists(join(root, 'src', `${app}.Infrastructure`, `${app}.Infrastructure.csproj`))
   ].join('\n');
-  return { root, app, solutionFile, efCorePostgres: /Npgsql\.EntityFrameworkCore\.PostgreSQL/.test(packages) };
+  return {
+    root,
+    app,
+    solutionFile,
+    database: detectDatabase(packages),
+    idType: detectIdType(readIfExists(join(root, 'Directory.Build.props')))
+  };
+}
+
+const XML_COMMENT = /<!--[\s\S]*?-->/g;
+
+/** `PackageReference` / `PackageVersion` names (comments ignored, either quote); one provider or undefined. */
+function detectDatabase(xml: string): BackendDatabase | undefined {
+  const names = new Set(
+    [...xml.replace(XML_COMMENT, '').matchAll(/<Package(?:Reference|Version)\b[^>]*\bInclude\s*=\s*["']([^"']+)["']/g)].map((m) => m[1].trim())
+  );
+  const found = (Object.keys(DOTNET_DATABASE_PACKAGES) as BackendDatabase[]).filter((db) => names.has(DOTNET_DATABASE_PACKAGES[db]!));
+  return found.length === 1 ? found[0] : undefined;
+}
+
+function detectIdType(props: string): BackendIdType | undefined {
+  const using = /<Using\b[^>]*\bInclude\s*=\s*["']([^"']+)["'][^>]*\bAlias\s*=\s*["']EntityId["']/.exec(props.replace(XML_COMMENT, ''));
+  if (!using) return undefined;
+  if (using[1] === 'System.Guid') return 'uuid-v7';
+  if (using[1] === 'MongoDB.Bson.ObjectId') return 'objectid';
+  return undefined;
 }
 
 /** `src/<App>.Domain/<Folder>/<Entity>.cs` (not `*.Custom.cs`, not `Common/`). */

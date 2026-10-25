@@ -26,6 +26,8 @@ public abstract class CrudServiceBase<TEntity, TRow, TCreate, TUpdate, TFilters>
     protected abstract Expression<Func<TEntity, TRow>> Row { get; }
     /// <summary>Create / update cevabının projeksiyonu. Varsayılan <see cref="Row"/>; populate edilen ilişkilerde id'ye iner.</summary>
     protected virtual Expression<Func<TEntity, TRow>> WriteRow => Row;
+    /// <summary>Liste sayfasının projeksiyonu. Varsayılan <see cref="Row"/>; <c>detailOnly</c> kolonları <c>null</c> olan modülde ayrı.</summary>
+    protected virtual Expression<Func<TEntity, TRow>> ListRow => Row;
     protected abstract SortMap<TEntity> Sort { get; }
     protected abstract IQueryable<TEntity> ApplyFilters(IQueryable<TEntity> query, TFilters? filters);
     protected abstract TEntity MapCreate(TCreate body);
@@ -46,6 +48,18 @@ public abstract class CrudServiceBase<TEntity, TRow, TCreate, TUpdate, TFilters>
     protected virtual Task<Error?> ApplyUpdateRelationsAsync(TEntity entity, TUpdate body, CancellationToken cancellationToken) =>
         Task.FromResult<Error?>(null);
 
+    /// <summary>Silinecek kayıda başka kayıtlar reference veriyor mu (FK'sız veritabanı; varsa 409). Varsayılan: kontrol yok.</summary>
+    protected virtual Task<Error?> CheckInUseAsync(TEntity entity, CancellationToken cancellationToken) =>
+        Task.FromResult<Error?>(null);
+
+    /// <summary>Silinecek kayda işaret eden id listelerinden kaydı çıkarır (FK'sız veritabanı; aynı kayıtta yazılır). Varsayılan: yok.</summary>
+    protected virtual Task DetachReferencesAsync(TEntity entity, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+
+    /// <summary>List / getOne satırlarının populate edilen reference'ları okumadan sonra (join'siz veritabanı). Varsayılan: satırlar aynen.</summary>
+    protected virtual Task<IReadOnlyList<TRow>> PopulateAsync(IReadOnlyList<TRow> rows, CancellationToken cancellationToken) =>
+        Task.FromResult(rows);
+
     /// <summary>Update / delete için yüklenen entity (çoka çok koleksiyonlar <c>Include</c> edilir).</summary>
     protected virtual IQueryable<TEntity> ForUpdate(IQueryable<TEntity> query) => query;
 
@@ -56,22 +70,22 @@ public abstract class CrudServiceBase<TEntity, TRow, TCreate, TUpdate, TFilters>
     {
         var query = ApplyFilters(hooks.BeforeList(Scope(Set.AsNoTracking()), body), body.Filters)
             .ApplySort(body.SortBy, body.SortOrder, Sort, q => hooks.DefaultSort(q) ?? q.OrderByDefault());
-        var page = await query.Select(Row).ToPaginatedListAsync(body.Page, body.Limit, cancellationToken);
-        return Result.Ok(page with { Items = await hooks.MapRows(page.Items, cancellationToken) });
+        var page = await query.ToRowPageAsync(ListRow, body.Page, body.Limit, cancellationToken);
+        var rows = await PopulateAsync(page.Items, cancellationToken);
+        return Result.Ok(page with { Items = await hooks.MapRows(rows, cancellationToken) });
     }
 
-    public virtual async Task<Result<TRow>> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    public virtual async Task<Result<TRow>> GetByIdAsync(EntityId id, CancellationToken cancellationToken)
     {
         var row = await hooks.BeforeGetById(Scope(Set.AsNoTracking()))
             .Where(x => x.Id == id)
-            .Select(Row)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstRowOrDefaultAsync(Row, cancellationToken);
         if (row is null)
         {
             return Error.NotFound();
         }
 
-        var mapped = await hooks.MapRows([row], cancellationToken);
+        var mapped = await hooks.MapRows(await PopulateAsync([row], cancellationToken), cancellationToken);
         return Result.Ok(mapped[0]);
     }
 
@@ -95,7 +109,7 @@ public abstract class CrudServiceBase<TEntity, TRow, TCreate, TUpdate, TFilters>
         return Result.Ok(await ReadRowAsync(entity.Id, cancellationToken), Messages.Created);
     }
 
-    public virtual async Task<Result<TRow>> UpdateAsync(Guid id, TUpdate body, CancellationToken cancellationToken)
+    public virtual async Task<Result<TRow>> UpdateAsync(EntityId id, TUpdate body, CancellationToken cancellationToken)
     {
         var entity = await ForUpdate(Scope(Set)).FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (entity is null)
@@ -120,7 +134,7 @@ public abstract class CrudServiceBase<TEntity, TRow, TCreate, TUpdate, TFilters>
         return Result.Ok(await ReadRowAsync(entity.Id, cancellationToken), Messages.Updated);
     }
 
-    public virtual async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
+    public virtual async Task<Result> DeleteAsync(EntityId id, CancellationToken cancellationToken)
     {
         var entity = await ForUpdate(Scope(Set)).FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (entity is null)
@@ -128,11 +142,12 @@ public abstract class CrudServiceBase<TEntity, TRow, TCreate, TUpdate, TFilters>
             return Result.Fail(Error.NotFound());
         }
 
-        if (await hooks.BeforeDelete(entity, cancellationToken) is { } error)
+        if ((await CheckInUseAsync(entity, cancellationToken) ?? await hooks.BeforeDelete(entity, cancellationToken)) is { } error)
         {
             return Result.Fail(error);
         }
 
+        await DetachReferencesAsync(entity, cancellationToken);
         Set.Remove(entity);
         await db.SaveChangesAsync(cancellationToken);
         await hooks.AfterDelete(entity, cancellationToken);
@@ -140,12 +155,12 @@ public abstract class CrudServiceBase<TEntity, TRow, TCreate, TUpdate, TFilters>
     }
 
     /// <summary>Kaydedilen satır <see cref="WriteRow"/> ile yeniden okunur.</summary>
-    protected Task<TRow> ReadRowAsync(Guid id, CancellationToken cancellationToken) =>
-        Set.AsNoTracking().Where(x => x.Id == id).Select(WriteRow).FirstAsync(cancellationToken);
+    protected Task<TRow> ReadRowAsync(EntityId id, CancellationToken cancellationToken) =>
+        Set.AsNoTracking().Where(x => x.Id == id).FirstRowAsync(WriteRow, cancellationToken);
 
     /// <summary>Unique kontrol yardımcısı: aynı değerde başka kayıt var mı.</summary>
     protected async Task<Error?> ConflictIfExistsAsync(
-        Expression<Func<TEntity, bool>> sameValue, Guid ownId, string field, CancellationToken cancellationToken) =>
+        Expression<Func<TEntity, bool>> sameValue, EntityId ownId, string field, CancellationToken cancellationToken) =>
         await Set.Where(sameValue).AnyAsync(x => x.Id != ownId, cancellationToken)
             ? Error.Conflict(string.Format(Messages.Duplicate, field))
             : null;

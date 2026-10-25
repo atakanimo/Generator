@@ -91,7 +91,7 @@ function applyPlanned(mod, model) {
 }
 
 /** Core assets the P4 templates need (`CrudAuthScope`, hidden fields) — §5 #1 merges them into Varlik360 by hand. */
-const CORE_OVERLAY = ['services/base-crud.service.ts', 'services/crud-projection.ts', 'services/crud-scope.ts'];
+const CORE_OVERLAY = ['services/base-crud.service.ts', 'services/crud-projection.ts', 'services/crud-scope.ts', 'services/merge-patch.ts'];
 
 /** `selectedFiles` key → file suffix under `src/modules/<module>/<module>.<suffix>.ts`. */
 const ARTIFACTS = {

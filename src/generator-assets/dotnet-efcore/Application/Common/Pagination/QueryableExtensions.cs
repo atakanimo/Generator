@@ -9,7 +9,7 @@ public sealed class SortMap<TEntity> where TEntity : IEntity
 {
     private readonly Dictionary<string, LambdaExpression> _map = new(StringComparer.Ordinal)
     {
-        ["id"] = (Expression<Func<TEntity, Guid>>)(x => x.Id),
+        ["id"] = (Expression<Func<TEntity, EntityId>>)(x => x.Id),
     };
 
     public SortMap<TEntity> Add<TKey>(string name, Expression<Func<TEntity, TKey>> selector)

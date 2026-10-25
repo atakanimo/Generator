@@ -39,6 +39,10 @@ interface IApiResponse<T> {
 | toplu aksiyon | `POST {endpoint}/actions/:actionId` | `{ ids?, ...input }` | serbest |
 | autocomplete | hedefin `get-all`'u | `{ filters: { [display]: "…" }, limit: 20 }` | `PaginatedList<Row>` |
 
+### Admin API
+
+- Varsayılan tam CRUD. `api.adminOperations` verilirse yalnız o işlemler açılır; `list` her zaman açık (admin ekranı listedir). Kapalı işlemin ucu yoktur (404 / 405); admin config `operations` (create / update / delete) aynı listeden üretilir. Kural tek yerde: `resolveAdminOperations` (`src/shared/normalizedModel.ts`); üç stack aynı.
+
 ### Normal (mobil) API
 
 - Model başına yalnızca seçilen işlemler açılır (`api.normalOperations`). Tam CRUD varsayılan değildir.
@@ -104,6 +108,14 @@ type PaginatedList<T> = { items: T[]; total: number; hasMore: boolean; currentPa
 - `reference` alanlar yalnızca id alır, populate edilmiş obje almaz.
 - Ownership alanı (`userId` benzeri): normal API auth'tan alır, body ve filtreden atar; admin API body ve filtrede kabul eder.
 - `adminOnly` alanlar normal create / update şemasında yoktur; admin şemasında vardır.
+- `detailOnly` alanlar (ör. rapor analizi) liste sayfasında okunmaz: liste satırında `null`, getOne'da değer. Admin config: tabloda kolon yok (detay gösterir).
+- `computed` alanlar (ör. canlı fiyat) saklanmaz: hiçbir gövdede yok, filtre ve `sortBy` reddeder (400), satırda opsiyonel ve hook doldurur. Admin config: `readonly`, `sortable: false`, filtre yok.
+- **Update'te `null` kuralı (JSON Merge Patch, RFC 7386; karar 2026-10-23, üç stack + admin-base 0.1.8):**
+  - Gövdede olmayan alan değişmez.
+  - Opsiyonel (`required` değil) ya da `nullable` tekil alana `null` alanı temizler: Mongo'da `$unset` (satırda alan yok, istemci `null` okur), SQL'de `NULL`. Tekil `reference` ve tekil obje de bu kurala uyar (obje bütün olarak yazılır, alt alanlar birleştirilmez).
+  - Zorunlu alana (`required && !nullable`) `null` → 400.
+  - Dizi (`reference[]`, obje dizisi dahil) `null` almaz (400); `[]` ile boşalır.
+  - Kural tek yerde: `updateNullClears` (`src/shared/normalizedModel.ts`). Express: update zod şemasında `.nullable()` + `toMergePatch` (`$set` / `$unset`). Python: `NotNull[T]` (zorunlu / dizi) + `exclude_unset` + repository `$unset`. .NET: update gövdesi `PatchBody` (gönderilen özellik `Has(nameof(X))`), `MapUpdate` gönderilen opsiyonel alanı `null` dahil yazar, zorunlu / dizi için `NotNull` kuralı.
 
 ## 6. Aksiyonlar
 

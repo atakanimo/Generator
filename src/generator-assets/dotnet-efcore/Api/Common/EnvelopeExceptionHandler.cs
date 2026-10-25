@@ -1,13 +1,11 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Diagnostics;
-using Microsoft.EntityFrameworkCore;
-using Npgsql;
 using __App__.Application.Common.Errors;
 
 namespace __App__.Api.Common;
 
 /// <summary>Yakalanmamış hata → zarf. Okunamayan / strict olmayan gövde 400, kısıt ihlali 409, gerisi 500. ProblemDetails yok.</summary>
-public sealed class EnvelopeExceptionHandler(ILogger<EnvelopeExceptionHandler> logger) : IExceptionHandler
+public sealed class EnvelopeExceptionHandler(ILogger<EnvelopeExceptionHandler> logger, IDbErrorClassifier dbErrors) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
@@ -19,11 +17,11 @@ public sealed class EnvelopeExceptionHandler(ILogger<EnvelopeExceptionHandler> l
             return true;
         }
 
-        // Servis kontrollerinden kaçan yarış durumları: unique (23505) ve FK (23503) ihlali → 409.
-        if (exception is DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation } pg })
+        // Servis kontrollerinden kaçan yarış durumları: unique ve kullanılan kayıt ihlali → 409.
+        if (dbErrors.Classify(exception) is { } conflict)
         {
             logger.LogInformation(exception, "Constraint violation");
-            var message = pg.SqlState == PostgresErrorCodes.UniqueViolation ? string.Format(Messages.Duplicate, pg.ConstraintName) : Messages.InUse;
+            var message = conflict.Kind == DbConflictKind.Duplicate ? string.Format(Messages.Duplicate, conflict.Field) : Messages.InUse;
             await httpContext.WriteEnvelopeAsync(Error.Conflict(message));
             return true;
         }

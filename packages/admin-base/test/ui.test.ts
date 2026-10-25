@@ -86,6 +86,37 @@ describe('form değerleri', () => {
     const body = formValuesToBody(fields, { price: ' 12,5 ', sortOrder: '3', note: '', limits: { watchList: '100' } }, 'create');
     expect(body).toEqual({ price: '12.5', sortOrder: 3, limits: { watchList: 100 } });
   });
+
+  it('edit: boşaltılan opsiyonel alan null gider, zorunlu alan gitmez, dizi [] ile boşalır (sözleşme §5)', () => {
+    const fields: readonly FieldConfig[] = [
+      { name: 'name', kind: 'string', required: true },
+      { name: 'note', kind: 'string' },
+      { name: 'sortOrder', kind: 'number' },
+      { name: 'tags', kind: 'string', isArray: true },
+      { name: 'limits', kind: 'object', fields: [{ name: 'label', kind: 'string' }] },
+      { name: 'password', kind: 'string', writeOnly: true }
+    ];
+    const values = { name: '', note: '', sortOrder: '', tags: [], limits: { label: '' }, password: '' };
+    expect(formValuesToBody(fields, values, 'edit')).toEqual({ note: null, sortOrder: null, tags: [], limits: {} });
+    expect(formValuesToBody(fields, values, 'create')).toEqual({ tags: [], limits: {} });
+  });
+});
+
+describe('modellenmemiş alt alanlar', () => {
+  // Markets `universe.symbolFilters` gibi: config alt objenin bir kısmını bilir, kaydetmek gerisini silmemeli.
+  const fields = [
+    { name: 'name', kind: 'string' },
+    { name: 'universe', kind: 'object', fields: [{ name: 'scanLimit', kind: 'number' }] }
+  ] as const;
+
+  it('edit gövdesi bilinmeyen alt anahtarları aynen geri gönderir, üst seviye strict kalır', () => {
+    const row = { id: 'm1', createdAt: '2026-10-25T00:00:00.000Z', name: 'DE', universe: { scanLimit: 1500, symbolFilters: { minPrice: 1 } } };
+    const values = initialFormValues(fields, 'edit', row);
+    expect(formValuesToBody(fields, { ...values, universe: { ...(values.universe as object), scanLimit: 2000 } }, 'edit')).toEqual({
+      name: 'DE',
+      universe: { scanLimit: 2000, symbolFilters: { minPrice: 1 } }
+    });
+  });
 });
 
 describe('validateField', () => {

@@ -6,8 +6,8 @@
  */
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import { findAdminMountPath } from '../utils/backendAppFile.js';
-import { join } from 'path';
-import type { NormalizedModel } from '../../shared/normalizedModel.js';
+import { dirname, join, resolve } from 'path';
+import { resolveAdminOperations, type NormalizedModel } from '../../shared/normalizedModel.js';
 import { safeWriteFile } from '../utils/fileUtils.js';
 import { log } from '../utils/logger.js';
 import { moduleNameFromEntity } from '../utils/namingUtils.js';
@@ -73,6 +73,7 @@ const FIELD_KEY_ORDER: Array<keyof AdminFieldConfig> = [
   'hideOnUpdate',
   'writeOnly',
   'list',
+  'sortable',
   'filter',
   'default',
   'component',
@@ -112,14 +113,15 @@ export function renderAdminConfigFile(config: AdminResourceConfig, exportName: s
   return `${lines.join('\n')}\n`;
 }
 
-function renderExtensionFile(camel: string, moduleName: string): string {
+/** `detail`: the model's admin API has getOne (or `detailOnly` fields), so rows get the read-only detail drawer. */
+function renderExtensionFile(camel: string, moduleName: string, detail: boolean): string {
   return [
     `// Admin behaviour for \`${moduleName}\`: actions, custom cells, icon (@atakanimo/ata-admin-base \`extendResource\`).`,
     `// Created once by the Generator, never overwritten: edit freely.`,
     `import { extendResource } from '@atakanimo/ata-admin-base';`,
     `import { ${camel}Schema } from './${moduleName}.generated.config';`,
     ``,
-    `export const ${camel}Resource = extendResource(${camel}Schema, {});`,
+    `export const ${camel}Resource = extendResource(${camel}Schema, {${detail ? ' detail: true ' : ''}});`,
     ``
   ].join('\n');
 }
@@ -151,6 +153,31 @@ export function renderRegistryFile(entries: Array<{ module: string; exportName: 
 
 // --- Generate ------------------------------------------------------------------------------------------
 
+function hasDetailView(model: NormalizedModel): boolean {
+  return resolveAdminOperations(model.api).includes('getOne') || model.fields.some(f => f.access?.detailOnly === true);
+}
+
+/** `extensions.detail` exists from admin-base 0.1.6; an older host package (or none installed) gets no `detail`.
+ * The package is looked up like Node does: the FE root's `node_modules`, then each parent's (hoisted workspaces). */
+function hostSupportsDetail(frontendRoot: string): boolean {
+  let dir = resolve(frontendRoot);
+  let pkg = '';
+  for (;;) {
+    const candidate = join(dir, 'node_modules', '@atakanimo', 'ata-admin-base', 'package.json');
+    if (existsSync(candidate)) {
+      pkg = candidate;
+      break;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
+  }
+  const [major = 0, minor = 0, patch = 0] = String(JSON.parse(readFileSync(pkg, 'utf-8')).version ?? '')
+    .split('.')
+    .map(n => Number.parseInt(n, 10) || 0);
+  return major > 0 || minor > 1 || (minor === 1 && patch >= 6);
+}
+
 export function generateAdminConfig(options: AdminConfigGenerateOptions): AdminConfigGenerateResult {
   try {
     const { model, frontendRoot, backendRoot, baseUrl, features } = options;
@@ -177,7 +204,7 @@ export function generateAdminConfig(options: AdminConfigGenerateOptions): AdminC
     const extensionFile = join(moduleDir, `${config.name}.generated.ts`);
     let extension: string | undefined;
     if (!existsSync(extensionFile)) {
-      const ext = safeWriteFile(extensionFile, renderExtensionFile(camel, config.name), { ensureDirectory: true, createBackup: false });
+      const ext = safeWriteFile(extensionFile, renderExtensionFile(camel, config.name, hasDetailView(model) && hostSupportsDetail(frontendRoot)), { ensureDirectory: true, createBackup: false });
       if (!ext.success) return { success: false, error: ext.error };
       extension = extensionFile;
     }

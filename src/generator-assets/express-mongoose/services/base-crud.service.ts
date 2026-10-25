@@ -6,6 +6,7 @@ import { clampListLimit, listOffsetFromPage, paginatedListMeta, type PaginatedLi
 import { getCurrentUserId } from '@utils/requestContext';
 import { resolveCrudProjection, stripHiddenFields } from '@core/services/crud-projection';
 import { applyAuthScope, type CrudAuthScope } from '@core/services/crud-scope';
+import { toMergePatch } from '@core/services/merge-patch';
 import { t } from '@helpers';
 
 /**
@@ -301,7 +302,7 @@ export abstract class BaseCrudService<TDoc extends Document & { createdAt?: Date
         delete sanitized.userId;
       }
       const scopedFilter = this.withAuthScope(extraFilter, uid);
-      let q: any = this.model.findOneAndUpdate({ _id: id, ...scopedFilter } as FilterQuery<TDoc>, { $set: sanitized } as UpdateQuery<TDoc>, {
+      let q: any = this.model.findOneAndUpdate({ _id: id, ...scopedFilter } as FilterQuery<TDoc>, toMergePatch(sanitized) as UpdateQuery<TDoc>, {
         new: true,
         runValidators: true
       });

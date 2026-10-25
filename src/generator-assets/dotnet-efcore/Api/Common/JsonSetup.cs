@@ -19,6 +19,10 @@ public static class JsonSetup
             json.Converters.Add(new DecimalStringConverter());
             json.Converters.Add(new UtcDateTimeOffsetConverter());
             json.Converters.Add(new RefJsonConverterFactory());
+            foreach (var converter in EntityIdJson.Converters)
+            {
+                json.Converters.Add(converter);
+            }
         });
         services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
         return services;

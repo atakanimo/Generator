@@ -1,5 +1,5 @@
 import { Alert, Box, Checkbox, FormControl, FormControlLabel, FormGroup, InputLabel, MenuItem, Select, Switch, Typography } from '@mui/material';
-import type { NormalOperation } from '@shared/normalizedModel';
+import { resolveAdminOperations, type NormalOperation } from '@shared/normalizedModel';
 import type { ModelApiSettings } from '../features/project/modelEdits';
 
 /**
@@ -26,8 +26,11 @@ export interface ResolvedModelApi {
   admin: boolean;
 }
 
-/** Effective settings as the backend generator will apply them (writes need ownership; self has no create). */
-export function resolveModelApi(api: ModelApiSettings | undefined, fields: NamedField[]): ResolvedModelApi {
+/**
+ * Effective settings as the backend generator will apply them (writes need ownership; self has no create).
+ * `defaultAdmin`: admin API when the model has no stored choice (Python: the admin API is the only one, so on).
+ */
+export function resolveModelApi(api: ModelApiSettings | undefined, fields: NamedField[], defaultAdmin = false): ResolvedModelApi {
   const hasUserId = fields.some(f => f.name.toLowerCase() === 'userid');
   const ownership: OwnershipChoice = api?.ownership === 'self' ? 'self' : hasUserId ? 'field' : 'none';
   const selected = api?.normalOperations ?? [];
@@ -37,19 +40,21 @@ export function resolveModelApi(api: ModelApiSettings | undefined, fields: Named
     return !(op === 'create' && ownership === 'self');
   }).map(({ op }) => op);
   const hasWrite = operations.some(op => OPERATIONS.find(o => o.op === op)?.write);
-  return { operations, ownership, requiresAuth: hasWrite || api?.requiresAuth !== false, admin: api?.admin === true };
+  return { operations, ownership, requiresAuth: hasWrite || api?.requiresAuth !== false, admin: api?.admin ?? defaultAdmin };
 }
 
 interface Props {
   api: ModelApiSettings | undefined;
   fields: NamedField[];
   source: 'saved' | 'files' | 'new' | null;
+  /** See `resolveModelApi`. */
+  defaultAdmin?: boolean;
   onChange: (patch: Partial<ModelApiSettings>) => void;
 }
 
-const ModelApiSettingsPanel = ({ api, fields, source, onChange }: Props) => {
+const ModelApiSettingsPanel = ({ api, fields, source, defaultAdmin = false, onChange }: Props) => {
   const hasUserId = fields.some(f => f.name.toLowerCase() === 'userid');
-  const resolved = resolveModelApi(api, fields);
+  const resolved = resolveModelApi(api, fields, defaultAdmin);
   const hasWrite = resolved.operations.some(op => OPERATIONS.find(o => o.op === op)?.write);
 
   const toggleOperation = (op: NormalOperation, checked: boolean) => {
@@ -59,6 +64,13 @@ const ModelApiSettingsPanel = ({ api, fields, source, onChange }: Props) => {
     const normalOperations = OPERATIONS.map(o => o.op).filter(o => current.has(o));
     const addsWrite = checked && OPERATIONS.find(o => o.op === op)?.write;
     onChange(addsWrite ? { normalOperations, requiresAuth: true } : { normalOperations });
+  };
+
+  const adminOps = resolveAdminOperations(api);
+  const toggleAdminOperation = (op: NormalOperation, checked: boolean) => {
+    const next = OPERATIONS.map(o => o.op).filter(o => (o === op ? checked : adminOps.includes(o)));
+    // Every operation open → no stored list (generators default to all).
+    onChange({ adminOperations: next.length === OPERATIONS.length ? undefined : next });
   };
 
   const changeOwnership = (choice: OwnershipChoice) => {
@@ -74,6 +86,26 @@ const ModelApiSettingsPanel = ({ api, fields, source, onChange }: Props) => {
         control={<Checkbox checked={resolved.admin} onChange={e => onChange({ admin: e.target.checked })} />}
         label='Include Admin API'
       />
+      {resolved.admin && (
+        <FormGroup row sx={{ ml: 4 }}>
+          {OPERATIONS.map(({ op, label, endpoint }) => (
+            <FormControlLabel
+              key={op}
+              disabled={op === 'list'}
+              control={<Checkbox size='small' checked={adminOps.includes(op)} onChange={e => toggleAdminOperation(op, e.target.checked)} />}
+              label={
+                <Box>
+                  <Typography variant='body2'>{label}</Typography>
+                  <Typography variant='caption' color='text.secondary'>
+                    {endpoint}
+                  </Typography>
+                </Box>
+              }
+              sx={{ mr: 3 }}
+            />
+          ))}
+        </FormGroup>
+      )}
       <Typography variant='subtitle1' sx={{ fontWeight: 600, mt: 2, mb: 0.5 }}>
         Normal (mobil) API
       </Typography>

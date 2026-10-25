@@ -5,6 +5,7 @@ import { scanProject } from './ipc/projectScanner.js';
 import type { SourceType } from './ipc/projectScanner.js';
 import type { NormalizedModel } from '../shared/normalizedModel.js';
 import type { ManifestWorkspacePrefs } from '../shared/ipcTypes.js';
+import type { HostDatabase } from '../shared/backendDatabase.js';
 import { loadModelForEditor } from './ipc/modelEditor.js';
 import { saveSchemaConfig } from './ipc/configManager.js';
 import { recordWorkspaceManifestUpsert, getWorkspacePreferences, stashModelInManifest, updateWorkspacePreferencesInManifest, reconcileModelFromDisk } from './utils/manifestSnapshot.js';
@@ -17,6 +18,24 @@ import { createModel, loadModelDraft, updateModel } from './ipc/modelCreator.js'
 import { getRelatedModelFieldNames } from './ipc/relatedModelFields.js';
 import { log } from './utils/logger.js';
 import { bootstrapDotnetProject, generateDotnetBackend, loadDotnetModelDraft, writeDotnetModel } from './ipc/dotnetBackend.js';
+import { bootstrapExpressProject } from './ipc/expressBackend.js';
+import {
+  bootstrapPythonProject,
+  generatePythonBackend,
+  importPythonModel,
+  isPythonProject,
+  loadPythonModelDraft,
+  previewPythonImport,
+  writePythonModel
+} from './ipc/pythonBackend.js';
+
+/** Python host (plan backend-python-fastapi PY5, PY7): `sourceType` from the scan, or manifest `backendStack: 'python-fastapi'`. */
+const isPythonSource = (sourceType: unknown, projectPath?: string) => sourceType === 'python-fastapi' || isPythonProject(projectPath);
+/** Hash of the generated model file: the editor's baseline for the next generate (as for the other stacks). */
+const withPythonSourceHash = <T extends { success: boolean; filePath?: string }>(result: T): T & { sourceHash?: string } =>
+  result.success && result.filePath && existsSync(result.filePath)
+    ? { ...result, sourceHash: modelSourceHash(readFileSync(result.filePath, 'utf8')) }
+    : result;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -207,6 +226,10 @@ app.whenReady().then(() => {
       try {
         const stale = staleModelSourceError(sourceCheck);
         if (stale) return { success: false, error: stale };
+        if (isPythonSource(sourceType, projectPath)) {
+          const { filePath: _model, ...python } = withPythonSourceHash(generatePythonBackend(projectPath, schema));
+          return python;
+        }
         if (sourceType === 'dotnet-ef') {
           const { filePath: _entity, ...dotnet } = generateDotnetBackend(projectPath, schema);
           return dotnet.success && sourceCheck?.filePath && existsSync(sourceCheck.filePath)
@@ -270,6 +293,8 @@ app.whenReady().then(() => {
 
   ipcMain.handle('project:createModel', async (_, { projectPath, sourceType, draft }) => {
     try {
+      // Python: the manifest is the model's source (K1); nothing to reconcile from the generated file.
+      if (isPythonSource(sourceType, projectPath)) return withPythonSourceHash(writePythonModel(projectPath, draft));
       const result = sourceType === 'dotnet-ef' ? writeDotnetModel(projectPath, draft) : await createModel(projectPath, sourceType, draft);
       if (result.success && result.filePath) {
         const reconciled = reconcileModelFromDisk(projectPath?.trim(), result.filePath, sourceType);
@@ -297,6 +322,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('project:loadModelDraft', async (_, { filePath, sourceType }) => {
     try {
+      if (sourceType === 'python-fastapi' || /[\\/]model_generated\.py$/.test(String(filePath ?? ''))) return loadPythonModelDraft(filePath);
       return sourceType === 'dotnet-ef' ? loadDotnetModelDraft(filePath) : loadModelDraft(filePath, sourceType);
     } catch (error) {
       log(`Error loading model draft: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
@@ -309,6 +335,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('project:updateModel', async (_, { filePath, projectPath, sourceType, draft }) => {
     try {
+      if (isPythonSource(sourceType, projectPath)) return withPythonSourceHash(writePythonModel(projectPath, draft));
       const result = sourceType === 'dotnet-ef' ? writeDotnetModel(projectPath, draft) : await updateModel(filePath, sourceType, draft);
       if (result.success && result.filePath) {
         const reconciled = reconcileModelFromDisk(projectPath?.trim(), result.filePath, sourceType);
@@ -334,10 +361,39 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('project:bootstrapDotnet', async (_, { root, app: appName }: { root?: string; app?: string }) => {
+  ipcMain.handle('project:bootstrapDotnet', async (_, { root, app: appName, db }: { root?: string; app?: string; db?: HostDatabase }) => {
     const target = root?.trim();
     if (!target || !appName?.trim()) return { success: false, error: 'Klasör ve uygulama adı gerekli.' };
-    return bootstrapDotnetProject(target, appName.trim());
+    if (!db) return { success: false, error: 'Veritabanı ve id tipi gerekli.' };
+    return bootstrapDotnetProject(target, appName.trim(), db);
+  });
+
+  ipcMain.handle('project:bootstrapExpress', async (_, { root, app: appName }: { root?: string; app?: string }) => {
+    const target = root?.trim();
+    if (!target || !appName?.trim()) return { success: false, error: 'Klasör ve uygulama adı gerekli.' };
+    return bootstrapExpressProject(target, appName.trim());
+  });
+
+  ipcMain.handle(
+    'project:previewPythonImport',
+    async (_, { projectPath, filePath, options }: { projectPath?: string; filePath?: string; options?: { className?: string; report?: boolean; allowRemote?: boolean } }) => {
+      if (!projectPath?.trim() || !filePath?.trim()) return { success: false, error: 'projectPath and filePath are required' };
+      return previewPythonImport(projectPath.trim(), filePath.trim(), options ?? {});
+    }
+  );
+
+  ipcMain.handle(
+    'project:importPythonModel',
+    async (_, { projectPath, filePath, options }: { projectPath?: string; filePath?: string; options?: { className?: string } }) => {
+      if (!projectPath?.trim() || !filePath?.trim()) return { success: false, error: 'projectPath and filePath are required' };
+      return withPythonSourceHash(importPythonModel(projectPath.trim(), filePath.trim(), options ?? {}));
+    }
+  );
+
+  ipcMain.handle('project:bootstrapPython', async (_, { root, app: appName }: { root?: string; app?: string }) => {
+    const target = root?.trim();
+    if (!target || !appName?.trim()) return { success: false, error: 'Klasör ve uygulama adı gerekli.' };
+    return bootstrapPythonProject(target, appName.trim());
   });
 
   createWindow();

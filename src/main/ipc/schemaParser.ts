@@ -29,7 +29,7 @@ import {
 
 export { entityNameFromModelFileName };
 
-type SourceTypeArg = 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null;
+type SourceTypeArg = 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | 'python-fastapi' | null;
 
 // --- Field construction ---------------------------------------------------------------------------------
 // The parser reads Mongoose / TS type names as parser tokens (`string`, `schema`, `schema.types.decimal128`, …);

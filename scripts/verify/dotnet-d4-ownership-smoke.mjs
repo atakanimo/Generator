@@ -6,6 +6,7 @@
  *   API_BASE=http://localhost:5091 JWT_SECRET=… JWT_ISSUER=… JWT_AUDIENCE=… node scripts/verify/dotnet-d4-ownership-smoke.mjs
  */
 import { createHmac, randomUUID } from 'node:crypto';
+import { newId } from './_smoke-ids.mjs';
 
 const base = process.env.API_BASE ?? 'http://localhost:5091';
 const secret = process.env.JWT_SECRET;
@@ -31,7 +32,7 @@ const check = (name, ok, detail) => {
   if (!ok) failures++;
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : `  → ${JSON.stringify(detail)}`}`);
 };
-const admin = token(randomUUID(), 'Admin');
+const admin = token(newId(), 'admin');
 const tag = randomUUID().slice(0, 8);
 
 // Users: admin creates two users.

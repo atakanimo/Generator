@@ -1,0 +1,74 @@
+[
+  {
+    "schemaVersion": 2,
+    "entityName": "Contacts",
+    "api": { "normalOperations": [], "admin": true },
+    "ui": { "label": "Kişiler" },
+    "fields": [
+      {
+        "name": "email",
+        "kind": "string",
+        "isArray": false,
+        "required": true,
+        "unique": true,
+        "trim": true,
+        "format": "email",
+        "filter": { "searchable": true, "type": "eq" }
+      },
+      {
+        "name": "workEmail",
+        "kind": "string",
+        "isArray": false,
+        "required": false,
+        "format": "email",
+        "constraints": { "pattern": "@example\\.com$" }
+      },
+      { "name": "nickname", "kind": "string", "isArray": false, "required": false, "unique": true, "constraints": { "maxLength": 20 } },
+      { "name": "fullName", "kind": "string", "isArray": false, "required": true, "trim": true, "constraints": { "minLength": 2, "maxLength": 80 } },
+      { "name": "age", "kind": "number", "isArray": false, "required": false, "numberFormat": "int", "constraints": { "min": 0, "max": 150 } },
+      { "name": "score", "kind": "number", "isArray": false, "required": true, "default": 0 },
+      {
+        "name": "level",
+        "kind": "enum",
+        "isArray": false,
+        "required": true,
+        "default": 10,
+        "enum": { "values": ["Low", "Mid", "High"], "numbers": [10, 20, 30] }
+      },
+      { "name": "status", "kind": "enum", "isArray": false, "required": false, "enum": { "values": ["active", "on-hold"] } },
+      { "name": "roles", "kind": "enum", "isArray": true, "required": false, "enum": { "values": ["owner", "viewer"] } },
+      { "name": "tags", "kind": "string", "isArray": true, "required": false },
+      { "name": "birthday", "kind": "date", "isArray": false, "required": false, "dateFormat": "date" },
+      { "name": "lastSeenAt", "kind": "date", "isArray": false, "required": false, "nullable": true },
+      { "name": "isVip", "kind": "boolean", "isArray": false, "required": true, "default": false },
+      { "name": "notes", "kind": "string", "isArray": false, "required": false, "filter": { "searchable": false } },
+      {
+        "name": "address",
+        "kind": "object",
+        "isArray": false,
+        "required": false,
+        "object": {
+          "typeName": "ContactAddress",
+          "fields": [
+            { "name": "street", "kind": "string", "required": true },
+            { "name": "zip", "kind": "number", "required": false, "nullable": true, "numberFormat": "int" },
+            { "name": "verifiedAt", "kind": "date", "required": false }
+          ]
+        }
+      },
+      {
+        "name": "phones",
+        "kind": "object",
+        "isArray": true,
+        "required": false,
+        "object": {
+          "typeName": "ContactPhones",
+          "fields": [
+            { "name": "number", "kind": "string", "required": true },
+            { "name": "primary", "kind": "boolean", "required": true }
+          ]
+        }
+      }
+    ]
+  }
+]

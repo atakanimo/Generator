@@ -1,0 +1,131 @@
+[
+  {
+    "schemaVersion": 2,
+    "entityName": "SubscriptionPlans",
+    "timestamps": { "createdAt": true, "updatedAt": true },
+    "api": { "normalOperations": [], "admin": true },
+    "ui": { "label": "Abonelik planları" },
+    "fields": [
+      {
+        "name": "code",
+        "kind": "string",
+        "isArray": false,
+        "required": true,
+        "unique": true,
+        "trim": true,
+        "constraints": { "minLength": 1, "maxLength": 64 },
+        "filter": { "searchable": true, "type": "regex" }
+      },
+      {
+        "name": "name",
+        "kind": "string",
+        "isArray": false,
+        "required": true,
+        "trim": true,
+        "filter": { "searchable": true, "type": "regex" }
+      },
+      { "name": "description", "kind": "string", "isArray": false, "required": false, "default": "" },
+      {
+        "name": "tier",
+        "kind": "enum",
+        "isArray": false,
+        "required": true,
+        "default": "free",
+        "enum": { "values": ["free", "pro", "enterprise"] },
+        "filter": { "searchable": true, "type": "enum" }
+      },
+      {
+        "name": "price",
+        "kind": "object",
+        "isArray": false,
+        "required": true,
+        "object": {
+          "typeName": "PlanPrice",
+          "fields": [
+            { "name": "monthly", "kind": "number", "required": true },
+            { "name": "yearly", "kind": "number", "required": true },
+            { "name": "currency", "kind": "string", "required": true }
+          ]
+        }
+      },
+      {
+        "name": "limits",
+        "kind": "object",
+        "isArray": false,
+        "required": true,
+        "object": {
+          "typeName": "PlanLimits",
+          "fields": [
+            { "name": "dailyAnalysisCount", "kind": "number", "required": false, "nullable": true, "numberFormat": "int" },
+            { "name": "watchlistMax", "kind": "number", "required": false, "nullable": true, "numberFormat": "int" },
+            { "name": "customScreenerRunsPerDay", "kind": "number", "required": false, "nullable": true, "numberFormat": "int" },
+            { "name": "backtestsPerDay", "kind": "number", "required": false, "nullable": true, "numberFormat": "int" },
+            { "name": "maxBacktestTickers", "kind": "number", "required": false, "nullable": true, "numberFormat": "int" },
+            { "name": "maxBacktestYears", "kind": "number", "required": false, "nullable": true, "numberFormat": "int" },
+            { "name": "exportPdfPerMonth", "kind": "number", "required": false, "nullable": true, "numberFormat": "int" },
+            { "name": "liveDataEnabled", "kind": "boolean", "required": true },
+            { "name": "apiAccessEnabled", "kind": "boolean", "required": true }
+          ]
+        }
+      },
+      {
+        "name": "features",
+        "kind": "object",
+        "isArray": false,
+        "required": true,
+        "object": {
+          "typeName": "PlanFeatures",
+          "fields": [
+            { "name": "llmSynthesis", "kind": "boolean", "required": true },
+            { "name": "customScreener", "kind": "boolean", "required": true },
+            { "name": "backtest", "kind": "boolean", "required": true },
+            { "name": "watchlist", "kind": "boolean", "required": true },
+            { "name": "liveQuote", "kind": "boolean", "required": true }
+          ]
+        }
+      },
+      {
+        "name": "rateLimit",
+        "kind": "object",
+        "isArray": false,
+        "required": true,
+        "object": {
+          "typeName": "PlanRateLimit",
+          "fields": [{ "name": "requestsPerMinute", "kind": "number", "required": true, "numberFormat": "int" }]
+        }
+      },
+      { "name": "marketsAllowed", "kind": "string", "isArray": true, "required": false },
+      {
+        "name": "isActive",
+        "kind": "boolean",
+        "isArray": false,
+        "required": true,
+        "default": true,
+        "filter": { "searchable": true, "type": "boolean" }
+      },
+      {
+        "name": "isDefault",
+        "kind": "boolean",
+        "isArray": false,
+        "required": true,
+        "default": false,
+        "filter": { "searchable": true, "type": "boolean" }
+      },
+      {
+        "name": "createdAt",
+        "kind": "date",
+        "isArray": false,
+        "required": false,
+        "filter": { "searchable": true, "type": "date-range" },
+        "access": { "readonly": true, "hiddenFromCreate": true, "hiddenFromUpdate": true }
+      },
+      {
+        "name": "updatedAt",
+        "kind": "date",
+        "isArray": false,
+        "required": false,
+        "access": { "readonly": true, "hiddenFromCreate": true, "hiddenFromUpdate": true }
+      }
+    ]
+  }
+]

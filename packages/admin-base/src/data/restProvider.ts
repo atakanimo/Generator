@@ -3,9 +3,13 @@ import type { ApiResponse, Id, ListBody, PaginatedList } from '../contract/api.j
 import type { AtaRequestFlags } from './axiosFlags.js';
 import type { ActionParams, DataProvider, RequestOptions, ResourceRef } from './dataProvider.js';
 
+/** What the provider calls: an `AxiosInstance` fits, so does a wrapper with only `request`. */
+export type AtaHttp = Pick<AxiosInstance, 'request'> | { request(config: AxiosRequestConfig): Promise<unknown> };
+
 export interface AtaRestProviderOptions {
-  /** Host'un axios instance'ı: token, global loading ve toast interceptor'da (sözleşme §7). */
-  http: AxiosInstance;
+  /** Host'un axios instance'ı (ya da yalnız `request`'i olan sarmalayıcı): token, global loading ve toast
+   * interceptor'da (sözleşme §7). `request` zarfı (`LocalResponse`) döndürmeli. */
+  http: AtaHttp;
 }
 
 function joinPath(endpoint: string, ...parts: string[]): string {

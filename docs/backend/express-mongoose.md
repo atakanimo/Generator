@@ -2,6 +2,46 @@
 
 Bu stack'in üreticisi `src/main/generators/express-mongoose/BackendGenerator.ts`, şablonları `src/main/templates/backend-express-mongoose/*.hbs`, core asset'leri `src/generator-assets/express-mongoose/**`. Sözleşme: [api-contract.md](../api-contract.md).
 
+Stack: TypeScript 5.9 (Node.js 22+), Express 4, MongoDB + Mongoose 8, Zod 3 (doğrulama), jsonwebtoken (HS256), i18next (tr / en), pino. Paket yöneticisi npm. Kimlik Mongo `_id` (ObjectId), JSON'da `id`.
+
+## Yeni proje
+
+Arayüzde: Project Location kartında **Yeni Express projesi** → boş klasör + uygulama adı → IPC `project:bootstrapExpress` → `bootstrapExpressProject` (`ipc/expressBackend.ts`; klasörde `package.json` varsa reddeder) → `bootstrapExpressHost` (`generators/express-mongoose/ExpressHostBootstrap.ts`): iskelet `src/generator-assets/express-mongoose/_skeleton/` (K, yalnız yoksa yazılır; belirteçler `__app__` = npm adı kebab-case, `__App__` = verilen ad) + core asset'ler (`ensureExpressCoreAssets`, generate'in kullandığı liste) + manifest `backendStack: nodejs-mongoose`. Klasör açılır ve taranır. Düğmenin yanındaki bilgi ikonu aşağıdaki yapıyı, teknolojileri ve komutları gösterir (tek tanım: `src/shared/backendStacks.ts`).
+
+```bash
+cp .env.example .env     # JWT_SECRET (en az 32 karakter, yoksa uygulama açılmaz), MONGODB_URI
+npm install
+npm test                 # iskelet testleri (node:test + tsx; Mongo gerekmez)
+npm run dev              # tsx watch → http://localhost:3000/api/health
+# Model: "Model Ekle" (editör) → Schema Designer → generate. Router'ın src/app.ts'e bağlanması için
+# "Update existing files" açık olmalı (kapalıyken route import + app.use elle eklenir).
+npm run typecheck
+npm run build && npm start   # tsc + tsc-alias → dist/
+```
+
+Mongo yerelde: `docker run -d -p 27017:27017 mongo:7`. Mongo kapalıyken uygulama açılır, sağlık ucu `mongoConnected: false`.
+
+```
+package.json  tsconfig.json (yol takma adları)  tsconfig.build.json  .env.example  .gitignore  .generator/manifest.json
+src/index.ts                 (K) sunucu: dotenv, JWT_SECRET kontrolü, listen, connectDB
+src/app.ts                   (K) createApp(): cors, requestId, istek bağlamı, dil, JSON; router bağlamaları; 404 + hata handler'ı
+src/config/                  (K) env.ts (requireJwtSecret), i18n.ts
+src/locales/tr.ts, en.ts     (K) common.*, ortak crud.*, auth.*
+src/db/connection.ts         (K) mongoose.connect
+src/helpers/                 (K) t(), getCurrentLanguage
+src/utils/requestContext.ts  (K) AsyncLocalStorage: requestId, dil, userId, roller
+src/core/index.ts            (K) @core barrel (validate dahil)
+src/core/middleware/         (K) cors, request-id, request-context, i18n, auth, admin-auth, validate, error (@middlewares)
+src/core/{errors,filters,logging,pagination,response,schema,services,types}/   (asset)
+src/modules/health/health.routes.ts   (K) GET /api/health
+src/modules/<m>/             (G) model, crud, filters, types, service(.admin), schema, routes(.admin); (K) hooks
+tests/health.test.ts         (K)
+```
+
+Auth: `Authorization: Bearer <JWT>`; kullanıcı id'si `userId` ya da `sub`, `exp` zorunlu, `JWT_ISSUER` / `JWT_AUDIENCE` ayarlıysa denetlenir. Admin: `role` (string ya da liste) `ADMIN_ROLE`'ü (varsayılan `admin`, üç stack'te aynı) içerir ya da id `ADMIN_USER_IDS`'te (Varlik360 kuralı). Dil: `lang` / `x-lang` başlığı, `?lang=`, `Accept-Language`; varsayılan `tr`. `X-Request-Id` (yoksa `X-Trace-Id`) okunur, yanıta ve zarfın `traceId`'sine yazılır.
+
+Bilinen: Express model editöründe `numberFormat` (int) seçimi yok ve Mongoose model dosyası bu bilgiyi taşımaz (`src/shared/modelDraft.ts`); editörden oluşturulan modelde sayı alanı ondalık kabul eder. Kapı: `scripts/verify/express-bootstrap.mjs` ([verification.md](../verification.md)).
+
 ## Çağrı zinciri
 
 `SchemaDesignPage` → `projectSlice.generateBackend` → preload → IPC `project:generateBackend` → `ipc/backendGenerator` → `BackendGenerator.generate`.
@@ -79,6 +119,10 @@ Marker'lar (`// <ad>` … `// </ad>`, kaynak `utils/customBlockMarkers.ts`):
 - `userId` / `self` kapsamlı modüllerde job kodu admin crud'u (`<entity>AdminCrud`) kullanır; kapsamlı crud istek auth bağlamı ister.
 - `adminOnly` alanlar normal create / update şemasında yoktur.
 
+## Update ve `null` (JSON Merge Patch)
+
+Sözleşme §5: gönderilmeyen alan değişmez, opsiyonel alana `null` alanı temizler, zorunlu alana ya da diziye `null` 400 (zod). `BaseCrudService.updateById` gövdeyi `toMergePatch` (`core/services/merge-patch.ts`) ile `{ $set, $unset }`'e çevirir: `null` → `$unset` (satırda alan kalmaz; istemci `null` okur), `undefined` düşer. Custom kodda `<m>Crud.updateById`'e verilen `null` da alanı siler.
+
 ## Gizli alanlar
 
 `access.hidden` alanlar `crud.hbs` `HIDDEN_FIELDS`'e gider (`BaseCrudService`'in 4. argümanı, admin dahil). list / getById / find'da projection, create ve lean sonuçlarında strip (`core/services/crud-projection.ts`). Şemaya `select: false` yazılmaz; gizli alan filtrelenemez. Bu modelleri dönen custom kod `stripHiddenFields`'i kendisi uygular.
@@ -87,7 +131,7 @@ Marker'lar (`// <ad>` … `// </ad>`, kaynak `utils/customBlockMarkers.ts`):
 
 - Şablonda iş mantığı yok (tip / bayrak / stack dalı). Kararlar helper'larda: `templateHelpers.ts`, `handlebars-be-*.ts`, `handlebars-schema-predicates.ts`. Şablonlar `noEscape: true` ile derlenir.
 - Route: `validate` + `TSchema`.
-- Schema: `id` filtresi; `IdParamSchema` ObjectId regex'i; enum → `z.enum([...])` (filtrede tek değer ya da dizi); sabit model `default:` → create'te `.default(…)`; `default: null` → `.nullable()`. `*AdminSchema` yalnızca ownership ya da `adminOnly` alan varsa.
+- Schema: `id` filtresi; `IdParamSchema` ObjectId regex'i; enum → `z.enum([...])` (filtrede tek değer ya da dizi); sabit model `default:` → create'te `.default(…)`; `default: null` → `.nullable()`; update şemasında opsiyonel ya da `nullable` tekil alan `.nullable()` (`updateNullClears`), zorunlu alan ve dizi `null` almaz. `*AdminSchema` yalnızca ownership ya da `adminOnly` alan varsa.
 - Filters: `id` → `_id`; enum → `$in`; `_id` / `id` adlı alanlar atlanır.
 - Liste: `extractListPagination` (yalnızca `filters`'ı okur) + `resolveListSort` (`sortBy: 'id'` → `_id`).
 - Cevap: route'lar `AtaResponse` (her `data` `toWire`'dan geçer: `_id` → `id`, populate ve alt dokümanlar dahil; `Decimal128` → string; `Map` → obje). Servisler `SuccessResponse` / `ErrorResponse` / `InternalServerErrorResponse`. Şablona ya da FE'ye `_id` işlemi yazılmaz.
@@ -105,10 +149,10 @@ CRUD mesajları modül başına değil, host'un locale dosyalarında tek bir `cr
 
 - **Yalnızca eksikse oluşturulur, asla ezilmez.** Farklı bir host dosyası korunur ve `canonical-deviation-detected` loglanır.
 - Yeni asset, host'taki (korunmuş) kardeş dosyanın dışa aktarmadığı bir adı import ediyorsa oluşturulmaz, uyarı loglanır (`utils/coreAssetImports.ts`).
-- Bootstrap listesi (`BackendGenerator.ensureCoreBootstrapFiles`): `errors/error-codes`, `errors/error.helper`, `logging/logger`, `logging/job-log-context`, `logging/pino-stdout-file-tee`, `logging/daily-log-file-path`, `pagination/pagination.helper`, `filters/filter-query.helper`, `response/response.helper`, `response/wire`, `schema/list-pagination.schema`, `types/api-contract`, `services/base-crud.service`, `services/crud-projection`, `services/crud-scope`. Yeni asset = listeye ekle, import'larını kapat.
+- Bootstrap listesi (`expressCoreAssets.ts` `EXPRESS_CORE_BOOTSTRAP_FILES`; generate'te `BackendGenerator.ensureCoreBootstrapFiles`, yeni host'ta bootstrap çağırır): `errors/error-codes`, `errors/error.helper`, `logging/logger`, `logging/job-log-context`, `logging/pino-stdout-file-tee`, `logging/daily-log-file-path`, `pagination/pagination.helper`, `filters/filter-query.helper`, `response/response.helper`, `response/wire`, `schema/list-pagination.schema`, `types/api-contract`, `services/service-hooks`, `services/base-crud.service`, `services/crud-projection`, `services/crud-scope`, `services/merge-patch`. Yeni asset = listeye ekle, import'larını kapat.
 - Asset değişikliği var olan host'a ulaşmaz; regenerate'ten **önce** elle birleştirilir. Host'un kendi eklemeleri korunur.
 - Asset'ler mümkün olduğunca saftır (`wire.ts`, `crud-projection.ts`, `crud-scope.ts` mongoose import etmez). Generator'da derlenmez (host alias'ları); test ve host kopyasında `tsc`: [verification.md](../verification.md).
-- Şablonların varsaydığı, asset olmayan host modülleri: `@core` (`validate`), `@helpers` (`t`), `@middlewares`, `@utils/requestContext`.
+- Şablonların varsaydığı, asset olmayan host modülleri: `@core` (`validate`), `@helpers` (`t`), `@middlewares` (`authMiddleware`, `adminAuthMiddleware`), `@utils/requestContext` (`getRequestContext`, `getCurrentUserId`, `applyRequestIdToResponse`). Yeni host'ta bunları iskelet verir; Varlik360'ta host'un kendileri.
 
 ## Keşif
 

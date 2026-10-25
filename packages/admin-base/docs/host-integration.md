@@ -29,6 +29,8 @@ import { resources } from '@/modules/resources.generated';
 
 `queryClient` verilmezse paket kendi QueryClient'ını kurar.
 
+`http` bir `AxiosInstance` ya da yalnız `request(config)`'i olan bir sarmalayıcı olabilir (`AtaHttp`). `request` zarfı (`LocalResponse`) döndürmeli; interceptor'ı başarıda axios yanıtını dönen host'larda (ör. StockExchange) küçük bir köprü yazılır: `request: async (c) => (await api.request(c)).data`.
+
 ## 3. Interceptor (sözleşme §7)
 
 1. Başarıda `LocalResponse` ile resolve, hatada `LocalResponse` ile reject.

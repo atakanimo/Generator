@@ -22,7 +22,7 @@ public sealed class RefJsonConverterFactory : JsonConverterFactory
         {
             if (value.Value is null)
             {
-                writer.WriteStringValue(value.Id);
+                JsonSerializer.Serialize(writer, value.Id, options);
                 return;
             }
 

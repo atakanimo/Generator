@@ -43,7 +43,7 @@ export function getGeneratorRoot(): string {
  * Get the templates directory path for a specific template type
  * @param templateType - backend template set (`src/main/templates/<set>`); the admin FE is config, not templates (plan 6)
  */
-export type TemplateSet = 'backend-express-mongoose' | 'backend-dotnet-efcore' | 'client-redux';
+export type TemplateSet = 'backend-express-mongoose' | 'backend-dotnet-efcore' | 'backend-python-fastapi' | 'client-redux';
 
 export function getTemplatesDir(templateType: TemplateSet = 'backend-express-mongoose'): string {
   const generatorRoot = getGeneratorRoot();
@@ -56,6 +56,19 @@ export function getTemplatesDir(templateType: TemplateSet = 'backend-express-mon
     // In production, use dist-electron/main/templates/{templateType}
     return join(generatorRoot, 'dist-electron', 'main', 'templates', templateType);
   }
+}
+
+/** Stacks whose core files ship as plain assets (`src/generator-assets/<stack>`). */
+export type GeneratorAssetStack = 'express-mongoose' | 'dotnet-efcore' | 'python-fastapi';
+
+/**
+ * Asset directory of a stack. Development: `src/generator-assets/<stack>`; packaged app:
+ * `dist-electron/generator-assets/<stack>` (copied by `build-electron.js`, like the templates).
+ */
+export function getGeneratorAssetsDir(stack: GeneratorAssetStack): string {
+  const generatorRoot = getGeneratorRoot();
+  const isDev = process.env.NODE_ENV === 'development' || !app?.isPackaged;
+  return isDev ? join(generatorRoot, 'src', 'generator-assets', stack) : join(generatorRoot, 'dist-electron', 'generator-assets', stack);
 }
 
 /**

@@ -35,6 +35,8 @@ export interface ModelApiSettings {
   ownership?: 'field' | 'self';
   requiresAuth?: boolean;
   admin?: boolean;
+  /** Admin API operations; absent → all (`list` always on). */
+  adminOperations?: NormalOperation[];
 }
 
 export function modelApiSettings(model: NormalizedModel): ModelApiSettings {

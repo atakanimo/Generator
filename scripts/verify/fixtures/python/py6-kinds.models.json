@@ -1,0 +1,66 @@
+[
+  {
+    "schemaVersion": 2,
+    "entityName": "Orders",
+    "api": { "normalOperations": [], "admin": true },
+    "ui": { "label": "Siparişler" },
+    "fields": [
+      { "name": "code", "kind": "string", "isArray": false, "required": true, "unique": true, "filter": { "searchable": true, "type": "eq" } },
+      {
+        "name": "customerId",
+        "kind": "reference",
+        "isArray": false,
+        "required": false,
+        "reference": { "include": true, "target": "Users", "display": "email", "populate": ["email", "password", "role", "createdAt"] },
+        "filter": { "searchable": true, "type": "reference" }
+      },
+      {
+        "name": "noteIds",
+        "kind": "reference",
+        "isArray": true,
+        "required": false,
+        "reference": { "include": true, "target": "UserNotes", "display": "text" }
+      },
+      { "name": "total", "kind": "decimal", "isArray": false, "required": true, "constraints": { "min": 0, "max": 1000000 }, "filter": { "searchable": true, "type": "range" } },
+      { "name": "fee", "kind": "decimal", "isArray": false, "required": false, "default": "0.50", "filter": { "searchable": true, "type": "eq" } },
+      { "name": "amounts", "kind": "decimal", "isArray": true, "required": false },
+      {
+        "name": "lines",
+        "kind": "object",
+        "isArray": true,
+        "required": false,
+        "object": {
+          "fields": [
+            { "name": "sku", "kind": "string", "required": true },
+            { "name": "price", "kind": "decimal", "required": true },
+            { "name": "productId", "kind": "reference", "required": false, "reference": { "target": "Documents" } },
+            { "name": "attrs", "kind": "object", "required": false },
+            { "name": "extra", "kind": "json", "required": false },
+            { "name": "flags", "kind": "map", "required": false, "native": { "type": "map<boolean>" } },
+            { "name": "shippedAt", "kind": "date", "required": false }
+          ]
+        }
+      },
+      { "name": "payload", "kind": "object", "isArray": false, "required": false },
+      { "name": "counters", "kind": "map", "isArray": false, "required": false, "native": { "type": "map<number>" } },
+      { "name": "raw", "kind": "json", "isArray": false, "required": true },
+      {
+        "name": "status",
+        "kind": "enum",
+        "isArray": false,
+        "required": true,
+        "default": "new",
+        "enum": { "values": ["new", "paid"] },
+        "access": { "readonly": true },
+        "filter": { "searchable": true, "type": "enum" }
+      },
+      { "name": "version", "kind": "number", "isArray": false, "required": true, "numberFormat": "int", "access": { "readonly": true } },
+      { "name": "approvedById", "kind": "reference", "isArray": false, "required": false, "reference": { "include": true, "target": "Users", "display": "email", "populate": ["email"] }, "filter": { "searchable": true, "type": "reference" }, "access": { "readonly": true } },
+      { "name": "internalNote", "kind": "string", "isArray": false, "required": false, "access": { "hiddenFromCreate": true } },
+      { "name": "lockedCode", "kind": "string", "isArray": false, "required": false, "access": { "hiddenFromUpdate": true } },
+      { "name": "secret", "kind": "string", "isArray": false, "required": true, "access": { "hidden": true } },
+      { "name": "vip", "kind": "boolean", "isArray": false, "required": true, "default": false, "access": { "adminOnly": true } }
+    ],
+    "timestamps": { "createdAt": true, "updatedAt": true }
+  }
+]

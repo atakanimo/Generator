@@ -44,3 +44,11 @@ if (existsSync(templatesSrc)) {
   console.log('Templates copied to dist-electron/main/templates');
 }
 
+
+// Copy stack assets (core files written into hosts; `getGeneratorAssetsDir` reads them from here when packaged)
+const assetsSrc = join(__dirname, 'src/generator-assets');
+const assetsDest = join(__dirname, 'dist-electron/generator-assets');
+if (existsSync(assetsSrc)) {
+  cpSync(assetsSrc, assetsDest, { recursive: true });
+  console.log('Generator assets copied to dist-electron/generator-assets');
+}

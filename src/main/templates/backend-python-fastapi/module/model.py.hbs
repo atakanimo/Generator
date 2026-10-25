@@ -1,0 +1,11 @@
+"""{{entity}} modeli (`{{collection}}`). Sınıflar `model_generated.py`'de (Generator); burada projeye özel adlar ve eklemeler."""
+
+from __future__ import annotations
+
+{{{k.modelImport}}}
+
+__all__ = [
+{{#each k.modelExports}}
+    "{{this}}",
+{{/each}}
+]

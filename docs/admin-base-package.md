@@ -18,7 +18,7 @@
 - Liste: sunucu sayfalama ve sıralama (resource ya da alan `sortable: false` ile kapatılır), filtre çubuğu (taslak / uygulanan), satır ve toplu aksiyonlar, silme onayı. Toolbar / toplu aksiyonlar `visible` / `disabled` ile liste isteğine (`listBody`) ve seçime göre gösterilir.
 - Detay: `extensions.detail` ya da `placement: 'detail'` aksiyonu → satırda "Detay" ikonu, sağdan salt okunur drawer (`getOne`, alanlar, `detail.component`, detail aksiyonları, düzenle / sil). (0.1.6)
 - Dinamik seçenek: `extensions.fields.<ad>.loadOptions` enum / string alanının filtre ve form select'ini çalışma anında doldurur. (0.1.6)
-- Form: sağdan açılan drawer; react-hook-form; kurallar config'ten türer (zod yok, son söz BE'de). Update body'si formdaki yazılabilir alanların tamamıdır; ilişkiler id'ye iner.
+- Form: sağdan açılan drawer; react-hook-form; kurallar config'ten türer (zod yok, son söz BE'de). Update body'si formdaki yazılabilir alanların tamamıdır; ilişkiler id'ye iner. Edit'te boşaltılan opsiyonel ya da `nullable` tekil alan `null` gider ve BE alanı temizler ([api-contract.md](api-contract.md) §5, JSON Merge Patch); zorunlu alan gönderilmez, dizi `[]` ile boşalır (0.1.8). Alt objede config'te olmayan anahtarlar okunan değerle aynen geri gider (modellenmemiş iç içe alan kaydedince silinmez; 0.1.8). Yalnız id gelen tekil ilişkinin etiketi hedefin `get-all`'undan (`filters.id`) okunur (alt obje ilişkileri; 0.1.8).
 - Alan türleri: relation autocomplete, enum (sayısal enum `numbers[i]` açık değerini gönderir; filtre, form ve hücre aynı yardımcıyı kullanır: `enumChoices`), tarih (dayjs; `dateFormat: 'date'` saat seçmez), iç içe obje, obje dizisi, map, JSON, resim URL'i, decimal (metin olarak gönderilir), e-posta, tam sayı. `constraints` (`minLength` / `maxLength` / `pattern` tekil metinde, `min` / `max` tekil sayıda) form kuralıdır (0.1.7).
 - `ApiResponse.traceId?`: zarftaki istek kimliği (0.1.7).
 - Dinamik create varsayılanı: `default: { dynamic: 'now' | 'uuid' | 'currentUserId' }`; kullanıcı id'si `AtaAdminProvider getCurrentUserId`'den.
@@ -72,6 +72,12 @@ Playground: `npm run playground` (port 5191; `.claude/launch.json` → `admin-ba
 
 ## Yayın
 
-`private: true`, sürüm 0.1.0, yayınlanmadı. Host CI'da `file:` bağımlılığı çözülemez; paket private registry'ye yayınlanmalı ya da vendorlanmalı, ardından host lock dosyası yeniden üretilmeli.
+npm'de herkese açık: `@atakanimo/ata-admin-base` (`publishConfig.access: public`). Yayın `packages/admin-base` içinde `npm run release` (`scripts/publish.sh`):
+
+1. `package.json` sürümü npm'de varsa durur (önce sürüm artırılır).
+2. `npm whoami` başarısızsa (token yok / süresi dolmuş) `npm login --auth-type=web`: giriş tarayıcıda yapılır, token `~/.npmrc`'ye yazılır.
+3. `npm publish`; önce `prepublishOnly` (typecheck + test + build) koşar. 2FA onayı da tarayıcıda.
+
+Host'lar paketi npm sürümüyle kullanır; yeni sürümden sonra host'ta sürüm güncellenip lock dosyası yeniden üretilir.
 
 Henüz yok: sayfalar arası "tümünü seç", kaydedilmemiş değişiklik uyarısı, iç içe (iki seviye) populate.

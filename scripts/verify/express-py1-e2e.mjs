@@ -32,6 +32,7 @@ const CORE_OVERLAY = [
   'services/base-crud.service.ts',
   'services/crud-projection.ts',
   'services/crud-scope.ts',
+  'services/merge-patch.ts',
   'services/service-hooks.ts',
   'filters/filter-query.helper.ts'
 ];

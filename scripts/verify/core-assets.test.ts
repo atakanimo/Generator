@@ -9,6 +9,7 @@ import { extractListPagination, resolveListSort } from '../../src/generator-asse
 import { toWire } from '../../src/generator-assets/express-mongoose/response/wire.ts';
 import { resolveCrudProjection, stripHiddenFields } from '../../src/generator-assets/express-mongoose/services/crud-projection.ts';
 import { applyAuthScope } from '../../src/generator-assets/express-mongoose/services/crud-scope.ts';
+import { toMergePatch } from '../../src/generator-assets/express-mongoose/services/merge-patch.ts';
 import { dateOnlyRangeFilter } from '../../src/generator-assets/express-mongoose/filters/filter-query.helper.ts';
 import { mapListRows, mapOneRow, runAfterWrite } from '../../src/generator-assets/express-mongoose/services/service-hooks.ts';
 
@@ -151,6 +152,20 @@ describe('crud-projection (G2)', () => {
     const doc = new Model({ email: 'a@b.c', password: 'hash' });
     assert.equal(stripHiddenFields(doc, hidden), doc);
     assert.equal(doc.get('password'), 'hash');
+  });
+});
+
+describe('merge-patch (contract §5 update null rule)', () => {
+  it('null → $unset, omitted / undefined → unchanged, values → $set', () => {
+    assert.deepEqual(toMergePatch({ name: 'a', description: null, note: undefined, tags: [] }), {
+      $set: { name: 'a', tags: [] },
+      $unset: { description: '' }
+    });
+  });
+
+  it('no null → $set only (empty update stays a no-op)', () => {
+    assert.deepEqual(toMergePatch({ isShow: false }), { $set: { isShow: false } });
+    assert.deepEqual(toMergePatch({}), { $set: {} });
   });
 });
 

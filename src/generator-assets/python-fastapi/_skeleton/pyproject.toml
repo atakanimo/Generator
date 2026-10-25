@@ -1,0 +1,81 @@
+# Generator Python + FastAPI host (plan backend-python-fastapi §2). Kurulabilir paket: `src/__app__`; kilit `uv.lock`.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/__app__"]
+
+[project]
+name = "__app_dist__"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.32,<1",
+    "pydantic>=2.10,<3",
+    "pydantic-settings>=2.6,<3",
+    # K5: sürücü yalnız `core/db.py`'de; hedef PyMongo Async, test sahte DB'si (mongomock-motor) Motor ister.
+    "motor>=3.6,<4",
+    "pymongo>=4.9,<5",
+    "PyJWT>=2.9,<3",
+    "structlog>=24.4,<26",
+    "APScheduler>=3.10,<4",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.24,<2",
+    "httpx>=0.27,<1",
+    "mongomock-motor>=0.0.34,<1",
+    "ruff>=0.6.9,<1",
+    "import-linter>=2.1,<3",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "TCH", "PIE", "PERF", "RUF"]
+ignore = [
+    "E501",   # line-too-long (formatter)
+    "B008",   # FastAPI Depends(...) varsayılanları bilinçli
+    "RUF001", "RUF002", "RUF003",  # Türkçe metinlerdeki Unicode noktalama
+    "TC001", "TC002", "TC003",  # FastAPI / Pydantic tipleri çalışma anında okur (Depends, route parametreleri)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "SLF001"]
+
+[tool.ruff.lint.flake8-type-checking]
+# Pydantic alan tiplerini çalışma anında okur.
+runtime-evaluated-base-classes = ["pydantic.BaseModel", "pydantic_settings.BaseSettings"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = ["-ra", "--strict-markers", "--import-mode=importlib"]
+
+# Katman yönü (plan §2): api/worker → modules → core.
+[tool.importlinter]
+root_packages = ["__app__"]
+
+[[tool.importlinter.contracts]]
+name = "Katman yönü: api/worker → modules → core"
+type = "layers"
+layers = [
+    "__app__.api | __app__.worker",
+    "__app__.modules",
+    "__app__.core",
+]
+# Üretilen admin router'ları `AdminDep` / `DbDep`'i api katmanından alır. Boş host'ta eşleşme yok, uyarı kapalı.
+unmatched_ignore_imports_alerting = "none"
+ignore_imports = [
+    "__app__.modules.*.router -> __app__.api.*",
+    "__app__.modules.*.admin_router -> __app__.api.*",
+    "__app__.modules.*.admin_router_generated -> __app__.api.*",
+]

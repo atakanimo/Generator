@@ -25,7 +25,8 @@ export async function getAll(filters?: {{entityName}}ListBody) {
   const result = await {{camelEntityName}}Crud.getAllPaginated(filtersQuery, {
     limit,
     page,
-    sort: resolveListSort(sortBy, sortOrder, hooks.defaultSort ?? { createdAt: -1, _id: -1 }){{beServicePopulateOptionLine fields}}{{beServiceLeanOptionLine needsMongooseDocumentLean}}
+    sort: resolveListSort(sortBy, sortOrder, hooks.defaultSort ?? { createdAt: -1, _id: -1 }){{beServicePopulateOptionLine fields}}{{#if listProjection}},
+    projection: '{{listProjection}}'{{/if}}{{beServiceLeanOptionLine needsMongooseDocumentLean}}
   });
   return mapListRows(result, hooks.mapRows?.bind(hooks));
 }

@@ -1,7 +1,7 @@
 import { Autocomplete, CircularProgress, TextField, type SxProps, type Theme } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
 import { useAtaAdmin } from '../../react/context.js';
-import { useRelationOptions } from '../../react/hooks.js';
+import { useRelationOptions, useRelationRow } from '../../react/hooks.js';
 import type { RelationFieldConfig } from '../../schema/fields.js';
 import { canSearchRelation, relationId, relationLabel } from '../../schema/relation.js';
 import { isEmptyValue } from '../format.js';
@@ -46,10 +46,15 @@ export function RelationAutocomplete({ field, label, value, onChange, multiple, 
   const query = useRelationOptions(field, searchable ? search : '', { enabled: open });
   const options = (query.data?.items ?? []) as Option[];
 
+  // Tekil değer yalnız id ise (alt obje ilişkisi, create / update cevabı) etiket hedeften okunur.
+  const bareId = !multiple && (typeof value === 'string' || typeof value === 'number') ? String(value) : null;
+  const resolved = useRelationRow(field, bareId);
+
   const selected = useMemo(() => {
     if (multiple) return (Array.isArray(value) ? value : []).map(toOption).filter((o): o is Option => o !== null);
+    if (bareId !== null && resolved.data && String(resolved.data.id) === bareId) return { ...resolved.data, id: bareId } as Option;
     return toOption(value);
-  }, [multiple, value]);
+  }, [multiple, value, bareId, resolved.data]);
 
   return (
     <Autocomplete<Option, boolean>

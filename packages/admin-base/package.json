@@ -1,6 +1,6 @@
 {
   "name": "@atakanimo/ata-admin-base",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Config-driven admin UI runtime for Generator output (resource schemas, data provider, TanStack Query hooks, MUI pages).",
   "license": "MIT",
   "repository": {
@@ -29,7 +29,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "playground": "vite --config playground/vite.config.ts",
-    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
+    "release": "bash scripts/publish.sh"
   },
   "dependencies": {
     "react-hook-form": "^7.90.0"

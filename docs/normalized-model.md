@@ -12,7 +12,7 @@ Generator'daki **tek** model tipi: `NormalizedModel` (`src/shared/normalizedMode
 | `timestamps?` | `{ createdAt, updatedAt }`; kaynak söylemiyorsa yok |
 | `native?` | Stack'e özel model ayrıntısı. Mongoose: `modelName` (`mongoose.model('…')`), `collection` |
 | `ownership?` | `{ kind: 'field' \| 'self' }`. Yoksa türetilir: `userId` alanı varsa `field` |
-| `api?` | `{ normalOperations?, requiresAuth?, admin? }`; manifest'te saklanır |
+| `api?` | `{ normalOperations?, requiresAuth?, admin?, adminOperations? }` (`adminOperations` yoksa tam admin CRUD, `list` hep açık); manifest'te saklanır |
 | `ui?` | `{ label? }`: admin menüsü ve sayfa başlığı (yoksa entity adından); manifest'te saklanır, arayüzde "Model etiketi" |
 
 ## Alan
@@ -31,7 +31,7 @@ Generator'daki **tek** model tipi: `NormalizedModel` (`src/shared/normalizedMode
 | `reference?` | `target`, `display`, `populate[]`, `include`, `relationType` |
 | `object?` | `fields?` (yoksa opak obje), `typeName?`, `schemaName?` |
 | `filter?` | `searchable`, `type` (`eq \| regex \| range \| date-range \| boolean \| enum \| reference`) |
-| `access?` | `readonly`, `hiddenFromCreate`, `hiddenFromUpdate`, `hidden` (hiçbir cevapta dönmez), `adminOnly` |
+| `access?` | `readonly`, `hiddenFromCreate`, `hiddenFromUpdate`, `hidden` (hiçbir cevapta dönmez), `adminOnly`, `computed` (okurken hesaplanır: saklanmaz, gövdede / filtrede / sıralamada yok, satırda opsiyonel; modülün `map_rows` / `mapRows` hook'u doldurur), `detailOnly` (ağır gövde: liste okumasında projeksiyonla dışarıda, liste satırında `null`; getOne döner) |
 | `ui?` | `label`, `list`, `component`, `defaultValue` |
 | `native?` | Ham parser tipi, bilinmeyen seçenekler, TS tipi, JSDoc. Yalnızca aynı stack'in emitter'ı okur |
 

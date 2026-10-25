@@ -1,5 +1,5 @@
 import type { DynamicDefault, FieldConfig } from '../../schema/fields.js';
-import { toWriteBody, type WriteMode } from '../../schema/write.js';
+import { toWriteBody, unmodelledKeys, type WriteMode } from '../../schema/write.js';
 import { isEmptyValue, isRecord } from '../format.js';
 
 export type FormMode = 'create' | 'edit';
@@ -66,7 +66,8 @@ export function initialFormValues(
     const fromRow = row?.[field.name];
     if (mode === 'edit' && fromRow !== undefined && fromRow !== null) {
       if (field.kind === 'object' && !field.isArray && isRecord(fromRow)) {
-        out[field.name] = initialFormValues(field.fields, 'edit', fromRow, ctx);
+        // Config'te olmayan alt anahtarlar (modellenmemiş iç içe obje) formda görünmez ama değerleri korunur.
+        out[field.name] = { ...unmodelledKeys(field.fields, fromRow), ...initialFormValues(field.fields, 'edit', fromRow, ctx) };
       } else if (field.kind === 'json') {
         // JSON alanı formda metin olarak düzenlenir; gönderirken parse edilir.
         out[field.name] = JSON.stringify(fromRow, null, 2);
@@ -92,8 +93,21 @@ function normalizeDecimal(value: unknown): string {
   return String(value).trim().replace(',', '.');
 }
 
-function cleanValue(field: FieldConfig, value: unknown): unknown {
-  if (isEmptyValue(value) && !Array.isArray(value)) return field.nullable ? null : OMIT;
+/**
+ * Update'te boşaltılan alan (sözleşme §5, JSON Merge Patch): opsiyonel ya da `nullable` tekil alan `null` gider
+ * (BE alanı temizler); zorunlu alan `null` almaz (400), hiç gönderilmez. Dizi `[]` ile boşalır (boş değer sayılmaz).
+ */
+function clearsWithNull(field: FieldConfig): boolean {
+  // `writeOnly` (şifre) edit'te boş başlar: boş = değişmez.
+  return !field.isArray && !field.writeOnly && (!field.required || field.nullable === true);
+}
+
+/** `clearOnEmpty`: yalnız edit gövdesinin üst seviye alanları; alt obje bütün olarak yazıldığı için alt alanda boş = yok. */
+function cleanValue(field: FieldConfig, value: unknown, clearOnEmpty: boolean): unknown {
+  if (isEmptyValue(value) && !Array.isArray(value)) {
+    if (field.nullable) return null;
+    return clearOnEmpty && clearsWithNull(field) ? null : OMIT;
+  }
   switch (field.kind) {
     case 'number':
       if (field.isArray) return (value as unknown[]).map(Number).filter(Number.isFinite);
@@ -101,8 +115,8 @@ function cleanValue(field: FieldConfig, value: unknown): unknown {
     case 'decimal':
       return field.isArray ? (value as unknown[]).map(normalizeDecimal) : normalizeDecimal(value);
     case 'object':
-      if (field.isArray) return (value as unknown[]).map(item => (isRecord(item) ? cleanFields(field.fields, item) : item));
-      return isRecord(value) ? cleanFields(field.fields, value) : value;
+      if (field.isArray) return (value as unknown[]).map(item => (isRecord(item) ? cleanObject(field.fields, item) : item));
+      return isRecord(value) ? cleanObject(field.fields, value) : value;
     case 'json':
       return typeof value === 'string' ? JSON.parse(value) : value;
     case 'map':
@@ -114,24 +128,30 @@ function cleanValue(field: FieldConfig, value: unknown): unknown {
   }
 }
 
-function cleanFields(fields: readonly FieldConfig[], values: Record<string, unknown>): Record<string, unknown> {
+/** Alt obje: modellenmiş alanlar temizlenir, modellenmemiş anahtarlar aynen kalır. */
+function cleanObject(fields: readonly FieldConfig[], values: Record<string, unknown>): Record<string, unknown> {
+  return { ...unmodelledKeys(fields, values), ...cleanFields(fields, values) };
+}
+
+function cleanFields(fields: readonly FieldConfig[], values: Record<string, unknown>, clearOnEmpty = false): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const field of fields) {
     if (!(field.name in values)) continue;
-    const cleaned = cleanValue(field, values[field.name]);
+    const cleaned = cleanValue(field, values[field.name], clearOnEmpty);
     if (cleaned !== OMIT) out[field.name] = cleaned;
   }
   return out;
 }
 
 /**
- * Form değerleri → create / update body'si. Edit'te tüm form gönderilir (karar 16.10.2026);
- * boş değerler nullable alanda `null`, değilse hiç gönderilmez. Son adım `toWriteBody`.
+ * Form değerleri → create / update body'si. Edit'te tüm form gönderilir (karar 16.10.2026).
+ * Boş değer: create'te nullable alanda `null`, değilse hiç gönderilmez; edit'te opsiyonel ya da nullable tekil alan
+ * `null` gider ve BE alanı temizler (sözleşme §5), zorunlu alan gönderilmez. Son adım `toWriteBody`.
  */
 export function formValuesToBody(
   fields: readonly FieldConfig[],
   values: Record<string, unknown>,
   mode: FormMode
 ): Record<string, unknown> {
-  return toWriteBody(fields, cleanFields(fields, values), writeModeOf(mode));
+  return toWriteBody(fields, cleanFields(fields, values, mode === 'edit'), writeModeOf(mode));
 }

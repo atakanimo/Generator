@@ -1,9 +1,9 @@
 namespace __App__.Domain.Common;
 
-/// <summary>uuid v7 kimlik + zaman damgaları. Zaman damgalarını Infrastructure'daki interceptor yazar.</summary>
+/// <summary>Kimlik (<see cref="EntityIds"/>) + zaman damgaları. Zaman damgalarını Infrastructure'daki interceptor yazar.</summary>
 public abstract class AuditableEntity : IEntity, ITimestamped
 {
-    public Guid Id { get; init; } = Guid.CreateVersion7();
+    public EntityId Id { get; init; } = EntityIds.New();
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

@@ -47,6 +47,12 @@ Bir değişiklik bitince üçü de temiz olmalı: typecheck, test, build. Host `
 
 ## Yayın
 
-`private: true`, 0.1.0, yayınlanmadı. Host CI'da `file:` bağımlılığı çözülemez; paket private registry'ye yayınlanmalı ya da vendorlanmalı, sonra host lock dosyası yeniden üretilmeli.
+npm'de herkese açık: `@atakanimo/ata-admin-base` (`publishConfig.access: public`). Yayın `packages/admin-base` içinde `npm run release` (`scripts/publish.sh`):
+
+1. `package.json` sürümü npm'de varsa durur (önce sürüm artırılır).
+2. `npm whoami` başarısızsa (token yok / süresi dolmuş) `npm login --auth-type=web`: giriş tarayıcıda yapılır, token `~/.npmrc`'ye yazılır.
+3. `npm publish`; önce `prepublishOnly` (typecheck + test + build) koşar. 2FA onayı da tarayıcıda.
+
+Host'lar paketi npm sürümüyle kullanır; yeni sürümden sonra host'ta sürüm güncellenip lock dosyası yeniden üretilir.
 
 Henüz yok: sayfalar arası "tümünü seç", kaydedilmemiş değişiklik uyarısı, iki seviye populate.

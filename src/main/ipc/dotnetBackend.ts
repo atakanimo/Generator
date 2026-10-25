@@ -5,11 +5,12 @@
  * A module's model is the merge of its entity file (`parseDotnetEntity`) and its manifest row; the registry files
  * need the host's whole module list, so every generate regenerates all Generator-owned modules.
  */
-import { existsSync } from 'fs';
+import { existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 import type { NormalizedModel } from '../../shared/normalizedModel.js';
 import type { ModelDraft } from '../../shared/modelDraft.js';
 import type { GenerateBackendResult } from '../../shared/ipcTypes.js';
+import { DATABASE_LABELS, hostDatabaseError, type HostDatabase } from '../../shared/backendDatabase.js';
 import { mergeModel } from '../../shared/modelMerge.js';
 import { generateDotnetModules } from '../generators/dotnet-efcore/DotnetEfGenerator.js';
 import { bootstrapDotnetHost } from '../generators/dotnet-efcore/DotnetHostBootstrap.js';
@@ -18,7 +19,9 @@ import { isValidAppName } from '../generators/dotnet-efcore/dotnetLayout.js';
 import { DotnetHost, findDotnetHost, listDotnetEntityFiles } from '../parsers/dotnet/dotnetHost.js';
 import { parseDotnetEntity } from '../parsers/dotnet/entityParser.js';
 import {
+  existingHostError,
   findManifestModelByRelativePath,
+  getWorkspacePreferences,
   toProjectRelativePath,
   writeWorkspaceManifestUpdate
 } from '../utils/manifestSnapshot.js';
@@ -61,8 +64,39 @@ export function loadDotnetModels(host: DotnetHost): DotnetModelEntry[] {
     .map((f) => ({ path: f.path, relativePath: toProjectRelativePath(host.root, f.path), model: loadDotnetModel(host, f.path, folders) }));
 }
 
-function migrationNote(host: DotnetHost): string {
-  return `Şema değiştiyse migration ekleyin: dotnet ef migrations add <Ad> -p src/${host.app}.Infrastructure -s src/${host.app}.Api`;
+/**
+ * Database / id type the host generates for. The manifest is the record (K2); when it has none (manifest lost or
+ * written before the fields) they come from the project: provider package and the `EntityId` alias, then persisted.
+ * Manifest and project disagreeing is refused (generating relational code into a Mongo host would not compile).
+ */
+export function resolveDotnetHostDatabase(host: DotnetHost): HostDatabase {
+  const workspace = getWorkspacePreferences(host.root);
+  const label = (db: Partial<HostDatabase>) =>
+    `${db.database ? DATABASE_LABELS[db.database] : '?'} + ${db.idType ?? '?'}`;
+  if (workspace?.database || workspace?.idType) {
+    const conflict =
+      (host.database && workspace.database && host.database !== workspace.database) ||
+      (host.idType && workspace.idType && host.idType !== workspace.idType);
+    if (conflict) {
+      throw new Error(
+        `Manifest (.generator/manifest.json) ${label(workspace)} diyor, proje ${label(host)} kullanıyor. ` +
+          'workspace.database / workspace.idType alanlarını projeyle aynı yapın.'
+      );
+    }
+  }
+  const db = { database: workspace?.database ?? host.database, idType: workspace?.idType ?? host.idType };
+  if (!db.database || !db.idType) {
+    throw new Error(
+      `Veritabanı / id tipi belirlenemedi (manifest'te yok, projede ${label(host)}): .generator/manifest.json ` +
+        'workspace.database ve workspace.idType alanlarını yazın.'
+    );
+  }
+  const error = hostDatabaseError('dotnet-ef', db);
+  if (error) throw new Error(`Manifest (.generator/manifest.json) workspace: ${error}`);
+  if (!workspace?.database || !workspace?.idType || workspace.backendStack !== 'dotnet-ef') {
+    writeWorkspaceManifestUpdate(host.root, { event: 'workspace', workspace: { backendStack: 'dotnet-ef', ...db } });
+  }
+  return db as HostDatabase;
 }
 
 /** Regenerates every module with `schema` replacing (or added to) its own entry. */
@@ -71,10 +105,10 @@ export function generateDotnetBackend(projectPath: string, schema: NormalizedMod
     const host = requireHost(projectPath);
     const own = dotnetEntityPath(host, schema.entityName);
     const models = loadDotnetModels(host).filter((m) => m.path !== own && m.model.entityName !== schema.entityName).map((m) => m.model);
-    const result = generateDotnetModules(host.root, host.app, [...models, schema]);
+    const result = generateDotnetModules(host.root, host.app, [...models, schema], resolveDotnetHostDatabase(host));
     const changed = result.files.filter((f) => f.action === 'created' || f.action === 'updated');
     const ctx = result.modules.find((m) => m.entity === dotnetModuleNames(schema.entityName).entity);
-    const notes = [migrationNote(host)];
+    const notes = [result.note];
     if (ctx?.droppedOperations.length) {
       notes.unshift(`Sözleşme gereği kapatılan normal işlemler: ${ctx.droppedOperations.join(', ')} (ownership ${ctx.ownership ? ctx.ownership.kind : 'yok'}).`);
     }
@@ -123,15 +157,23 @@ export function loadDotnetModelDraft(filePath: string, projectPath?: string): { 
   }
 }
 
-/** New host in an empty (or new) folder; the manifest records the stack. */
-export function bootstrapDotnetProject(root: string, app: string): { success: boolean; files?: string[]; error?: string } {
+/** New host in an empty (or new) folder; the manifest records the stack, database and id type. */
+export function bootstrapDotnetProject(root: string, app: string, db: HostDatabase): { success: boolean; files?: string[]; error?: string } {
   try {
     if (!isValidAppName(app)) return { success: false, error: 'Uygulama adı PascalCase olmalı (harf / rakam), ör. SharedFrame.' };
-    if (existsSync(join(root, `${app}.slnx`)) || existsSync(join(root, `${app}.sln`))) {
-      return { success: false, error: `${app} çözümü bu klasörde zaten var.` };
-    }
-    const result = bootstrapDotnetHost(root, app);
-    writeWorkspaceManifestUpdate(root, { event: 'workspace', workspace: { backendStack: 'dotnet-ef' } });
+    const dbError = hostDatabaseError('dotnet-ef', db);
+    if (dbError) return { success: false, error: dbError };
+    const hostError = existingHostError(root);
+    if (hostError) return { success: false, error: hostError };
+    const existingProject = (existsSync(root) ? readdirSync(root) : []).find(
+      (n) => /\.slnx?$/.test(n) || n === 'package.json' || n === 'pyproject.toml'
+    );
+    if (existingProject) return { success: false, error: `Bu klasörde zaten bir proje var (${existingProject}).` };
+    const result = bootstrapDotnetHost(root, app, db);
+    writeWorkspaceManifestUpdate(root, {
+      event: 'workspace',
+      workspace: { backendStack: 'dotnet-ef', database: db.database, idType: db.idType }
+    });
     return { success: true, files: result.files.filter((f) => f.action === 'created').map((f) => toProjectRelativePath(root, f.path)) };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };

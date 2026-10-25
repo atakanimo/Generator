@@ -22,16 +22,21 @@ router.post('/get-all', validate({ body: {{schemaRef entityName "GetAllBody" tru
   const result = await {{entityNameLower}}ServiceAdmin.getAll(req.body);
   AtaResponse(res, result);
 });
+{{#if adminOps.getOne}}
 
 router.get('/:id', validate({ params: TSchema.{{entityName}}IdParamSchema }), async (req, res) => {
   const result = await {{entityNameLower}}ServiceAdmin.getById(req.params.id);
   AtaResponse(res, result);
 });
+{{/if}}
+{{#if adminOps.create}}
 
 router.post('/create', validate({ body: {{schemaRef entityName "CreateBody" true adminSchemaVariant}} }), async (req, res) => {
   const result = await {{entityNameLower}}ServiceAdmin.create(req.body);
   AtaResponse(res, result);
 });
+{{/if}}
+{{#if adminOps.update}}
 
 router.post(
   '/update/:id',
@@ -41,10 +46,13 @@ router.post(
     AtaResponse(res, result);
   }
 );
+{{/if}}
+{{#if adminOps.delete}}
 
 router.delete('/:id', validate({ params: TSchema.{{entityName}}IdParamSchema }), async (req, res) => {
   const result = await {{entityNameLower}}ServiceAdmin.delete{{entityName}}(req.params.id);
   AtaResponse(res, result);
 });
+{{/if}}
 
 export default router;

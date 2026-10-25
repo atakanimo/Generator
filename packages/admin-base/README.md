@@ -13,7 +13,7 @@ Sözleşme: [`docs/api-contract.md`](../../docs/api-contract.md)
 | [docs/host-integration.md](docs/host-integration.md) | Host projeye kurulum |
 | [docs/development.md](docs/development.md) | Komutlar, playground, testler, yayın |
 
-## Durum (0.1.0, yayınlanmadı)
+## Durum (npm'de; yayın: `npm run release`)
 
 Hazır: liste sayfası (filtre, sunucu sayfalama / sıralama, satır ve toplu aksiyonlar, silme onayı), form drawer (bütün alan türleri, istemci doğrulaması), dinamik create varsayılanları, `createAdminRoutes`. Henüz yok: sayfalar arası "tümünü seç", kaydedilmemiş değişiklik uyarısı, iki seviye populate.
 
@@ -29,5 +29,5 @@ Hazır: liste sayfası (filtre, sunucu sayfalama / sıralama, satır ve toplu ak
 | Geçiş | Eski admin modülleri kademeli taşınır; eski sayfalar ve paket yan yana çalışır |
 | Form | react-hook-form; kurallar (required, sayı, decimal formatı, tarih) config'ten türetilir, zod yok — son söz BE'de |
 | Form kabı | Sağdan açılan Drawer (create / edit) |
-| Update body | Formdaki tüm yazılabilir alanlar gönderilir (`toWriteBody`: readonly / `hideOnUpdate` / şema dışı alanlar düşer, ilişkiler id'ye iner) |
+| Update body | Formdaki tüm yazılabilir alanlar gönderilir (`toWriteBody`: readonly / `hideOnUpdate` / şema dışı alanlar düşer, ilişkiler id'ye iner); boşaltılan opsiyonel tekil alan `null` gider, BE alanı temizler (0.1.8) |
 | Alan hataları | İstemci doğrulama hataları alanın altında; API hataları yalnızca host interceptor toast'u |

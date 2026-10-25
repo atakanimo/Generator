@@ -8,6 +8,7 @@ import type { NormalizedModel } from '../../shared/normalizedModel.js';
 import type { BackendSelectedFiles, GenerateBackendResult } from '../../shared/ipcTypes.js';
 import { parseBaseUrlFromBackend } from '../utils/backendAppFile.js';
 import { log } from '../utils/logger.js';
+import { assertHostDatabase } from '../utils/manifestSnapshot.js';
 
 function logInfo(message: string, context?: Record<string, unknown>): void {
   log(`${message}${context ? ` | ${JSON.stringify(context)}` : ''}`, 'info');
@@ -35,6 +36,7 @@ export function generateBackend(
   selectedFiles?: BackendSelectedFiles
 ): GenerateBackendResult {
   try {
+    if (sourceType !== 'dotnet-ef' && sourceType !== 'nodejs-typeorm') assertHostDatabase(projectPath, 'nodejs-mongoose');
     // Parse base URL from backend if not provided
     const finalBaseUrl = baseUrl || parseBaseUrlFromBackend(projectPath);
     logInfo('Using base URL for backend generation', { baseUrl: finalBaseUrl, projectPath });

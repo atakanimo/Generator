@@ -1,0 +1,13 @@
+"""{{entity}} iş kuralları (admin CRUD hook'ları). Boş varsayılanlar `core/crud/hooks.py`'de; gereken hook override edilir."""
+
+from __future__ import annotations
+
+{{{k.hooksImport}}}
+
+if TYPE_CHECKING:
+    from {{pkg}}.core.db import Database
+
+
+class {{entity}}Hooks({{entity}}HooksBase):
+    def __init__(self, db: Database) -> None:
+        self._db = db

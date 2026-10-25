@@ -3,13 +3,12 @@ import { join, extname } from 'path';
 import { log } from '../utils/logger.js';
 import { findDotnetHost, listDotnetEntityFiles } from '../parsers/dotnet/dotnetHost.js';
 import { getWorkspacePreferences } from '../utils/manifestSnapshot.js';
+import { findPythonHost, listPythonModels } from './pythonBackend.js';
+import type { ScannedModel } from '../../shared/ipcTypes.js';
+import { DATABASE_LABELS, type BackendDatabase } from '../../shared/backendDatabase.js';
 
-export type SourceType = 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm';
-
-export interface ScannedModel {
-  fileName: string;
-  path: string;
-}
+export type SourceType = 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | 'python-fastapi';
+export type { ScannedModel };
 
 export interface ScanResult {
   success: boolean;
@@ -41,14 +40,15 @@ export async function scanProject(
     let finalSourceType: SourceType;
     let detectedTechnologies: string[] = [];
 
-    const savedStack = getWorkspacePreferences(projectPath)?.backendStack;
+    const workspace = getWorkspacePreferences(projectPath);
+    const savedStack = workspace?.backendStack;
     if (!sourceType && savedStack) {
       sourceType = savedStack;
       log(`[Generator] Stack from manifest: ${savedStack}`, 'info');
     }
     if (sourceType) {
       finalSourceType = sourceType;
-      detectedTechnologies = technologiesFromSourceType(sourceType);
+      detectedTechnologies = technologiesFromSourceType(sourceType, workspace?.database);
       log(`[Generator] Stack provided by client: ${sourceType}`, 'info');
     } else {
       const detected = await detectProjectStack(projectPath);
@@ -69,6 +69,10 @@ export async function scanProject(
       const srcModulesPath = join(projectPath, 'src', 'modules');
       models = await scanModulesDirectory(srcModulesPath, ['.js', '.ts']);
       log('[Generator] Node discovery path: src/modules/**', 'info');
+    } else if (finalSourceType === 'python-fastapi') {
+      // Python host (plan backend-python-fastapi PY7): manifest modules + hand-written `modules/<m>/model.py` to import.
+      models = listPythonModels(projectPath);
+      log(`[Generator] Python host: ${models.filter(m => m.kind === 'generated').length} generated, ${models.filter(m => m.kind === 'importable').length} importable`, 'info');
     } else if (finalSourceType === 'dotnet-ef' && findDotnetHost(projectPath)) {
       // Generator host (plan backend-dotnet-efcore §3): Domain entity files.
       const host = findDotnetHost(projectPath)!;
@@ -114,7 +118,9 @@ export async function scanProject(
       discoveryInfo:
         finalSourceType === 'nodejs-mongoose' || finalSourceType === 'nodejs-typeorm'
           ? 'Node.js: src/** altında *.model.ts|*.model.js (özyinelemeli tarama).'
-          : findDotnetHost(projectPath)
+          : finalSourceType === 'python-fastapi'
+            ? "Python + FastAPI: manifest'teki modüller (model_generated.py) ve içe aktarılabilir elle yazılmış modules/<m>/model.py."
+            : findDotnetHost(projectPath)
             ? `.NET 10 + EF Core: src/${findDotnetHost(projectPath)!.app}.Domain/<Modül>/<Entity>.cs (elle yazılmış entity'ler yalnızca ilişki hedefi).`
             : '.NET: Entities/Models klasörleri ve .cs entity dosyaları taranır.'
     };
@@ -269,11 +275,17 @@ async function detectProjectStack(projectPath: string): Promise<DetectStackResul
     // continue to .NET checks
   }
 
+  // Python + FastAPI host (pyproject.toml + src/<pkg>/core).
+  if (findPythonHost(projectPath)) {
+    detectedTechnologies.push('Python 3.12', 'FastAPI', 'Pydantic v2', 'MongoDB');
+    return { success: true, sourceType: 'python-fastapi', detectedTechnologies };
+  }
+
   // .NET checks: Generator host (solution + src/<App>.Domain) first.
   const host = findDotnetHost(projectPath);
   if (host) {
     detectedTechnologies.push('.NET 10', 'ASP.NET Core', 'EF Core');
-    if (host.efCorePostgres) detectedTechnologies.push('PostgreSQL');
+    if (host.database) detectedTechnologies.push(DATABASE_LABELS[host.database]);
     return { success: true, sourceType: 'dotnet-ef', detectedTechnologies };
   }
   let hasCsproj = false;
@@ -308,14 +320,19 @@ async function detectProjectStack(projectPath: string): Promise<DetectStackResul
   };
 }
 
-function technologiesFromSourceType(sourceType: SourceType): string[] {
+/** Stack known in advance (manifest / client); the database comes from the manifest (`workspace.database`). */
+function technologiesFromSourceType(sourceType: SourceType, database?: BackendDatabase): string[] {
+  const db = database ? [DATABASE_LABELS[database]] : [];
   if (sourceType === 'nodejs-mongoose') {
-    return ['Node.js', 'Express', 'Mongoose'];
+    return ['Node.js', 'Express', 'Mongoose', ...db];
   }
   if (sourceType === 'nodejs-typeorm') {
     return ['Node.js', 'TypeORM'];
   }
-  return ['.NET', 'ASP.NET Core', 'EF Core'];
+  if (sourceType === 'python-fastapi') {
+    return ['Python 3.12', 'FastAPI', 'Pydantic v2', ...db];
+  }
+  return ['.NET', 'ASP.NET Core', 'EF Core', ...db];
 }
 
 /**

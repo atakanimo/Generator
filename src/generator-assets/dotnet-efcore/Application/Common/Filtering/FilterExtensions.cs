@@ -132,12 +132,20 @@ public static class FilterExtensions
             return query;
         }
 
-        var list = values.Values.Select(v => (TValue?)v).ToList();
-        return query.Where(Build(selector, body => Expression.Call(Param(list), typeof(List<TValue?>).GetMethod(nameof(List<TValue?>.Contains))!, body)));
+        if (values.Values.Count == 0)
+        {
+            return query.Where(_ => false);
+        }
+
+        // Eşitlik zinciri (`x == a || x == b`), `List.Contains` değil: MongoDB sürücüsü nullable + dönüştürücülü enum'da
+        // `Contains`'i çeviremiyor; ilişkisel sağlayıcılarda sonuç aynı.
+        return query.Where(Build(selector, body => values.Values
+            .Select(v => (Expression)Expression.Equal(body, Param<TValue?>(v)))
+            .Aggregate(Expression.OrElse)));
     }
 
     /// <summary>Çoka çok ilişki: hedeflerden en az biri verilen id'lerden biri.</summary>
-    public static IQueryable<T> WhereAnyIn<T, TTarget>(this IQueryable<T> query, Expression<Func<T, IEnumerable<TTarget>>> selector, OneOrMany<Guid>? ids)
+    public static IQueryable<T> WhereAnyIn<T, TTarget>(this IQueryable<T> query, Expression<Func<T, IEnumerable<TTarget>>> selector, OneOrMany<EntityId>? ids)
         where TTarget : __App__.Domain.Common.IEntity
     {
         if (ids is null)
@@ -149,6 +157,21 @@ public static class FilterExtensions
         Expression<Func<TTarget, bool>> match = t => list.Contains(t.Id);
         var any = typeof(Enumerable).GetMethods().Single(m => m.Name == nameof(Enumerable.Any) && m.GetParameters().Length == 2)
             .MakeGenericMethod(typeof(TTarget));
+        return query.Where(Build(selector, body => Expression.Call(any, body, match)));
+    }
+
+    /// <summary>Id listesi alanı (join'siz <c>reference[]</c>): listedeki id'lerden en az biri verilen id'lerden biri.</summary>
+    public static IQueryable<T> WhereAnyIdIn<T>(this IQueryable<T> query, Expression<Func<T, List<EntityId>>> selector, OneOrMany<EntityId>? ids)
+    {
+        if (ids is null)
+        {
+            return query;
+        }
+
+        var list = ids.Values.ToList();
+        Expression<Func<EntityId, bool>> match = id => list.Contains(id);
+        var any = typeof(Enumerable).GetMethods().Single(m => m.Name == nameof(Enumerable.Any) && m.GetParameters().Length == 2)
+            .MakeGenericMethod(typeof(EntityId));
         return query.Where(Build(selector, body => Expression.Call(any, body, match)));
     }
 

@@ -1,0 +1,22 @@
+"""{{entity}} servisi: admin CRUD (`service_generated.py` tabanı) + iş kuralları. API ve job'lar bunu çağırır."""
+
+from __future__ import annotations
+
+{{{k.serviceImports}}}
+
+if TYPE_CHECKING:
+    from {{pkg}}.core.db import Database
+
+
+class {{entity}}Service({{entity}}ServiceBase):
+    pass
+
+
+def build_{{folder}}_service(db: Database) -> {{entity}}Service:
+    return {{entity}}Service({{entity}}Repository(db), {{entity}}Hooks(db))
+
+
+__all__ = [
+    "{{entity}}Service",
+    "build_{{folder}}_service",
+]

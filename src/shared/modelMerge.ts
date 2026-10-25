@@ -15,7 +15,7 @@ import { constraintsForField, isNumericEnum } from './fieldConstraints.js';
 import { filterFromToken, filterTokenOf, typeTokenOf, type FilterToken } from './fieldTypeToken.js';
 import { isMongooseSourceType } from './schemaFieldTypes.js';
 
-export type SourceType = 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null;
+export type SourceType = 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | 'python-fastapi' | null;
 
 export type UIComponent =
   | 'TextField'

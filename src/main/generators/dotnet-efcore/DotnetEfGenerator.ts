@@ -6,7 +6,9 @@
  */
 import { join } from 'path';
 import type { NormalizedModel } from '../../../shared/normalizedModel.js';
+import type { HostDatabase } from '../../../shared/backendDatabase.js';
 import { ensureDotnetHost, writeDotnetRegistries } from './DotnetHostBootstrap.js';
+import { dotnetDbProvider } from './providers/index.js';
 import { DotnetModuleContext, buildDotnetModuleContexts, dotnetRegistryModule } from './dotnetContext.js';
 import { WrittenFile, renderDotnetTemplate, writeGenerated, writeOnce } from './dotnetFiles.js';
 import { dotnetLayout } from './dotnetLayout.js';
@@ -14,6 +16,8 @@ import { dotnetLayout } from './dotnetLayout.js';
 export interface DotnetGenerateResult {
   files: WrittenFile[];
   modules: DotnetModuleContext[];
+  /** Schema step for the user (provider: migration command / index note). */
+  note: string;
 }
 
 function serviceSummary(ctx: DotnetModuleContext): string {
@@ -58,7 +62,6 @@ function moduleFiles(root: string, ctx: DotnetModuleContext): WrittenFile[] {
       ...ctx.admin
     }
   ];
-  const allOps = { list: true, getOne: true, create: true, update: true, delete: true };
   const endpoints = [
     {
       file: `${entity}Endpoints.cs`,
@@ -81,7 +84,7 @@ function moduleFiles(root: string, ctx: DotnetModuleContext): WrittenFile[] {
       iface: `I${entity}AdminService`,
       create: ctx.admin.create.name,
       update: ctx.admin.update.name,
-      ops: allOps,
+      ops: ctx.adminOps,
       summary: `Admin API: <c>${ctx.route}/admin</c>. Admin policy.`
     }
   ];
@@ -111,12 +114,13 @@ function moduleFiles(root: string, ctx: DotnetModuleContext): WrittenFile[] {
 
 /**
  * Generates every given module and rewrites the registries from that list. `models` must be the host's full
- * module list (D5 reads it from the host; until then the caller passes it).
+ * module list (D5 reads it from the host; until then the caller passes it); `db` comes from the manifest.
  */
-export function generateDotnetModules(root: string, app: string, models: NormalizedModel[]): DotnetGenerateResult {
-  const modules = buildDotnetModuleContexts(app, models);
-  const files: WrittenFile[] = ensureDotnetHost(root, app);
+export function generateDotnetModules(root: string, app: string, models: NormalizedModel[], db: HostDatabase): DotnetGenerateResult {
+  const provider = dotnetDbProvider(db);
+  const modules = buildDotnetModuleContexts(app, models, provider);
+  const files: WrittenFile[] = ensureDotnetHost(root, app, provider, db.idType);
   for (const ctx of modules) files.push(...moduleFiles(root, ctx));
   files.push(...writeDotnetRegistries(root, app, modules.map(dotnetRegistryModule)));
-  return { files, modules };
+  return { files, modules, note: provider.generateNote(app) };
 }

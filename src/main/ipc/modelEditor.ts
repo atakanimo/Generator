@@ -8,10 +8,22 @@ import type { ParseModelResult } from '../../shared/ipcTypes.js';
 import { parseNormalizedModel } from './schemaParser.js';
 import { findManifestModelByRelativePath, toProjectRelativePath } from '../utils/manifestSnapshot.js';
 import { detectModuleApi } from '../utils/moduleApiDetect.js';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { modelSourceHash } from '../utils/modelSourceHash.js';
+import { loadPythonModelForEditor } from './pythonBackend.js';
 
 export function loadModelForEditor(filePath: string, projectRoot: string, sourceType?: SourceType): ParseModelResult {
+  // Python (K1): the manifest row is the model; the generated file only gives the stale-editor hash.
+  if (sourceType === 'python-fastapi' || /[\\/]model_generated\.py$/.test(filePath)) {
+    const py = loadPythonModelForEditor(filePath, projectRoot);
+    if (!py.success || !py.model) return { success: false, error: py.error };
+    return {
+      success: true,
+      model: py.model,
+      hasSavedConfig: true,
+      sourceHash: existsSync(filePath) ? modelSourceHash(readFileSync(filePath, 'utf8')) : undefined
+    };
+  }
   const parsed = parseNormalizedModel(filePath, sourceType);
   if (!parsed.success || !parsed.model) return { success: false, error: parsed.error };
 

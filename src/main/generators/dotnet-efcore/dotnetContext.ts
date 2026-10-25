@@ -12,10 +12,11 @@ import type {
   NormalizedModel,
   NormalizedObjectSubField
 } from '../../../shared/normalizedModel.js';
-import { NORMAL_OPERATIONS } from '../../../shared/normalizedModel.js';
+import { NORMAL_OPERATIONS, resolveAdminOperations, updateNullClears } from '../../../shared/normalizedModel.js';
 import { constraintsForField, EMAIL_PATTERN, isNumericEnum } from '../../../shared/fieldConstraints.js';
 import { kebabCase, moduleNameFromEntity, pascalCase, pluralize, singularize } from '../../utils/namingUtils.js';
 import type { DotnetRegistryModule } from './DotnetHostBootstrap.js';
+import type { DotnetDbProvider } from './providers/DotnetDbProvider.js';
 
 /** Provided by `AuditableEntity`; never emitted as model fields. */
 const BASE_FIELDS = new Set(['id', '_id', 'createdAt', 'updatedAt']);
@@ -42,14 +43,14 @@ export interface DotnetRefRecord {
   params: string[];
 }
 
-type Category = 'scalar' | 'scalarArray' | 'enumArray' | 'object' | 'objectArray' | 'json' | 'map' | 'ref' | 'refArray';
+export type DotnetFieldCategory = 'scalar' | 'scalarArray' | 'enumArray' | 'object' | 'objectArray' | 'json' | 'map' | 'ref' | 'refArray';
 
-interface FieldInfo {
+export interface DotnetFieldInfo {
   source: NormalizedField;
   json: string;
   /** Property name in Row / bodies / filters (JSON name = `json`). */
   prop: string;
-  category: Category;
+  category: DotnetFieldCategory;
   /** C# value type without `?` as seen in Row / bodies for non-relation fields. */
   type: string;
   isValueType: boolean;
@@ -57,14 +58,17 @@ interface FieldInfo {
   defaultLiteral?: string;
   enumName?: string;
   enumNumeric?: boolean;
-  /** ref: FK property; refArray: navigation collection. */
+  /** ref: FK property. */
   fk?: string;
+  /** Navigation (relational reference strategy only): ref → target entity, refArray → collection of targets. */
   nav?: string;
-  target?: TargetInfo;
+  /** Name of the reference without `Id` / `Ids` (`EventType`, `Documents`): the navigation, the populate record. */
+  refStem?: string;
+  target?: DotnetTargetInfo;
   populate?: string[];
 }
 
-interface TargetInfo {
+export interface DotnetTargetInfo {
   entity: string;
   folder: string;
   model: NormalizedModel;
@@ -98,6 +102,9 @@ export interface DotnetModuleContext {
   /** Create / update response projection; only when populated references exist. */
   writeRowArgs: string[];
   hasWriteRow: boolean;
+  /** `Row` with `detailOnly` columns as `null`; list pages project with it (`ListRow`). */
+  listRowArgs: string[];
+  hasListRow: boolean;
   filterProps: string[];
   filterCalls: string[];
   sortEntries: string[];
@@ -107,6 +114,13 @@ export interface DotnetModuleContext {
   uniqueChecks: string[];
   relationChecks: string[];
   relationLoaders: Array<{ nav: string; folder: string; json: string }>;
+  /** Document strategy: `CheckInUseAsync` terms (`|| …` from the second on); empty when no single reference points here. */
+  inUseChecks: string[];
+  /** Document strategy: `DetachReferencesAsync` statements (the id leaves the `reference[]` lists pointing here). */
+  detachReferences: string[];
+  /** Document strategy: `PopulateAsync` statements and the `with` assignments of the populated references. */
+  populateLoads: string[];
+  populateAssigns: string[];
   updateIncludes: string[];
   normal: { create: DotnetBodyContext; update: DotnetBodyContext };
   admin: { create: DotnetBodyContext; update: DotnetBodyContext };
@@ -117,6 +131,8 @@ export interface DotnetModuleContext {
   ops: Record<NormalOperation, boolean>;
   normalAuth: 'anonymous' | 'authenticated';
   hasAdmin: boolean;
+  /** Admin endpoints (`api.adminOperations`; `list` always). */
+  adminOps: Record<NormalOperation, boolean>;
   usesSerialization: boolean;
   usesJson: boolean;
 }
@@ -187,11 +203,12 @@ function subFieldProp(sub: NormalizedObjectSubField): string {
   const required = sub.required && sub.nullable !== true;
   let type: string;
   let isValueType = true;
-  if (sub.kind === 'reference') type = 'Guid';
+  if (sub.kind === 'reference') type = 'EntityId';
   else if (sub.kind === 'enum') {
     type = 'string';
     isValueType = false;
-  } else if (SCALAR_TYPES[sub.kind]) ({ type, isValueType } = SCALAR_TYPES[sub.kind]);
+  } else if (sub.kind === 'number' && sub.numberFormat === 'int') type = 'int';
+  else if (SCALAR_TYPES[sub.kind]) ({ type, isValueType } = SCALAR_TYPES[sub.kind]);
   else throw new DotnetUnsupportedError(`alt alan ${sub.name}: ${sub.kind} (iç içe obje / json / map) desteklenmiyor.`);
   const init = required && !isValueType ? ' = string.Empty;' : '';
   return `public ${type}${required ? '' : '?'} ${pascalCase(sub.name)} { get; set; }${init} // ${sub.name}${sub.trim ? ' trim' : ''}`;
@@ -219,8 +236,8 @@ function defaultLiteral(field: NormalizedField, enumDef?: DotnetEnum): string | 
 }
 
 /** Filter type actually applied: the model's choice when it fits the kind, otherwise the kind's default. */
-function effectiveFilter(f: FieldInfo): FilterType | null {
-  const byCategory: Partial<Record<Category, FilterType[]>> = {
+function effectiveFilter(f: DotnetFieldInfo): FilterType | null {
+  const byCategory: Partial<Record<DotnetFieldCategory, FilterType[]>> = {
     ref: ['reference'],
     refArray: ['reference']
   };
@@ -242,7 +259,7 @@ function effectiveFilter(f: FieldInfo): FilterType | null {
   return wanted && allowed.includes(wanted) ? wanted : allowed[0];
 }
 
-function filterLine(f: FieldInfo, filter: FilterType): { prop: string; call: string } {
+function filterLine(f: DotnetFieldInfo, filter: FilterType): { prop: string; call: string } {
   const p = f.prop;
   switch (filter) {
     case 'regex':
@@ -259,8 +276,10 @@ function filterLine(f: FieldInfo, filter: FilterType): { prop: string; call: str
       return { prop: `public OneOrMany<${f.type}>? ${p} { get; init; }`, call: `.WhereIn(x => x.${p}, filters.${p})` };
     case 'reference':
       return f.category === 'ref'
-        ? { prop: `public OneOrMany<Guid>? ${p} { get; init; }`, call: `.WhereIn(x => x.${f.fk}, filters.${p})` }
-        : { prop: `public OneOrMany<Guid>? ${p} { get; init; }`, call: `.WhereAnyIn(x => x.${f.nav}, filters.${p})` };
+        ? { prop: `public OneOrMany<EntityId>? ${p} { get; init; }`, call: `.WhereIn(x => x.${f.fk}, filters.${p})` }
+        : f.nav
+          ? { prop: `public OneOrMany<EntityId>? ${p} { get; init; }`, call: `.WhereAnyIn(x => x.${f.nav}, filters.${p})` }
+          : { prop: `public OneOrMany<EntityId>? ${p} { get; init; }`, call: `.WhereAnyIdIn(x => x.${f.prop}, filters.${p})` };
     default:
       throw new DotnetUnsupportedError(`filter ${filter}`);
   }
@@ -269,18 +288,19 @@ function filterLine(f: FieldInfo, filter: FilterType): { prop: string; call: str
 interface ModelInfo {
   model: NormalizedModel;
   names: ReturnType<typeof dotnetModuleNames>;
-  fields: FieldInfo[];
+  fields: DotnetFieldInfo[];
   enums: DotnetEnum[];
   complexTypes: DotnetComplexType[];
 }
 
 /** First pass: C# shapes of every field; references are resolved against `targets`. */
-function describeModel(model: NormalizedModel, targets: Map<string, TargetInfo>): ModelInfo {
+function describeModel(model: NormalizedModel, targets: Map<string, DotnetTargetInfo>, provider: DotnetDbProvider): ModelInfo {
+  const relational = provider.referenceStrategy === 'relational';
   const names = dotnetModuleNames(model.entityName);
   const { entity } = names;
   const enums: DotnetEnum[] = [];
   const complexTypes: DotnetComplexType[] = [];
-  const fields: FieldInfo[] = [];
+  const fields: DotnetFieldInfo[] = [];
 
   for (const field of model.fields) {
     if (BASE_FIELDS.has(field.name)) continue;
@@ -292,13 +312,15 @@ function describeModel(model: NormalizedModel, targets: Map<string, TargetInfo>)
     if (field.kind === 'reference') {
       const target = field.reference?.target ? targets.get(field.reference.target) : undefined;
       const include = field.reference?.include === true && (field.reference?.populate?.length ?? 0) > 0;
+      const populate = target && include ? field.reference!.populate : undefined;
       if (field.isArray) {
-        const nav = target ? (/Ids$/.test(prop) ? pluralize(prop.slice(0, -3)) : prop) : undefined;
-        fields.push({ ...base, category: 'refArray', type: 'Guid', isValueType: true, nav, target, populate: target && include ? field.reference!.populate : undefined });
+        const refStem = /Ids$/.test(prop) ? pluralize(prop.slice(0, -3)) : prop;
+        const nav = target && relational ? refStem : undefined;
+        fields.push({ ...base, category: 'refArray', type: 'EntityId', isValueType: true, nav, refStem, target, populate });
       } else {
-        const stem = /Id$/.test(prop) && prop.length > 2 ? prop.slice(0, -2) : prop;
+        const refStem = /Id$/.test(prop) && prop.length > 2 ? prop.slice(0, -2) : prop;
         const fk = /Id$/.test(prop) ? prop : `${prop}Id`;
-        fields.push({ ...base, category: 'ref', type: 'Guid', isValueType: true, fk, nav: target ? stem : undefined, target, populate: target && include ? field.reference!.populate : undefined });
+        fields.push({ ...base, category: 'ref', type: 'EntityId', isValueType: true, fk, nav: target && relational ? refStem : undefined, refStem, target, populate });
       }
       continue;
     }
@@ -351,12 +373,12 @@ function describeModel(model: NormalizedModel, targets: Map<string, TargetInfo>)
   return { model, names, fields, enums, complexTypes };
 }
 
-function isHidden(f: FieldInfo): boolean {
+function isHidden(f: DotnetFieldInfo): boolean {
   return f.source.access?.hidden === true;
 }
 
 /** Row / body C# type of a non-relation field (lists are never null). */
-function valueType(f: FieldInfo): string {
+function valueType(f: DotnetFieldInfo): string {
   switch (f.category) {
     case 'scalarArray':
     case 'enumArray':
@@ -374,7 +396,7 @@ function boundLiteral(type: string, value: number): string {
 }
 
 /** One FluentValidation call each, so `.When` applies to that check (optional bodies). */
-function validatorChecks(f: FieldInfo): string[] {
+function validatorChecks(f: DotnetFieldInfo, provider: DotnetDbProvider): string[] {
   const checks: string[] = [];
   // Same limits and email pattern as the other stacks (`fieldConstraints.ts`); arrays carry none.
   const c = constraintsForField(f.source, f.source.constraints);
@@ -382,7 +404,10 @@ function validatorChecks(f: FieldInfo): string[] {
     if (f.required) checks.push('NotEmpty()');
     if (f.source.format === 'email') checks.push(`Matches(${csString(EMAIL_PATTERN)})`);
     if (c?.minLength != null) checks.push(`MinimumLength(${c.minLength})`);
-    if (c?.maxLength != null) checks.push(`MaximumLength(${c.maxLength})`);
+    // A unique column the provider bounds (SQL Server `nvarchar(850)`) is bounded here too: longer is 400, not a
+    // truncation error (500) from the database.
+    const maxLength = c?.maxLength ?? (f.source.unique ? provider.uniqueTextMaxLength : undefined);
+    if (maxLength != null) checks.push(`MaximumLength(${maxLength})`);
     if (c?.pattern) checks.push(`Matches(${csString(c.pattern)})`);
   }
   if (f.category === 'scalar' && (f.type === 'int' || f.type === 'double' || f.type === 'decimal')) {
@@ -394,31 +419,40 @@ function validatorChecks(f: FieldInfo): string[] {
   return checks;
 }
 
-function isCollection(f: FieldInfo): boolean {
+function isCollection(f: DotnetFieldInfo): boolean {
   return f.category === 'scalarArray' || f.category === 'enumArray' || f.category === 'objectArray' || f.category === 'refArray';
 }
 
-function buildBody(name: string, fields: FieldInfo[], mode: 'create' | 'update'): DotnetBodyContext {
+function buildBody(name: string, fields: DotnetFieldInfo[], mode: 'create' | 'update', provider: DotnetDbProvider): DotnetBodyContext {
   const props: string[] = [];
   const rules: string[] = [];
   const mapCreate: string[] = [];
   const mapUpdate: string[] = [];
   const relations: string[] = [];
   for (const f of fields) {
-    const t = f.category === 'ref' ? 'Guid' : f.category === 'refArray' ? 'List<Guid>' : valueType(f);
+    const t = f.category === 'ref' ? 'EntityId' : f.category === 'refArray' ? 'List<EntityId>' : valueType(f);
     const requiredHere = mode === 'create' && f.required && f.defaultLiteral === undefined && !isCollection(f);
-    props.push(requiredHere ? `public required ${t} ${f.prop} { get; init; }` : `public ${t}? ${f.prop} { get; init; }`);
+    // Update (contract §5, JSON Merge Patch): `init` records that the property was in the JSON (`PatchBody.Has`),
+    // so `null` (clear) and "omitted" (unchanged) differ. A required field or a list takes no `null` (400).
+    const accessors = mode === 'update' ? '{ get; init { field = value; Sent(); } }' : '{ get; init; }';
+    props.push(requiredHere ? `public required ${t} ${f.prop} { get; init; }` : `public ${t}? ${f.prop} ${accessors}`);
+    const clears = mode === 'update' && updateNullClears({ required: f.required, isArray: isCollection(f) });
+    if (mode === 'update' && !clears) {
+      rules.push(`RuleFor(x => x.${f.prop}).NotNull().WithMessage(PatchBody.NullNotAllowed).When(x => x.Has(nameof(x.${f.prop})));`);
+    }
 
     const when = requiredHere ? '' : `.When(x => x.${f.prop} is not null)`;
-    for (const check of validatorChecks(f)) rules.push(`RuleFor(x => x.${f.prop}).${check}${when};`);
+    for (const check of validatorChecks(f, provider)) rules.push(`RuleFor(x => x.${f.prop}).${check}${when};`);
     if ((f.category === 'object' || f.category === 'json') && requiredHere) rules.push(`RuleFor(x => x.${f.prop}).NotNull();`);
 
     const trim = f.source.trim === true && f.category === 'scalar' && f.type === 'string';
     const v = `body.${f.prop}`;
     if (f.category === 'refArray') {
-      if (f.target) relations.push(`await Load${f.nav}Async(entity, ${v}, cancellationToken)`);
-      else if (mode === 'create') mapCreate.push(`${f.prop} = ${v} ?? [],`);
-      else mapUpdate.push(`if (${v} is not null) entity.${f.prop} = ${v};`);
+      // Id list of a known target (document strategy) is a set, as the join table of the relational one.
+      const ids = f.target ? `${v}.Distinct().ToList()` : v;
+      if (f.nav) relations.push(`await Load${f.nav}Async(entity, ${v}, cancellationToken)`);
+      else if (mode === 'create') mapCreate.push(`${f.prop} = ${f.target ? `${v}?.Distinct().ToList()` : v} ?? [],`);
+      else mapUpdate.push(`if (${v} is not null) entity.${f.prop} = ${ids};`);
       continue;
     }
     const member = f.category === 'ref' ? f.fk! : f.prop;
@@ -437,6 +471,9 @@ function buildBody(name: string, fields: FieldInfo[], mode: 'create' | 'update')
         else expr = nullable;
       }
       mapCreate.push(`${member} = ${expr},`);
+    } else if (clears) {
+      // Sent → assign as is: `null` clears the (nullable) entity member.
+      mapUpdate.push(`if (body.Has(nameof(body.${f.prop}))) entity.${member} = ${trim ? `${v}?.Trim()` : v};`);
     } else {
       const assigned = f.isValueType && !isCollection(f) ? `${v}.Value` : trim ? `${v}.Trim()` : v;
       mapUpdate.push(`if (${v} is not null) entity.${member} = ${assigned};`);
@@ -446,10 +483,10 @@ function buildBody(name: string, fields: FieldInfo[], mode: 'create' | 'update')
 }
 
 /** Row param + projection for a populated reference (target's fields, in `populate` order). */
-function refRecord(owner: string, f: FieldInfo, infos: Map<string, ModelInfo>, nav: string, usings: Set<string>) {
+function refRecord(owner: string, f: DotnetFieldInfo, infos: Map<string, ModelInfo>, nav: string, usings: Set<string>) {
   const target = infos.get(f.target!.model.entityName)!;
-  const name = `${owner}${f.category === 'refArray' ? singularize(f.nav!) : f.nav}Ref`;
-  const params = ['Guid Id'];
+  const name = `${owner}${f.category === 'refArray' ? singularize(f.refStem!) : f.refStem}Ref`;
+  const params = ['EntityId Id'];
   const args = [`${nav}.Id`];
   const seen = new Set<string>();
   for (const key of f.populate ?? []) {
@@ -463,7 +500,7 @@ function refRecord(owner: string, f: FieldInfo, infos: Map<string, ModelInfo>, n
     const tf = target.fields.find((x) => x.json === key);
     if (!tf || isHidden(tf) || tf.category === 'refArray') continue;
     if (tf.category === 'ref') {
-      params.push(`Guid${tf.required ? '' : '?'} ${tf.prop}`);
+      params.push(`EntityId${tf.required ? '' : '?'} ${tf.prop}`);
       args.push(`${nav}.${tf.fk}`);
       continue;
     }
@@ -474,7 +511,39 @@ function refRecord(owner: string, f: FieldInfo, infos: Map<string, ModelInfo>, n
   return { record: { name, params }, args };
 }
 
-function buildModuleContext(app: string, info: ModelInfo, infos: Map<string, ModelInfo>): DotnetModuleContext {
+/**
+ * `PopulateAsync` lines of one populated reference without a navigation: distinct ids of the page, one query for the
+ * targets (dictionary by id), then the row's `Ref` gets its record (`null` when the target is gone). `target` is the
+ * pattern variable the record arguments read (`t0`, `t1`, …: one per field, they share the `with` expression).
+ */
+function populateLines(f: DotnetFieldInfo, recordName: string, args: string[], target: string): { loads: string[]; assign: string } {
+  const stem = f.refStem!.charAt(0).toLowerCase() + f.refStem!.slice(1);
+  const ids = `${stem}Ids`;
+  const targets = `${stem}Targets`;
+  const r = `r.${f.prop}`;
+  const pick =
+    f.category === 'refArray'
+      ? `rows.SelectMany(r => ${r}).Select(x => x.Id)`
+      : f.required
+        ? `rows.Select(r => ${r}.Id)`
+        : `rows.Where(r => ${r} is not null).Select(r => ${r}!.Id)`;
+  const record = (id: string) => `new Ref<${recordName}>(${id}, ${targets}.GetValueOrDefault(${id}) is { } ${target} ? new ${recordName}(${args.join(', ')}) : null)`;
+  const assign =
+    f.category === 'refArray'
+      ? `${f.prop} = ${r}.Select(x => ${record('x.Id')}).ToList(),`
+      : f.required
+        ? `${f.prop} = ${record(`${r}.Id`)},`
+        : `${f.prop} = ${r} is null ? null : ${record(`${r}.Id`)},`;
+  return {
+    loads: [
+      `var ${ids} = ${pick}.Distinct().ToList();`,
+      `var ${targets} = await Db.${f.target!.folder}.AsNoTracking().Where(t => ${ids}.Contains(t.Id)).ToDictionaryAsync(t => t.Id, cancellationToken);`
+    ],
+    assign
+  };
+}
+
+function buildModuleContext(app: string, info: ModelInfo, infos: Map<string, ModelInfo>, provider: DotnetDbProvider): DotnetModuleContext {
   const { model, names, fields, enums, complexTypes } = info;
   const { entity } = names;
   const visible = fields.filter((f) => !isHidden(f));
@@ -486,18 +555,19 @@ function buildModuleContext(app: string, info: ModelInfo, infos: Map<string, Mod
   // Entity. Every model property ends with a marker comment (`// <json name> [unique] [trim] [required]`): the
   // .NET entity parser reads the JSON name and the flags the C# declaration cannot carry (D5).
   const entityProps: string[] = [];
-  const marker = (f: FieldInfo) =>
-    ` // ${[f.json, f.source.unique ? 'unique' : '', f.source.trim ? 'trim' : '', f.required && isCollection(f) ? 'required' : ''].filter(Boolean).join(' ')}`;
-  const push = (f: FieldInfo, line: string) => entityProps.push(line + marker(f));
+  // Reference without a navigation (document strategy): the target travels in the marker (`ref=<Folder>`).
+  const marker = (f: DotnetFieldInfo) =>
+    ` // ${[f.json, f.source.unique ? 'unique' : '', f.source.trim ? 'trim' : '', f.required && isCollection(f) ? 'required' : '', f.target && !f.nav ? `ref=${f.target.folder}` : ''].filter(Boolean).join(' ')}`;
+  const push = (f: DotnetFieldInfo, line: string) => entityProps.push(line + marker(f));
   for (const f of fields) {
-    if (f.target) domainFolders.add(f.target.folder);
+    if (f.nav) domainFolders.add(f.target!.folder);
     switch (f.category) {
       case 'ref':
-        push(f, `public Guid${f.required ? '' : '?'} ${f.fk} { get; set; }`);
+        push(f, `public EntityId${f.required ? '' : '?'} ${f.fk} { get; set; }`);
         if (f.nav) entityProps.push(`public ${f.target!.entity}? ${f.nav} { get; set; } // nav`);
         break;
       case 'refArray':
-        push(f, f.nav ? `public List<${f.target!.entity}> ${f.nav} { get; set; } = [];` : `public List<Guid> ${f.prop} { get; set; } = [];`);
+        push(f, f.nav ? `public List<${f.target!.entity}> ${f.nav} { get; set; } = [];` : `public List<EntityId> ${f.prop} { get; set; } = [];`);
         break;
       case 'scalarArray':
       case 'enumArray':
@@ -524,61 +594,88 @@ function buildModuleContext(app: string, info: ModelInfo, infos: Map<string, Mod
 
   // Row. Populated references are `Ref<TRecord>`: object in list / getOne (`Row`), id only in create / update
   // responses (`WriteRow`), as Express returns them (contract §4).
-  const rowParams = ['Guid Id'];
+  const rowParams = ['EntityId Id'];
   const rowArgs = ['x.Id'];
   const writeRowArgs = ['x.Id'];
+  const detailOnlyArgs = new Set<number>();
   const same = (expr: string) => {
     rowArgs.push(expr);
     writeRowArgs.push(expr);
   };
+  // Document strategy (no navigation): the projection writes ids, `PopulateAsync` fills the records after the read.
+  const populateLoads: string[] = [];
+  const populateAssigns: string[] = [];
+  const populate = (f: DotnetFieldInfo, recordName: string, args: string[], target: string) => {
+    const lines = populateLines(f, recordName, args, target);
+    populateLoads.push(...lines.loads);
+    populateAssigns.push(lines.assign);
+  };
   for (const f of visible) {
     if (f.category === 'ref') {
       if (f.populate) {
-        const nav = `x.${f.nav}!`;
+        const id = f.required ? `x.${f.fk}` : `x.${f.fk}.Value`;
+        const nav = f.nav ? `x.${f.nav}!` : `t${populateAssigns.length}`;
         const { record, args } = refRecord(entity, f, infos, nav, dtoFolders);
         refRecords.push(record);
         rowParams.push(`Ref<${record.name}>${f.required ? '' : '?'} ${f.prop}`);
-        const id = f.required ? `x.${f.fk}` : `x.${f.fk}.Value`;
-        const full = `new Ref<${record.name}>(${id}, new ${record.name}(${args.join(', ')}))`;
         const bare = `new Ref<${record.name}>(${id}, null)`;
-        rowArgs.push(f.required ? full : `x.${f.fk} == null ? null : ${full}`);
         writeRowArgs.push(f.required ? bare : `x.${f.fk} == null ? null : ${bare}`);
+        if (f.nav) {
+          const full = `new Ref<${record.name}>(${id}, new ${record.name}(${args.join(', ')}))`;
+          rowArgs.push(f.required ? full : `x.${f.fk} == null ? null : ${full}`);
+        } else {
+          rowArgs.push(f.required ? bare : `x.${f.fk} == null ? null : ${bare}`);
+          populate(f, record.name, args, nav);
+        }
       } else {
-        rowParams.push(`Guid${f.required ? '' : '?'} ${f.prop}`);
+        rowParams.push(`EntityId${f.required ? '' : '?'} ${f.prop}`);
         same(`x.${f.fk}`);
       }
       continue;
     }
     if (f.category === 'refArray') {
-      if (f.populate) {
+      if (f.populate && f.nav) {
         const { record, args } = refRecord(entity, f, infos, 't', dtoFolders);
         refRecords.push(record);
         rowParams.push(`List<Ref<${record.name}>> ${f.prop}`);
         rowArgs.push(`x.${f.nav}.Select(t => new Ref<${record.name}>(t.Id, new ${record.name}(${args.join(', ')}))).ToList()`);
         writeRowArgs.push(`x.${f.nav}.Select(t => new Ref<${record.name}>(t.Id, null)).ToList()`);
+      } else if (f.populate) {
+        const target = `t${populateAssigns.length}`;
+        const { record, args } = refRecord(entity, f, infos, target, dtoFolders);
+        refRecords.push(record);
+        rowParams.push(`List<Ref<${record.name}>> ${f.prop}`);
+        same(`x.${f.prop}.Select(id => new Ref<${record.name}>(id, null)).ToList()`);
+        populate(f, record.name, args, target);
       } else if (f.nav) {
-        rowParams.push(`List<Guid> ${f.prop}`);
+        rowParams.push(`List<EntityId> ${f.prop}`);
         same(`x.${f.nav}.Select(t => t.Id).ToList()`);
       } else {
-        rowParams.push(`List<Guid> ${f.prop}`);
+        rowParams.push(`List<EntityId> ${f.prop}`);
         same(`x.${f.prop}`);
       }
       continue;
     }
     if (f.category === 'json') usesJson = true;
-    rowParams.push(`${valueType(f)}${f.required || isCollection(f) ? '' : '?'} ${f.prop}`);
+    // `detailOnly`: `null` in list rows (`ListRow`), so the row type is nullable.
+    const detailOnly = f.source.access?.detailOnly === true;
+    if (detailOnly) detailOnlyArgs.add(rowArgs.length);
+    rowParams.push(`${valueType(f)}${(f.required || isCollection(f)) && !detailOnly ? '' : '?'} ${f.prop}`);
     same(`x.${f.prop}`);
   }
   rowParams.push('DateTimeOffset CreatedAt', 'DateTimeOffset UpdatedAt');
   same('x.CreatedAt');
   same('x.UpdatedAt');
-  const hasWriteRow = refRecords.length > 0;
+  const hasWriteRow = rowArgs.join() !== writeRowArgs.join();
+  // List page projection: `detailOnly` columns are not read (contract: `null` in list rows, getOne returns them).
+  const listRowArgs = rowArgs.map((arg, i) => (detailOnlyArgs.has(i) ? 'null' : arg));
+  const hasListRow = detailOnlyArgs.size > 0;
 
   // Filters + sort
-  const filterProps = ['public Guid? Id { get; init; }'];
+  const filterProps = ['public EntityId? Id { get; init; }'];
   const filterCalls = ['.WhereEquals(x => x.Id, filters.Id)'];
   for (const f of visible) {
-    if (f.source.filter?.searchable === false) continue;
+    if (f.source.filter?.searchable === false || f.source.access?.computed === true) continue;
     const filter = effectiveFilter(f);
     if (!filter) continue;
     const line = filterLine(f, filter);
@@ -595,53 +692,13 @@ function buildModuleContext(app: string, info: ModelInfo, infos: Map<string, Mod
 
   const sortEntries = [
     ...visible
-      .filter((f) => f.category === 'scalar' || f.category === 'ref')
-      .map((f) => `.Add(${csString(f.json)}, x => x.${f.category === 'ref' ? f.fk : f.prop})`),
+      .filter((f) => (f.category === 'scalar' || f.category === 'ref') && f.source.access?.computed !== true)
+      .map((f) => `.Add(${csString(f.json)}, ${provider.sortKey(f, f.category === 'ref' ? f.fk! : f.prop)})`),
     '.Add("createdAt", x => x.CreatedAt)',
     '.Add("updatedAt", x => x.UpdatedAt)'
   ];
 
-  // Configuration
-  const configLines = [`builder.ToTable(${csString(names.table)});`, 'builder.HasKey(x => x.Id);', 'builder.Property(x => x.Id).ValueGeneratedNever();'];
-  let usesJsonb = false;
-  for (const f of fields) {
-    switch (f.category) {
-      case 'scalar':
-        if (f.type === 'string' && f.required) configLines.push(`builder.Property(x => x.${f.prop}).IsRequired();`);
-        if (f.enumName && !f.enumNumeric) configLines.push(`builder.Property(x => x.${f.prop}).HasConversion<string>();`);
-        break;
-      case 'enumArray':
-      case 'map':
-        usesJsonb = true;
-        configLines.push(`builder.Property(x => x.${f.prop}).HasJsonbConversion();`);
-        break;
-      case 'object':
-        configLines.push(`builder.ComplexProperty(x => x.${f.prop}, b => b.ToJson());`);
-        break;
-      case 'objectArray':
-        configLines.push(`builder.ComplexCollection(x => x.${f.prop}, b => b.ToJson());`);
-        break;
-      case 'json':
-        configLines.push(`builder.Property(x => x.${f.prop}).HasColumnType("jsonb");`);
-        break;
-      case 'ref':
-        if (f.nav) {
-          configLines.push(
-            `builder.HasOne(x => x.${f.nav}).WithMany().HasForeignKey(x => x.${f.fk}).IsRequired(${f.required}).OnDelete(DeleteBehavior.Restrict);`
-          );
-        } else configLines.push(`builder.HasIndex(x => x.${f.fk});`);
-        break;
-      case 'refArray':
-        if (f.nav) {
-          configLines.push(`builder.HasMany(x => x.${f.nav}).WithMany().UsingEntity(j => j.ToTable(${csString(`${names.table}_${snake(f.prop)}`)}));`);
-        }
-        break;
-    }
-    if (f.source.unique && (f.category === 'scalar' || f.category === 'ref')) {
-      configLines.push(`builder.HasIndex(x => x.${f.category === 'ref' ? f.fk : f.prop}).IsUnique();`);
-    }
-  }
-  configLines.push('builder.HasIndex(x => x.CreatedAt);');
+  const config = provider.configure({ app, names, fields });
 
   // Service: unique, relation checks, m-n loaders
   const uniqueChecks = fields
@@ -653,22 +710,43 @@ function buildModuleContext(app: string, info: ModelInfo, infos: Map<string, Mod
     })
     .map((expr, i) => (i === 0 ? expr : `?? ${expr}`));
 
+  const missing = (f: DotnetFieldInfo) => `Error.BadRequest(string.Format(Messages.ReferenceNotFound, ${csString(f.json)}))`;
   const relationChecks = fields
-    .filter((f) => f.category === 'ref' && f.target)
+    .filter((f) => (f.category === 'ref' || (f.category === 'refArray' && !f.nav)) && f.target)
     .map((f) => {
+      if (f.category === 'refArray') {
+        // Id list (document strategy): every distinct id must exist.
+        const ids = `entity.${f.prop}`;
+        return `if (${ids}.Count > 0 && await Db.${f.target!.folder}.CountAsync(t => ${ids}.Contains(t.Id), cancellationToken) != ${ids}.Distinct().Count()) return ${missing(f)};`;
+      }
       const exists = `await Db.${f.target!.folder}.AnyAsync(t => t.Id == entity.${f.fk}, cancellationToken)`;
-      const missing = `Error.BadRequest(string.Format(Messages.ReferenceNotFound, ${csString(f.json)}))`;
       return f.required
-        ? `if (!${exists}) return ${missing};`
-        : `if (entity.${f.fk} is not null && !${exists}) return ${missing};`;
+        ? `if (!${exists}) return ${missing(f)};`
+        : `if (entity.${f.fk} is not null && !${exists}) return ${missing(f)};`;
     });
 
-  const relationFields = fields.filter((f) => f.category === 'refArray' && f.target);
+  // Document strategy, no foreign keys; on delete it answers as the relational one: a single reference to the record
+  // refuses the delete (409, FK Restrict), the record's id leaves the id lists pointing to it (join-table cascade).
+  const referrers = (category: 'ref' | 'refArray') =>
+    provider.referenceStrategy === 'document'
+      ? [...infos.values()].flatMap((other) =>
+          other.fields
+            .filter((rf) => rf.category === category && rf.target?.model.entityName === model.entityName)
+            .map((rf) => ({ folder: other.names.folder, rf }))
+        )
+      : [];
+  const inUseChecks = referrers('ref').map(({ folder, rf }) => `await Db.${folder}.AnyAsync(t => t.${rf.fk} == entity.Id, cancellationToken)`);
+  const detachReferences = referrers('refArray').map(
+    ({ folder, rf }) =>
+      `foreach (var referrer in await Db.${folder}.Where(t => t.${rf.prop}.Contains(entity.Id)).ToListAsync(cancellationToken)) referrer.${rf.prop}.Remove(entity.Id);`
+  );
+
+  const relationFields = fields.filter((f) => f.category === 'refArray' && f.nav);
   const relationLoaders = relationFields.map((f) => ({ nav: f.nav!, folder: f.target!.folder, json: csString(f.json) }));
   const updateIncludes = relationFields.map((f) => `.Include(x => x.${f.nav})`);
 
-  const writable = (f: FieldInfo, mode: 'create' | 'update') =>
-    f.source.access?.readonly !== true && (mode === 'create' ? f.source.access?.hiddenFromCreate !== true : f.source.access?.hiddenFromUpdate !== true);
+  const writable = (f: DotnetFieldInfo, mode: 'create' | 'update') =>
+    f.source.access?.readonly !== true && f.source.access?.computed !== true && (mode === 'create' ? f.source.access?.hiddenFromCreate !== true : f.source.access?.hiddenFromUpdate !== true);
   // Ownership (contract §2, §5): explicit kind, or derived from a `userId` reference.
   const ownerField = fields.find((f) => f.json === 'userId' && f.category === 'ref');
   const ownershipKind = model.ownership?.kind ?? (ownerField ? 'field' : undefined);
@@ -689,8 +767,8 @@ function buildModuleContext(app: string, info: ModelInfo, infos: Map<string, Mod
   const droppedOperations = requested.filter((op) => !allowed(op));
   const ops = Object.fromEntries(NORMAL_OPERATIONS.map((op) => [op, normalOperations.includes(op)])) as Record<NormalOperation, boolean>;
   const writes = ops.create || ops.update || ops.delete;
-  const normalCreate = buildBody(`${entity}CreateBody`, normalFields('create'), 'create');
-  if (ownership?.kind === 'field') normalCreate.mapCreate.push(`${ownership.fk} = currentUser.Id${ownerField!.required ? ' ?? Guid.Empty' : ''},`);
+  const normalCreate = buildBody(`${entity}CreateBody`, normalFields('create'), 'create', provider);
+  if (ownership?.kind === 'field') normalCreate.mapCreate.push(`${ownership.fk} = currentUser.Id${ownerField!.required ? ' ?? default' : ''},`);
 
   const domainUsings = [...domainFolders].sort().map((folder) => `${app}.Domain.${folder}`);
   if (usesJson) domainUsings.unshift('System.Text.Json');
@@ -698,12 +776,11 @@ function buildModuleContext(app: string, info: ModelInfo, infos: Map<string, Mod
   const needsOwnDomain = enums.length > 0 || complexTypes.length > 0;
   const dtoUsings = [
     ...(usesJson ? ['System.Text.Json'] : []),
+    `${app}.Application.Common.Patch`,
     ...(refRecords.length ? [`${app}.Application.Common.Relations`] : []),
     ...(needsOwnDomain ? [`${app}.Domain.${names.folder}`] : []),
     ...[...dtoFolders].filter((x) => x !== names.folder).sort().map((folder) => `${app}.Domain.${folder}`)
   ];
-  const infraUsings = [...(usesJsonb ? [`${app}.Infrastructure.Common`] : [])];
-
   return {
     app,
     ...names,
@@ -716,24 +793,30 @@ function buildModuleContext(app: string, info: ModelInfo, infos: Map<string, Mod
     rowParams,
     rowArgs,
     writeRowArgs,
+    listRowArgs,
+    hasListRow,
     hasWriteRow,
     filterProps,
     filterCalls,
     sortEntries,
-    configLines,
-    infraUsings,
+    configLines: config.lines,
+    infraUsings: config.usings,
     uniqueChecks,
     relationChecks,
     relationLoaders,
-    usesErrors: uniqueChecks.length + relationChecks.length + relationLoaders.length > 0,
+    usesErrors: uniqueChecks.length + relationChecks.length + relationLoaders.length + inUseChecks.length > 0,
+    inUseChecks: inUseChecks.map((check, i) => (i === 0 ? check : `|| ${check}`)),
+    detachReferences,
+    populateLoads,
+    populateAssigns,
     updateIncludes,
     normal: {
       create: normalCreate,
-      update: buildBody(`${entity}UpdateBody`, normalFields('update'), 'update')
+      update: buildBody(`${entity}UpdateBody`, normalFields('update'), 'update', provider)
     },
     admin: {
-      create: buildBody(`${entity}AdminCreateBody`, adminFields('create'), 'create'),
-      update: buildBody(`${entity}AdminUpdateBody`, adminFields('update'), 'update')
+      create: buildBody(`${entity}AdminCreateBody`, adminFields('create'), 'create', provider),
+      update: buildBody(`${entity}AdminUpdateBody`, adminFields('update'), 'update', provider)
     },
     normalOperations,
     droppedOperations,
@@ -742,20 +825,21 @@ function buildModuleContext(app: string, info: ModelInfo, infos: Map<string, Mod
     // Default is authenticated (as Express: `moduleApiDetect` → `requiresAuth: true`); anonymous only when asked for.
     normalAuth: model.api?.requiresAuth === false && !writes && !ownership ? 'anonymous' : 'authenticated',
     hasAdmin: model.api?.admin !== false,
+    adminOps: Object.fromEntries(NORMAL_OPERATIONS.map((op) => [op, resolveAdminOperations(model.api).includes(op)])) as Record<NormalOperation, boolean>,
     usesSerialization: enums.length > 0,
     usesJson
   };
 }
 
 /** Contexts for the host's whole module list (references resolve within it). */
-export function buildDotnetModuleContexts(app: string, models: NormalizedModel[]): DotnetModuleContext[] {
-  const targets = new Map<string, TargetInfo>();
+export function buildDotnetModuleContexts(app: string, models: NormalizedModel[], provider: DotnetDbProvider): DotnetModuleContext[] {
+  const targets = new Map<string, DotnetTargetInfo>();
   for (const model of models) {
     const { entity, folder } = dotnetModuleNames(model.entityName);
     targets.set(model.entityName, { entity, folder, model });
   }
-  const infos = new Map(models.map((m) => [m.entityName, describeModel(m, targets)]));
-  return models.map((m) => buildModuleContext(app, infos.get(m.entityName)!, infos));
+  const infos = new Map(models.map((m) => [m.entityName, describeModel(m, targets, provider)]));
+  return models.map((m) => buildModuleContext(app, infos.get(m.entityName)!, infos, provider));
 }
 
 export function dotnetRegistryModule(ctx: DotnetModuleContext): DotnetRegistryModule {

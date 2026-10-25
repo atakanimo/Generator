@@ -92,7 +92,8 @@ export function newObjectSubField(): NormalizedObjectSubField {
   return { name: '', kind: 'string', required: false, trim: true };
 }
 
-/** A field of the chosen editor type: name / required / unique / trim carry over; enum, default and type details reset. */
+/** A field of the chosen editor type: name / required carry over; `trim` only for text (string, string array), `unique`
+ * not for boolean / map / object; enum, default and type details reset. */
 export function withEditorType(field: NormalizedField, type: Exclude<EditorFieldType, 'Other'>): NormalizedField {
   const base = { name: field.name, required: field.required };
   switch (type) {
@@ -101,15 +102,15 @@ export function withEditorType(field: NormalizedField, type: Exclude<EditorField
     case 'Array':
       return { ...base, kind: 'string', isArray: true, unique: field.unique, trim: field.trim };
     case 'Map':
-      return { ...base, kind: 'map', isArray: false, unique: field.unique, trim: field.trim };
+      return { ...base, kind: 'map', isArray: false, unique: false, trim: false };
     case 'ObjectId':
-      return { ...base, kind: 'reference', isArray: false, unique: field.unique, trim: field.trim };
+      return { ...base, kind: 'reference', isArray: false, unique: field.unique, trim: false };
     case 'Number':
-      return { ...base, kind: 'number', isArray: false, unique: field.unique, trim: field.trim };
+      return { ...base, kind: 'number', isArray: false, unique: field.unique, trim: false };
     case 'Boolean':
-      return { ...base, kind: 'boolean', isArray: false, unique: field.unique, trim: field.trim };
+      return { ...base, kind: 'boolean', isArray: false, unique: false, trim: false };
     case 'Date':
-      return { ...base, kind: 'date', isArray: false, unique: field.unique, trim: field.trim };
+      return { ...base, kind: 'date', isArray: false, unique: field.unique, trim: false };
     default:
       return { ...base, kind: 'string', isArray: false, unique: field.unique, trim: field.trim };
   }
@@ -131,17 +132,41 @@ export function withEditorSubType(sub: NormalizedObjectSubField, type: EditorSub
   }
 }
 
-/** Mongoose `ref` of an ObjectId field. */
+/** Target model of a reference field (Mongoose `ref`, EF navigation, Python reference). */
 export function referenceTargetOf(field: NormalizedField): string {
   return field.reference?.target ?? '';
 }
 
+/** Sets the target; a different target drops populate / display (they name the old target's fields). */
 export function withReferenceTarget(field: NormalizedField, target: string | undefined): NormalizedField {
-  const { target: _t, include: _i, ...rest } = field.reference ?? {};
-  const reference = target ? { ...rest, include: true, target } : rest;
+  const { target: prev, include: _i, ...rest } = field.reference ?? {};
+  const kept: Omit<NonNullable<NormalizedField['reference']>, 'target' | 'include'> = { ...rest };
+  if (prev !== target) {
+    delete kept.populate;
+    delete kept.display;
+    delete kept.displayObjectFields;
+  }
+  const reference = target ? { ...kept, include: true, target } : kept;
   const out: NormalizedField = { ...field, reference };
   if (Object.keys(reference).length === 0) delete out.reference;
   return out;
+}
+
+/** Populated target fields (read endpoints return `{ id, ...populate }`) and the display field (admin autocomplete,
+ * table cell). `display` must be one of `populate`; it falls back to the first one. Empty populate → id only. */
+export function withReferencePopulate(field: NormalizedField, populate: string[], display?: string): NormalizedField {
+  const reference = { ...field.reference };
+  const names = [...new Set(populate.map(p => p.trim()).filter(Boolean))];
+  if (names.length === 0) {
+    delete reference.populate;
+    delete reference.display;
+    delete reference.displayObjectFields;
+  } else {
+    reference.populate = names;
+    reference.display = display && names.includes(display) ? display : names[0];
+    if (reference.display !== field.reference?.display) delete reference.displayObjectFields;
+  }
+  return { ...field, reference };
 }
 
 export function subReferenceOf(sub: NormalizedObjectSubField): string {
@@ -252,6 +277,7 @@ export function normalizeEditedField(field: NormalizedField): NormalizedField {
             const s: NormalizedObjectSubField = { ...sub, trim: sub.kind === 'string' ? Boolean(sub.trim) : false };
             if (sub.kind === 'number') s.nullable = Boolean(sub.nullable);
             else delete s.nullable;
+            if (sub.kind !== 'number' || sub.numberFormat !== 'int') delete s.numberFormat;
             if (sub.kind !== 'reference') delete s.reference;
             return s;
           });

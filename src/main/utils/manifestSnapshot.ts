@@ -4,6 +4,7 @@ import { parseNormalizedModel } from '../ipc/schemaParser.js';
 import { mergeModel, sanitizeFieldRelationMeta } from '../../shared/modelMerge.js';
 import { NORMALIZED_MODEL_VERSION, canonicalModel, type NormalizedModel } from '../../shared/normalizedModel.js';
 import type { ManifestWorkspacePrefs } from '../../shared/ipcTypes.js';
+import { LEGACY_HOST_DATABASE, hostDatabaseError, type BackendStack, type HostDatabase } from '../../shared/backendDatabase.js';
 import { log } from './logger.js';
 import { getGeneratorRoot } from './templateHelpers.js';
 
@@ -74,6 +75,42 @@ function readGeneratorVersion(): string {
   }
 }
 
+/**
+ * Manifests written before `database` / `idType` existed get what their stack generated then (plan
+ * backend-dotnet-database-providers K2); the next manifest write persists it. `dotnet-ef` is not filled here: a .NET
+ * host can be on any of three databases, so the generator reads it from the project (`resolveDotnetHostDatabase`).
+ * An unknown stack is left as is (no fill, the manifest is still read).
+ */
+function withHostDatabase(workspace: ManifestWorkspacePrefs): ManifestWorkspacePrefs {
+  if (!workspace.backendStack || workspace.backendStack === 'dotnet-ef' || (workspace.database && workspace.idType)) {
+    return workspace;
+  }
+  const legacy = LEGACY_HOST_DATABASE[workspace.backendStack as BackendStack] as HostDatabase | undefined;
+  if (!legacy) return workspace;
+  return { ...workspace, database: workspace.database ?? legacy.database, idType: workspace.idType ?? legacy.idType };
+}
+
+/**
+ * Express / Python generate: refused when the manifest records a database / id type the stack does not generate for
+ * (ör. `python-fastapi` + `postgres`). A manifest without the fields (older hosts) passes. .NET: `resolveDotnetHostDatabase`.
+ */
+export function assertHostDatabase(workspaceRoot: string, stack: BackendStack): void {
+  const workspace = getWorkspacePreferences(workspaceRoot);
+  if (!workspace?.database && !workspace?.idType) return;
+  const error = hostDatabaseError(stack, { database: workspace.database, idType: workspace.idType });
+  if (error) throw new Error(`Manifest (.generator/manifest.json) workspace: ${error}`);
+}
+
+/**
+ * Bootstrap guard: the stack, database and id type are fixed once a host exists (K2), so a folder whose manifest
+ * already names a stack is refused (bootstrapping again would overwrite them and regenerate the host for another
+ * database). Each bootstrap also checks its own project files.
+ */
+export function existingHostError(workspaceRoot: string): string | null {
+  const stack = getWorkspacePreferences(workspaceRoot)?.backendStack;
+  return stack ? `Bu klasör zaten bir ${stack} projesi (.generator/manifest.json); yeni proje boş bir klasörde kurulur.` : null;
+}
+
 function normalizeManifest(raw: unknown): WorkspaceManifest {
   const base: WorkspaceManifest = {
     manifestVersion: MANIFEST_VERSION,
@@ -89,7 +126,7 @@ function normalizeManifest(raw: unknown): WorkspaceManifest {
     ...stored,
     manifestVersion: MANIFEST_VERSION,
     models: storedVersion >= MANIFEST_VERSION ? (rows as ManifestModelRecord[]) : [],
-    workspace: stored.workspace && typeof stored.workspace === 'object' ? stored.workspace : undefined,
+    workspace: stored.workspace && typeof stored.workspace === 'object' ? withHostDatabase(stored.workspace) : undefined,
     lastSavedAt: stored.lastSavedAt,
     lastGeneratedAt: stored.lastGeneratedAt
   };

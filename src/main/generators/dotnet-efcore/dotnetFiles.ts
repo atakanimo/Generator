@@ -4,7 +4,7 @@
 import Handlebars from 'handlebars';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'fs';
 import { dirname, join, relative } from 'path';
-import { getGeneratorRoot, getTemplatesDir } from '../../utils/templateHelpers.js';
+import { getGeneratorAssetsDir, getTemplatesDir } from '../../utils/templateHelpers.js';
 import { APP_TOKEN, APP_TOKEN_LOWER } from './dotnetLayout.js';
 
 /** Roslyn treats files starting with this comment as generated (hence `#nullable enable` on line 2). */
@@ -14,7 +14,7 @@ export type WriteAction = 'created' | 'updated' | 'unchanged' | 'skipped-user-ow
 export interface WrittenFile { path: string; action: WriteAction }
 
 export function dotnetAssetsDir(): string {
-  return join(getGeneratorRoot(), 'src', 'generator-assets', 'dotnet-efcore');
+  return getGeneratorAssetsDir('dotnet-efcore');
 }
 
 
@@ -72,9 +72,23 @@ export function listFiles(dir: string): string[] {
   return out.sort();
 }
 
-/** Copies a token-bearing asset tree (paths and contents) into `targetDir`, create-only. */
-export function copyAssetTree(sourceDir: string, targetDir: string, app: string): WrittenFile[] {
-  return listFiles(sourceDir).map((file) =>
-    writeOnce(join(targetDir, applyAppTokens(relative(sourceDir, file), app)), applyAppTokens(readFileSync(file, 'utf8'), app))
-  );
+/** `bin/` / `obj/`: build output an IDE restore leaves next to the skeleton's project files; never an asset. */
+const BUILD_OUTPUT = /(^|\/)(bin|obj)\//;
+
+/**
+ * Copies token-bearing asset trees (paths and contents) into `targetDir`, create-only. A file in a later tree replaces
+ * the file on the same relative path of an earlier one (provider layer over the common assets); missing trees are skipped.
+ */
+export function copyAssetTrees(sourceDirs: string[], targetDir: string, app: string): WrittenFile[] {
+  const files = new Map<string, string>();
+  for (const dir of sourceDirs) {
+    if (!existsSync(dir)) continue;
+    for (const file of listFiles(dir)) {
+      const rel = relative(dir, file).replace(/\\/g, '/');
+      if (!BUILD_OUTPUT.test(rel)) files.set(rel, file);
+    }
+  }
+  return [...files.keys()]
+    .sort()
+    .map((rel) => writeOnce(join(targetDir, applyAppTokens(rel, app)), applyAppTokens(readFileSync(files.get(rel)!, 'utf8'), app)));
 }

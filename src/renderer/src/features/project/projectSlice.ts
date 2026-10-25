@@ -1,7 +1,18 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
 import type { NormalizedModel } from '@shared/normalizedModel';
-import type { BackendSelectedFiles, GenerateBackendResult, GenerateFrontendResult, ScannedModel, SourceType } from '@shared/ipcTypes';
+import type {
+  BackendSelectedFiles,
+  BootstrapProjectResult,
+  GenerateBackendResult,
+  GenerateFrontendResult,
+  PythonImportPreview,
+  PythonImportResult,
+  ScannedModel,
+  SourceType
+} from '@shared/ipcTypes';
 import type { ModelDraft } from '@shared/modelDraft';
+import type { NewProjectStack } from '@shared/backendStacks';
+import type { HostDatabase } from '@shared/backendDatabase';
 import { filePathToProjectRelativePath } from '../../utils/schemaUtils';
 import { patchField, patchModelApi, type FieldPatch, type ModelApiSettings } from './modelEdits';
 import {
@@ -52,6 +63,14 @@ interface ProjectState {
   lastUpdatedModelPath: string | null;
   workspaceGeneratePrefs: WorkspaceGeneratePrefs;
   workspaceManifestLoaded: boolean;
+  /** Python import dialog (PY7): hand-written `model.py` → preview (class, fields, extra-field report) → import. */
+  pythonImport: {
+    filePath: string | null;
+    status: 'idle' | 'previewing' | 'ready' | 'importing' | 'imported' | 'error';
+    preview: PythonImportPreview | null;
+    result: PythonImportResult | null;
+    error: string | null;
+  };
 }
 
 const initialState: ProjectState = {
@@ -86,7 +105,8 @@ const initialState: ProjectState = {
   updatingModelError: null,
   lastUpdatedModelPath: null,
   workspaceGeneratePrefs: DEFAULT_WORKSPACE_GENERATE_PREFS,
-  workspaceManifestLoaded: false
+  workspaceManifestLoaded: false,
+  pythonImport: { filePath: null, status: 'idle', preview: null, result: null, error: null }
 };
 
 // Async thunk for scanning project files
@@ -401,6 +421,54 @@ export const updateModel = createAsyncThunk(
   }
 );
 
+/** PY7: parse a hand-written Pydantic module + extra-field report (nothing written). */
+export const previewPythonImport = createAsyncThunk(
+  'project/previewPythonImport',
+  async (
+    { projectPath, filePath, className, allowRemote }: { projectPath: string; filePath: string; className?: string; allowRemote?: boolean },
+    { rejectWithValue }
+  ) => {
+    if (!window.electronAPI?.project?.previewPythonImport) return rejectWithValue('Python import API not available');
+    const result = await window.electronAPI.project.previewPythonImport(projectPath, filePath, { className, allowRemote });
+    // A module without a class named like the entity still lists its classes: the dialog lets the user pick one.
+    return result.success || result.candidates?.length ? result : rejectWithValue(result.error || 'Python modeli okunamadı');
+  }
+);
+
+/** PY7: import the class into the manifest and generate the module. */
+export const importPythonModel = createAsyncThunk(
+  'project/importPythonModel',
+  async ({ projectPath, filePath, className }: { projectPath: string; filePath: string; className?: string }, { rejectWithValue }) => {
+    if (!window.electronAPI?.project?.importPythonModel) return rejectWithValue('Python import API not available');
+    const result = await window.electronAPI.project.importPythonModel(projectPath, filePath, { className });
+    return result.success ? result : rejectWithValue(result.error || 'İçe aktarma başarısız');
+  }
+);
+
+/** Folder picker (Electron dialog): the chosen path, or `null` when cancelled / unavailable. */
+export const pickDirectory = createAsyncThunk('project/pickDirectory', async (): Promise<string | null> => {
+  const result = await window.electronAPI?.dialog?.openDirectory?.();
+  return result && !result.canceled && result.filePaths?.length ? result.filePaths[0] : null;
+});
+
+/**
+ * PY9: new host in an empty folder (.NET / Express / Python). Not listened to by the slice; always fulfils with the IPC
+ * result so the dialog branches on `success` (no try / catch in components).
+ */
+export const bootstrapBackendProject = createAsyncThunk(
+  'project/bootstrapBackendProject',
+  async ({ stack, root, app, db }: { stack: NewProjectStack; root: string; app: string; db: HostDatabase }): Promise<BootstrapProjectResult> => {
+    const api = window.electronAPI?.project;
+    if (stack === 'dotnet-ef') {
+      if (!api?.bootstrapDotnet) return { success: false, error: 'Project bootstrap API not available' };
+      return api.bootstrapDotnet(root, app, db);
+    }
+    const call = stack === 'nodejs-mongoose' ? api?.bootstrapExpress : api?.bootstrapPython;
+    if (!call) return { success: false, error: 'Project bootstrap API not available' };
+    return call(root, app);
+  }
+);
+
 // Async thunk for generating frontend code
 export const generateFrontend = createAsyncThunk(
   'project/generateFrontend',
@@ -506,6 +574,12 @@ const projectSlice = createSlice({
       state.error = null;
     },
     resetProject: () => initialState,
+    openPythonImport: (state, action: PayloadAction<string>) => {
+      state.pythonImport = { filePath: action.payload, status: 'idle', preview: null, result: null, error: null };
+    },
+    closePythonImport: state => {
+      state.pythonImport = initialState.pythonImport;
+    },
     clearSelectedSchema: state => {
       state.selectedModelSchema = null;
       state.selectedModelSourceRelativePath = null;
@@ -674,6 +748,32 @@ const projectSlice = createSlice({
       .addCase(updateModel.rejected, (state, action) => {
         state.updatingModelStatus = 'error';
         state.updatingModelError = action.payload as string;
+      })
+      .addCase(previewPythonImport.pending, state => {
+        state.pythonImport.status = 'previewing';
+        state.pythonImport.error = null;
+      })
+      .addCase(previewPythonImport.fulfilled, (state, action) => {
+        state.pythonImport.status = 'ready';
+        state.pythonImport.preview = action.payload;
+        state.pythonImport.error = action.payload.success ? null : (action.payload.error ?? null);
+      })
+      .addCase(previewPythonImport.rejected, (state, action) => {
+        state.pythonImport.status = 'error';
+        state.pythonImport.preview = null;
+        state.pythonImport.error = (action.payload as string) ?? action.error.message ?? 'Unknown error';
+      })
+      .addCase(importPythonModel.pending, state => {
+        state.pythonImport.status = 'importing';
+        state.pythonImport.error = null;
+      })
+      .addCase(importPythonModel.fulfilled, (state, action) => {
+        state.pythonImport.status = 'imported';
+        state.pythonImport.result = action.payload;
+      })
+      .addCase(importPythonModel.rejected, (state, action) => {
+        state.pythonImport.status = 'ready';
+        state.pythonImport.error = (action.payload as string) ?? action.error.message ?? 'Unknown error';
       });
   }
 });
@@ -689,6 +789,8 @@ export const {
   setError,
   startScanning,
   resetProject,
+  openPythonImport,
+  closePythonImport,
   clearSelectedSchema,
   updateModelApi,
   updateModelLabel,

@@ -8,6 +8,7 @@
  * Admin token'ı JWT_SECRET ile burada imzalanır (HS256, role=Admin). Çıkış kodu: kalan hata sayısı.
  */
 import { createHmac } from 'node:crypto';
+import { ID_LABEL, ID_PATTERN, MISSING_ID, SUBJECT } from './_smoke-ids.mjs';
 
 const base = process.env.API_BASE ?? 'http://localhost:5080';
 const endpoint = process.argv[2] ?? '/api/event-types';
@@ -23,10 +24,10 @@ function sign(payload) {
   return `${head}.${createHmac('sha256', secret).update(head).digest('base64url')}`;
 }
 const now = Math.floor(Date.now() / 1000);
-const claims = { sub: '0199f000-0000-7000-8000-000000000001', iat: now, exp: now + 600 };
+const claims = { sub: SUBJECT, iat: now, exp: now + 600 };
 if (process.env.JWT_ISSUER) claims.iss = process.env.JWT_ISSUER;
 if (process.env.JWT_AUDIENCE) claims.aud = process.env.JWT_AUDIENCE;
-const adminToken = sign({ ...claims, role: 'Admin' });
+const adminToken = sign({ ...claims, role: 'admin' });
 const userToken = sign(claims);
 
 async function call(method, path, body, token) {
@@ -49,7 +50,6 @@ function check(name, ok, detail) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : `  → ${JSON.stringify(detail)}`}`);
 }
 
-const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const ENVELOPE_KEYS = ['data', 'errorData', 'isSuccess', 'uiMessage'];
 
@@ -89,7 +89,7 @@ check('admin get-all Admin rolü yok → 403 zarf', errEnvelope(await call('POST
 const c1 = await call('POST', `${admin}/create`, { name: `${tag}-Düğün`, description: 'Alpha 100%_x' }, adminToken);
 check('create → 200 zarf', okEnvelope(c1), c1);
 const row = c1.json?.data ?? {};
-check('create Row: id uuid v7, _id yok', UUID_V7.test(row.id ?? '') && !('_id' in row), row);
+check(`create Row: id ${ID_LABEL}, _id yok`, ID_PATTERN.test(row.id ?? '') && !('_id' in row), row);
 check('create Row: createdAt/updatedAt ISO UTC', ISO_UTC.test(row.createdAt ?? '') && ISO_UTC.test(row.updatedAt ?? ''), row);
 check('create Row: varsayılan isActive=true', row.isActive === true, row);
 const c2 = await call('POST', `${admin}/create`, { name: `${tag}-Nişan`, isActive: false }, adminToken);
@@ -101,6 +101,9 @@ check('create bilinmeyen anahtar → 400', errEnvelope(await call('POST', `${adm
 check('create name eksik → 400', errEnvelope(await call('POST', `${admin}/create`, { description: 'x' }, adminToken), 400));
 check('create name boş → 400', errEnvelope(await call('POST', `${admin}/create`, { name: '' }, adminToken), 400));
 check('create aynı name → 409', errEnvelope(await call('POST', `${admin}/create`, { name: `${tag}-Düğün` }, adminToken), 409));
+const cased = await call('POST', `${admin}/create`, { name: `${tag}-DÜĞÜN` }, adminToken);
+check('unique büyük / küçük harfe duyarlı (aynı ad, farklı harf → 200)', okEnvelope(cased), cased);
+if (cased.json?.data?.id) await call('DELETE', `${admin}/${cased.json.data.id}`, undefined, adminToken);
 check('create bozuk JSON → 400', errEnvelope(await (async () => {
   const res = await fetch(`${base}${admin}/create`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${adminToken}` }, body: '{"name":' });
   return { status: res.status, json: await res.json().catch(() => null) };
@@ -143,7 +146,7 @@ check('page 0 → 400', errEnvelope(await call('POST', `${endpoint}/get-all`, { 
 // --- getOne
 const g = await call('GET', `${endpoint}/${row.id}`);
 check('normal getOne → 200 Row', okEnvelope(g) && g.json.data.id === row.id, g);
-check('getOne olmayan id → 404 zarf', errEnvelope(await call('GET', `${endpoint}/0199f000-0000-7000-8000-00000000dead`), 404));
+check('getOne olmayan id → 404 zarf', errEnvelope(await call('GET', `${endpoint}/${MISSING_ID}`), 404));
 check('bilinmeyen yol → 404 zarf', errEnvelope(await call('GET', `${endpoint}/not-a-guid`), 404));
 check('normal create ucu yok (normalOperations) → 404/405', [404, 405].includes((await call('POST', `${endpoint}/create`, { name: 'x' })).status));
 
@@ -153,7 +156,7 @@ check('update kısmi → 200 güncel Row', okEnvelope(u) && u.json.data.descript
 check('update updatedAt ilerler', (u.json?.data?.updatedAt ?? '') >= row.updatedAt, u.json?.data);
 check('update body\'de id → 400', errEnvelope(await call('POST', `${admin}/update/${row.id}`, { id: row.id }, adminToken), 400));
 check('update aynı name → 409', errEnvelope(await call('POST', `${admin}/update/${row.id}`, { name: `${tag}-Nişan` }, adminToken), 409));
-check('update olmayan id → 404', errEnvelope(await call('POST', `${admin}/update/0199f000-0000-7000-8000-00000000dead`, {}, adminToken), 404));
+check('update olmayan id → 404', errEnvelope(await call('POST', `${admin}/update/${MISSING_ID}`, {}, adminToken), 404));
 
 // --- delete
 for (const id of [row.id, c2.json?.data?.id]) {

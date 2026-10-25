@@ -1,0 +1,316 @@
+"""{{entity}} admin CRUD testi (Generator, K: ilk generate'te yazılır, sonra sizindir; model değişince yeniden yazılmaz).
+
+Üretilen uçları in-process istemciyle ve sahte Mongo'yla (mongomock, `tests/conftest.py`) uçtan uca dener: zarf ve auth,
+create / getOne / update / delete, varsayılanlar, doğrulama, unique (409), liste (sayfalama, filtre, sıralama) ve
+update'te `null` kuralı (api-contract §5); yalnız açık admin işlemleri (`api.adminOperations`), kapalılar 404 / 405. Örnek değerler modelden üretildi; `hooks.py` / `service.py`'ye iş kuralı
+ekledikçe ya da model değiştikçe burayı güncelleyin.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Any
+
+import pytest
+from bson import ObjectId
+{{#unless adminOps.create}}
+
+from {{pkg}}.core.db import get_db
+from {{pkg}}.modules.{{folder}}.schemas_generated import {{entity}}Create
+from {{pkg}}.modules.{{folder}}.service import build_{{folder}}_service
+{{/unless}}
+
+{{#if test.skipReason}}
+{{{test.skipStatement}}}
+
+{{/if}}
+BASE = "/api/v1/admin-crud/{{route}}"
+ENVELOPE_KEYS = {"isSuccess", "data", "uiMessage", "errorData", "traceId"}
+ISO_MS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
+# reference alanı → (hedef collection, hedefin zorunlu unique alanları); hedef bu host'ta üretiliyorsa varlığı
+# denetlenir ve test hedef dokümanı ekler, değilse None.
+{{{test.refTargets}}}
+{{{test.populated}}}
+{{{test.hidden}}}
+{{{test.requiredFields}}}
+# Hedefi denetlenen reference'lar: var olmayan id 400.
+{{{test.missingRefs}}}
+{{{test.singleRefs}}}
+# Liste gövdesinin reddettiği filtre / sıralama alanları (gizli, `searchable: false`, filtresi / sırası olmayan tür).
+{{{test.notFilterable}}}
+{{{test.notSortable}}}
+# Tek başına 400 vermesi gereken create değerleri (kısıt, format, tür; create gövdesinde olmayan alanlar).
+{{{test.invalidCreate}}}
+# Update gövdesinde olmayan alanlar (readonly, hiddenFromUpdate): 400.
+{{{test.notUpdatable}}}
+# Listede okunmayan alanlar (`access.detailOnly`): liste satırında `None`.
+DETAIL_ONLY: tuple[str, ...] = {{{detailOnlyTuple}}}
+
+
+@pytest.fixture
+def h(make_token) -> dict[str, str]:
+    return {"Authorization": f"Bearer {make_token('admin-1', role='admin')}"}
+
+
+@pytest.fixture
+async def refs(mock_db) -> dict[str, list[str]]:
+    """Her reference alanı için iki hedef id; hedef bu host'ta üretiliyorsa dokümanı eklenir."""
+    out: dict[str, list[str]] = {}
+    for field, target in REF_TARGETS.items():
+        ids = [ObjectId(), ObjectId()]
+        if target is not None:
+            collection, unique = target
+            await mock_db[collection].insert_many(
+                [{"_id": i, **dict.fromkeys(unique, f"ref-{i}")} for i in ids]
+            )
+        out[field] = [str(i) for i in ids]
+    return out
+
+
+def body(i: int, refs: dict[str, list[str]]) -> dict[str, Any]:
+    """Create gövdesinin bütün alanları; `i` (0 / 1) unique alanları ayırır."""
+    if i == 0:
+{{{test.body0}}}
+{{{test.body1}}}
+
+
+def minimal_body(refs: dict[str, list[str]]) -> dict[str, Any]:
+    """Yalnız zorunlu alanlar (`trim`'li metin boşluklu gider)."""
+{{{test.minimal}}}
+
+
+def minimal_expected(refs: dict[str, list[str]]) -> dict[str, Any]:
+    """`minimal_body` ile oluşan satır: gönderilen değerler, gönderilmeyenlerde varsayılan / `[]` / `None`."""
+{{{test.minimalExpected}}}
+
+
+def ids(row: dict[str, Any]) -> dict[str, Any]:
+    """Populate edilen reference'lar (list / getOne'da `{id, ...}`) id'ye indirgenir; create / update id döner."""
+    out = dict(row)
+    for key in POPULATED:
+        value = out.get(key)
+        if isinstance(value, dict):
+            out[key] = value["id"]
+        elif isinstance(value, list):
+            out[key] = [v["id"] if isinstance(v, dict) else v for v in value]
+    return out
+
+
+def error(resp: Any, status: int) -> dict[str, Any]:
+    assert resp.status_code == status, resp.text
+    payload = resp.json()
+    assert set(payload) == ENVELOPE_KEYS
+    assert payload["isSuccess"] is False and payload["data"] is None
+    assert payload["errorData"]["code"] == status
+    return payload
+
+
+async def create(client, h, data: dict[str, Any]) -> dict[str, Any]:
+{{#if adminOps.create}}
+    resp = await client.post(f"{BASE}/create", json=data, headers=h)
+    assert resp.status_code == 200, resp.text
+    return resp.json()["data"]
+{{else}}
+    """Create ucu kapalı: kayıt servisle eklenir (aynı doğrulama ve hook'lar); satırın yalnız `id`'si uçla karşılaştırılır."""
+    row = await build_{{folder}}_service(get_db()).create({{entity}}Create.model_validate(data))
+    return row.model_dump(mode="json")
+{{/if}}
+
+
+async def test_auth_and_envelope(client, make_token, h) -> None:
+    error(await client.post(f"{BASE}/get-all", json={}), 401)
+    user = {"Authorization": f"Bearer {make_token('u1', role='user')}"}
+    error(await client.post(f"{BASE}/get-all", json={}, headers=user), 403)
+    resp = await client.post(f"{BASE}/get-all", headers={**h, "X-Request-Id": "trace-1"})
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert set(payload) == ENVELOPE_KEYS and payload["isSuccess"] is True and payload["traceId"] == "trace-1"
+    assert payload["data"] == {
+        "items": [],
+        "total": 0,
+        "hasMore": False,
+        "currentPage": 1,
+        "currentLimit": 50,
+    }
+
+
+{{#if adminOps.create}}
+async def test_create_round_trip(client, h, refs) -> None:
+    resp = await client.post(f"{BASE}/create", json=body(0, refs), headers={**h, "lang": "tr"})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["uiMessage"] == "Kayıt oluşturuldu."
+    row = resp.json()["data"]
+    assert ObjectId.is_valid(row["id"]) and "_id" not in row
+    assert ISO_MS.match(row["createdAt"]) and ISO_MS.match(row["updatedAt"])
+    assert not set(HIDDEN) & set(row)
+    sent = {k: v for k, v in body(0, refs).items() if k not in HIDDEN}
+    assert {k: row[k] for k in sent} == sent
+{{#if adminOps.getOne}}
+
+    got = await client.get(f"{BASE}/{row['id']}", headers=h)
+    assert got.status_code == 200, got.text
+    assert ids(got.json()["data"]) == row
+{{/if}}
+
+
+{{/if}}
+{{#if adminOps.getOne}}
+async def test_get_one(client, h, refs) -> None:
+    row = await create(client, h, body(0, refs))
+    got = await client.get(f"{BASE}/{row['id']}", headers=h)
+    assert got.status_code == 200, got.text
+    data = got.json()["data"]
+    assert data["id"] == row["id"] and "_id" not in data
+    assert ISO_MS.match(data["createdAt"]) and ISO_MS.match(data["updatedAt"])
+    assert not set(HIDDEN) & set(data)
+    error(await client.get(f"{BASE}/not-an-id", headers=h), 404)
+    error(await client.get(f"{BASE}/{ObjectId()}", headers=h), 404)
+
+
+{{/if}}
+{{#if adminOps.delete}}
+async def test_delete(client, h, refs) -> None:
+    row = await create(client, h, body(0, refs))
+    deleted = await client.delete(f"{BASE}/{row['id']}", headers=h)
+    assert deleted.status_code == 200 and deleted.json()["data"] is None
+{{#if adminOps.getOne}}
+    error(await client.get(f"{BASE}/{row['id']}", headers=h), 404)
+{{/if}}
+    error(await client.delete(f"{BASE}/{row['id']}", headers=h), 404)
+
+
+{{/if}}
+{{#unless adminOps.all}}
+async def test_closed_operations(client, h) -> None:
+    """`api.adminOperations` dışındaki uçlar yok."""
+    rid = str(ObjectId())
+{{#unless adminOps.getOne}}
+    assert (await client.get(f"{BASE}/{rid}", headers=h)).status_code in (404, 405)
+{{/unless}}
+{{#unless adminOps.create}}
+    assert (await client.post(f"{BASE}/create", json={}, headers=h)).status_code in (404, 405)
+{{/unless}}
+{{#unless adminOps.update}}
+    assert (await client.post(f"{BASE}/update/{rid}", json={}, headers=h)).status_code in (404, 405)
+{{/unless}}
+{{#unless adminOps.delete}}
+    assert (await client.delete(f"{BASE}/{rid}", headers=h)).status_code in (404, 405)
+{{/unless}}
+
+
+{{/unless}}
+{{#if adminOps.create}}
+async def test_create_defaults(client, h, refs) -> None:
+    row = await create(client, h, minimal_body(refs))
+    expected = minimal_expected(refs)
+    assert {k: row.get(k) for k in expected} == expected
+
+
+{{/if}}
+{{#if adminOps.update}}
+async def test_update_and_null_rule(client, h, refs) -> None:
+    row = await create(client, h, body(0, refs))
+    rid = row["id"]
+{{#if test.update}}
+{{{test.update.payload}}}
+    resp = await client.post(f"{BASE}/update/{rid}", json=payload, headers=h)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["{{test.update.field}}"] == payload["{{test.update.field}}"]
+{{#if test.update.keep}}
+    assert data["{{test.update.keep}}"] == row["{{test.update.keep}}"]  # gönderilmeyen alan değişmez
+{{/if}}
+{{else}}
+    resp = await client.post(f"{BASE}/update/{rid}", json={}, headers=h)
+    assert resp.status_code == 200, resp.text
+{{/if}}
+{{#if test.nullClear}}
+    # api-contract §5 (JSON Merge Patch): `null` opsiyonel alanı temizler.
+    cleared = await client.post(f"{BASE}/update/{rid}", json={"{{test.nullClear.field}}": None}, headers=h)
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["data"]["{{test.nullClear.field}}"] is None
+{{#if adminOps.getOne}}
+    got = await client.get(f"{BASE}/{rid}", headers=h)
+    assert got.json()["data"]["{{test.nullClear.field}}"] is None
+{{/if}}
+{{/if}}
+{{#if test.nullRequired}}
+    # Zorunlu alan ve dizi `null` almaz.
+    error(await client.post(f"{BASE}/update/{rid}", json={"{{test.nullRequired.field}}": None}, headers=h), 400)
+{{/if}}
+    for field, value in NOT_UPDATABLE:
+        resp = await client.post(f"{BASE}/update/{rid}", json={field: value}, headers=h)
+        assert resp.status_code == 400, f"{field}: {resp.text}"
+    error(await client.post(f"{BASE}/update/{ObjectId()}", json={}, headers=h), 404)
+
+
+{{/if}}
+async def test_validation(client, h, refs) -> None:
+{{#if adminOps.create}}
+    error(await client.post(f"{BASE}/create", json={**body(0, refs), "__unknown__": 1}, headers=h), 400)
+    for field in REQUIRED:
+        data = {k: v for k, v in body(0, refs).items() if k != field}
+        resp = await client.post(f"{BASE}/create", json=data, headers=h)
+        assert resp.status_code == 400, f"{field} eksik: {resp.text}"
+    for field, value in INVALID_CREATE:
+        resp = await client.post(f"{BASE}/create", json={**body(0, refs), field: value}, headers=h)
+        assert resp.status_code == 400, f"{field}={value!r}: {resp.text}"
+    for field in MISSING_REFS:
+        value: Any = str(ObjectId())
+        data = {**body(0, refs), field: value if field in SINGLE_REFS else [value]}
+        resp = await client.post(f"{BASE}/create", json=data, headers=h)
+        assert resp.status_code == 400, f"{field} hedefi yok: {resp.text}"
+{{/if}}
+    for field in NOT_FILTERABLE:
+        resp = await client.post(f"{BASE}/get-all", json={"filters": {field: "x"}}, headers=h)
+        assert resp.status_code == 400, f"filtre {field}: {resp.text}"
+    for field in NOT_SORTABLE:
+        resp = await client.post(f"{BASE}/get-all", json={"sortBy": field}, headers=h)
+        assert resp.status_code == 400, f"sıralama {field}: {resp.text}"
+{{#if adminOps.create}}
+{{#if test.hasUnique}}
+{{#if test.twoRecords}}
+
+
+async def test_unique_conflict(client, h, refs) -> None:
+    await create(client, h, body(0, refs))
+    error(await client.post(f"{BASE}/create", json=body(0, refs), headers=h), 409)
+    second = await create(client, h, body(1, refs))
+{{#if test.uniqueUpdate}}
+    taken = {"{{test.uniqueUpdate}}": body(0, refs)["{{test.uniqueUpdate}}"]}
+    error(await client.post(f"{BASE}/update/{second['id']}", json=taken, headers=h), 409)
+{{else}}
+    assert second["id"]
+{{/if}}
+{{/if}}
+{{/if}}
+{{/if}}
+{{#if test.twoRecords}}
+
+
+async def test_list_paging_filter_sort(client, h, refs) -> None:
+    first = await create(client, h, body(0, refs))
+    second = await create(client, h, body(1, refs))
+
+    async def listed(payload: dict[str, Any]) -> dict[str, Any]:
+        resp = await client.post(f"{BASE}/get-all", json=payload, headers=h)
+        assert resp.status_code == 200, resp.text
+        return resp.json()["data"]
+
+    page = await listed({})
+    assert page["total"] == 2
+    assert all(item[field] is None for item in page["items"] for field in DETAIL_ONLY)
+    assert [i["id"] for i in page["items"]] == [second["id"], first["id"]]  # createdAt desc
+    page = await listed({"page": 2, "limit": 1})
+    assert (page["total"], page["hasMore"], page["currentPage"], page["currentLimit"]) == (2, False, 2, 1)
+    assert [i["id"] for i in page["items"]] == [first["id"]]
+{{#if test.filter}}
+{{{test.filter.body}}}
+    page = await listed(payload)
+    assert [i["id"] for i in page["items"]] == [first["id"]]
+{{/if}}
+{{#if test.sort}}
+    page = await listed({"sortBy": "{{test.sort.field}}", "sortOrder": "asc"})
+    assert [i["id"] for i in page["items"]] == {{#if test.sort.firstIsFirst}}[first["id"], second["id"]]{{else}}[second["id"], first["id"]]{{/if}}
+{{/if}}
+{{/if}}

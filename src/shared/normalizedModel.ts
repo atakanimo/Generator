@@ -100,6 +100,9 @@ export interface NormalizedSubReference {
   target?: string;
   /** Model name from the schema's own `ref:` (kept separately; both exist in saved data). */
   ref?: string;
+  /** Target field the admin shows for the id (autocomplete option, selected value). Sub-field references are
+   * not populated by the BE, so the admin reads the label from the target's list. */
+  display?: string;
 }
 
 /** Field of an embedded object (`object.fields`). */
@@ -109,6 +112,8 @@ export interface NormalizedObjectSubField {
   required: boolean;
   nullable?: boolean;
   trim?: boolean;
+  /** Set only for `kind: 'number'` (C# `int`, Python `int`). Absent → float. */
+  numberFormat?: NumberFormat;
   reference?: NormalizedSubReference;
   native?: NativeType;
 }
@@ -138,6 +143,13 @@ export interface NormalizedAccess {
   hidden?: boolean;
   /** Not writable through the normal (mobile) API; admin create / update schemas keep it (G5, P4). */
   adminOnly?: boolean;
+  /**
+   * Derived when read (e.g. a live price): never stored, not in create / update bodies, no filter, no sort. The row
+   * carries it (optional); the module's `map_rows` / `mapRows` hook fills it.
+   */
+  computed?: boolean;
+  /** Heavy body read only by getOne (e.g. a report's analysis blob): left out of list reads, `null` in list rows. */
+  detailOnly?: boolean;
 }
 
 export interface NormalizedUi {
@@ -191,6 +203,14 @@ export interface NormalizedApi {
   requiresAuth?: boolean;
   /** Admin API (`*.routes.admin.ts` / `*.service.admin.ts`). */
   admin?: boolean;
+  /** Admin API operations. Absent → every operation; `list` is always on (the admin screen is a list). */
+  adminOperations?: NormalOperation[];
+}
+
+/** Admin operations a model exposes (`api.adminOperations`, `list` forced); every BE generator and the admin config read this. */
+export function resolveAdminOperations(api: NormalizedApi | undefined): NormalOperation[] {
+  const requested = api?.adminOperations;
+  return NORMAL_OPERATIONS.filter(op => op === 'list' || requested === undefined || requested.includes(op));
 }
 
 export interface NormalizedModel {
@@ -244,10 +264,10 @@ function canonicalSubField(f: NormalizedObjectSubField): NormalizedObjectSubFiel
   return ordered(
     {
       ...f,
-      reference: sub(f.reference, ['include', 'target', 'ref']),
+      reference: sub(f.reference, ['include', 'target', 'ref', 'display']),
       native: sub(f.native, ['type', 'options', 'tsType', 'tsOptional', 'doc'], true)
     },
-    ['name', 'kind', 'required', 'nullable', 'trim', 'reference', 'native']
+    ['name', 'kind', 'required', 'nullable', 'trim', 'numberFormat', 'reference', 'native']
   );
 }
 
@@ -261,7 +281,7 @@ export function canonicalField(f: NormalizedField): NormalizedField {
       enum: sub(f.enum, ['values', 'numbers']),
       constraints: sub(f.constraints, ['minLength', 'maxLength', 'min', 'max', 'pattern']),
       filter: sub(f.filter, ['searchable', 'type', 'nativeType']),
-      access: sub(f.access, ['readonly', 'hiddenFromCreate', 'hiddenFromUpdate', 'hidden', 'adminOnly']),
+      access: sub(f.access, ['readonly', 'hiddenFromCreate', 'hiddenFromUpdate', 'hidden', 'adminOnly', 'computed', 'detailOnly']),
       ui: sub(f.ui, ['label', 'list', 'component', 'defaultValue'])
     },
     [
@@ -309,9 +329,19 @@ export function canonicalModel(m: NormalizedModel): NormalizedModel {
       nestedSchemas: m.nestedSchemas?.map(canonicalNested),
       native: sub(m.native, ['modelName', 'collection']),
       ownership: sub(m.ownership, ['kind']),
-      api: sub(m.api, ['normalOperations', 'requiresAuth', 'admin']),
+      api: sub(m.api, ['normalOperations', 'requiresAuth', 'admin', 'adminOperations']),
       ui: sub(m.ui, ['label'])
     },
     ['schemaVersion', 'entityName', 'fields', 'nestedSchemas', 'nestedTypeName', 'timestamps', 'native', 'ownership', 'api', 'ui']
   );
+}
+
+/**
+ * Update body `null` rule (api-contract §5, JSON Merge Patch): an omitted field is unchanged; `null` clears a single
+ * optional (or `nullable`) field (Mongo `$unset`, SQL `NULL`). A required field and an array take no `null` (400);
+ * an array is emptied with `[]`. Express (zod), Python (`NotNull`) and .NET (`PatchBody`) generators read this one rule.
+ */
+export function updateNullClears(field: { required?: boolean; nullable?: boolean; isArray?: boolean }): boolean {
+  if (field.isArray === true) return false;
+  return field.required !== true || field.nullable === true;
 }

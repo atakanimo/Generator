@@ -69,9 +69,36 @@ function findDotnetMountPath(backendRoot: string, moduleName: string, kind: Moun
 
 type MountKind = 'admin' | 'normal';
 
+/**
+ * Python host: `prefix="/admin-crud/<module>"` in `src/<pkg>/modules/<m>/admin_router_generated.py`, mounted under
+ * `API_PREFIX` (`src/<pkg>/core/config.py`, default `/api/v1`). Only admin routers are generated for Python.
+ */
+function findPythonMountPath(backendRoot: string, moduleName: string, kind: MountKind): string | null {
+  if (kind !== 'admin') return null;
+  const src = join(backendRoot, 'src');
+  if (!existsSync(src)) return null;
+  for (const pkg of readdirSync(src)) {
+    const modules = join(src, pkg, 'modules');
+    if (!existsSync(modules) || !statSync(modules).isDirectory()) continue;
+    const config = join(src, pkg, 'core', 'config.py');
+    const apiPrefix = existsSync(config)
+      ? (/API_PREFIX\s*:\s*str\s*=\s*["']([^"']*)["']/.exec(readFileSync(config, 'utf-8'))?.[1] ?? '/api/v1')
+      : '/api/v1';
+    for (const mod of readdirSync(modules)) {
+      const file = join(modules, mod, 'admin_router_generated.py');
+      if (!existsSync(file)) continue;
+      const prefix = /prefix\s*=\s*["']([^"']+)["']/.exec(readFileSync(file, 'utf-8'))?.[1];
+      if (prefix && prefix.endsWith(`/${moduleName}`)) return `${apiPrefix.replace(/\/+$/, '')}${prefix}`;
+    }
+  }
+  return null;
+}
+
 function findMountPath(backendRoot: string, moduleName: string, kind: MountKind): string | null {
   const dotnet = findDotnetMountPath(backendRoot, moduleName, kind);
   if (dotnet) return dotnet;
+  const python = findPythonMountPath(backendRoot, moduleName, kind);
+  if (python) return python;
   const routeFile = `${moduleName}.routes${kind === 'admin' ? '.admin' : ''}`.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
   for (const rel of BE_APP_FILES) {
     const file = join(backendRoot, rel);

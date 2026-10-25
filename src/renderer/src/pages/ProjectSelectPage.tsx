@@ -13,17 +13,28 @@ import {
   ListItemButton,
   Divider,
   Snackbar,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions
+  Chip
 } from '@mui/material';
 import { FolderOpen, Add as AddIcon, Edit as EditIcon, CreateNewFolder } from '@mui/icons-material';
 import { useAppSelector, useAppDispatch } from '../store/hooks';
-import { setProjectPath, scanProjectFiles, parseModelFile, createModel, updateModel, loadModelDraft } from '../features/project/projectSlice';
+import {
+  setProjectPath,
+  scanProjectFiles,
+  parseModelFile,
+  createModel,
+  updateModel,
+  loadModelDraft,
+  openPythonImport,
+  pickDirectory
+} from '../features/project/projectSlice';
+import type { ScannedModel } from '../features/project/projectSlice';
+import PythonImportDialog from '../components/PythonImportDialog';
 import { IconButton } from '@mui/material';
 import SchemaDesignPage from './SchemaDesignPage';
 import AddModelModal from '../components/AddModelModal';
+import BackendStackInfoButton from '../components/BackendStackInfo';
+import NewProjectDialog from '../components/NewProjectDialog';
+import { NEW_PROJECT_STACKS, type BackendStackInfo } from '@shared/backendStacks';
 import type { ModelDraft } from '@shared/modelDraft';
 import { useState, useEffect } from 'react';
 
@@ -52,55 +63,23 @@ const ProjectSelectPage = () => {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
-  const [dotnetDialogOpen, setDotnetDialogOpen] = useState(false);
-  const [dotnetRoot, setDotnetRoot] = useState('');
-  const [dotnetApp, setDotnetApp] = useState('');
-  const [dotnetError, setDotnetError] = useState<string | null>(null);
-  const [dotnetBusy, setDotnetBusy] = useState(false);
+  const [newProject, setNewProject] = useState<BackendStackInfo | null>(null);
 
-  const handleBrowseDotnetRoot = async () => {
-    const result = await window.electronAPI?.dialog?.openDirectory();
-    if (result && !result.canceled && result.filePaths?.length) setDotnetRoot(result.filePaths[0]);
-  };
-
-  /** New .NET 10 + EF Core host (plan backend-dotnet-efcore D5), then the folder is opened like any project. */
-  const handleCreateDotnetHost = async () => {
-    setDotnetBusy(true);
-    setDotnetError(null);
-    try {
-      const result = await window.electronAPI.project.bootstrapDotnet(dotnetRoot, dotnetApp);
-      if (!result.success) {
-        setDotnetError(result.error || 'Proje oluşturulamadı');
-        return;
-      }
-      setDotnetDialogOpen(false);
-      dispatch(setProjectPath(dotnetRoot));
-      dispatch(scanProjectFiles({ path: dotnetRoot }));
-      setSnackbarMessage(`${dotnetApp}: ${result.files?.length ?? 0} dosya oluşturuldu.`);
-      setSnackbarSeverity('success');
-      setSnackbarOpen(true);
-    } finally {
-      setDotnetBusy(false);
-    }
+  /** PY9: a new host was bootstrapped; it is opened like any project. */
+  const handleProjectCreated = (root: string, message: string) => {
+    setNewProject(null);
+    dispatch(setProjectPath(root));
+    dispatch(scanProjectFiles({ path: root }));
+    setSnackbarMessage(message);
+    setSnackbarSeverity('success');
+    setSnackbarOpen(true);
   };
 
   const handleBrowseFolder = async () => {
-    try {
-      if (!window.electronAPI?.dialog?.openDirectory) {
-        console.error('Dialog API is not available');
-        return;
-      }
-
-      const result = await window.electronAPI.dialog.openDirectory();
-
-      if (result && !result.canceled && result.filePaths && result.filePaths.length > 0) {
-        const selectedPath = result.filePaths[0];
-        dispatch(setProjectPath(selectedPath));
-        dispatch(scanProjectFiles({ path: selectedPath }));
-      }
-    } catch (err) {
-      console.error('Error opening folder dialog:', err);
-    }
+    const selectedPath = await dispatch(pickDirectory()).unwrap();
+    if (!selectedPath) return;
+    dispatch(setProjectPath(selectedPath));
+    dispatch(scanProjectFiles({ path: selectedPath }));
   };
 
   const handleScanProject = () => {
@@ -109,10 +88,19 @@ const ProjectSelectPage = () => {
     }
   };
 
-  const handleModelClick = (modelPath: string) => {
-    if (projectPath) {
-      dispatch(parseModelFile({ filePath: modelPath, projectRoot: projectPath }));
-    }
+  const handleModelClick = (model: ScannedModel) => {
+    if (!projectPath) return;
+    // Python (PY7): a hand-written `model.py` is imported first; generated modules open in the schema designer.
+    if (model.kind === 'importable') dispatch(openPythonImport(model.path));
+    else dispatch(parseModelFile({ filePath: model.path, projectRoot: projectPath }));
+  };
+
+  const handlePythonImportClosed = (imported: boolean) => {
+    if (!imported || !projectPath) return;
+    dispatch(scanProjectFiles({ path: projectPath }));
+    setSnackbarMessage('Python modeli içe aktarıldı ve üretildi.');
+    setSnackbarSeverity('success');
+    setSnackbarOpen(true);
   };
 
   const isScanDisabled = !projectPath || status === 'scanning';
@@ -224,10 +212,15 @@ const ProjectSelectPage = () => {
               Browse Folder
             </Button>
           </Box>
-          <Box sx={{ mt: 2 }}>
-            <Button size='small' startIcon={<CreateNewFolder />} onClick={() => setDotnetDialogOpen(true)}>
-              Yeni .NET projesi
-            </Button>
+          <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+            {NEW_PROJECT_STACKS.map(info => (
+              <Box key={info.stack} sx={{ display: 'flex', alignItems: 'center' }}>
+                <Button size='small' startIcon={<CreateNewFolder />} onClick={() => setNewProject(info)}>
+                  {info.label}
+                </Button>
+                <BackendStackInfoButton info={info} />
+              </Box>
+            ))}
           </Box>
         </Paper>
 
@@ -244,6 +237,10 @@ const ProjectSelectPage = () => {
             <Typography variant='body2'>
               - .NET: <code>src/&lt;App&gt;.Domain/&lt;Modül&gt;/&lt;Entity&gt;.cs</code> entity dosyaları taranır (çözüm: <code>&lt;App&gt;.slnx</code>).
             </Typography>
+            <Typography variant='body2'>
+              - Python: manifest'teki modüller (<code>modules/&lt;m&gt;/model_generated.py</code>) ve içe aktarılabilir elle yazılmış{' '}
+              <code>modules/&lt;m&gt;/model.py</code> (kök: <code>pyproject.toml</code> + <code>src/&lt;paket&gt;/core</code>).
+            </Typography>
           </Box>
           <Alert severity={sourceType ? 'success' : 'warning'}>
             <Typography variant='body2'>
@@ -254,7 +251,9 @@ const ProjectSelectPage = () => {
                     ? 'Node.js / Express / Mongoose'
                     : sourceType === 'nodejs-typeorm'
                       ? 'Node.js / TypeORM'
-                      : '.NET / ASP.NET Core / EF Core'}
+                      : sourceType === 'python-fastapi'
+                        ? 'Python / FastAPI / Pydantic'
+                        : '.NET / ASP.NET Core / EF Core'}
                   {detectedTechnologies.length > 0 && <> ({detectedTechnologies.join(', ')})</>}
                 </>
               ) : (
@@ -301,10 +300,12 @@ const ProjectSelectPage = () => {
               {modelsFound.map((model, index) => (
                 <Box key={model.path}>
                   <ListItem disablePadding>
-                    <ListItemButton onClick={() => handleModelClick(model.path)}>
+                    <ListItemButton onClick={() => handleModelClick(model)}>
                       <ListItemText primary={model.fileName} secondary={model.path} />
+                      {model.kind === 'importable' && <Chip size='small' color='info' label='Elle yazılmış: içe aktar' sx={{ ml: 2 }} />}
                       {parsingStatus === 'parsing' && <CircularProgress size={20} sx={{ ml: 2 }} />}
                     </ListItemButton>
+                    {model.kind !== 'importable' && (
                     <IconButton
                       edge='end'
                       aria-label='edit'
@@ -316,6 +317,7 @@ const ProjectSelectPage = () => {
                     >
                       <EditIcon />
                     </IconButton>
+                    )}
                   </ListItem>
                   {index < modelsFound.length - 1 && <Divider />}
                 </Box>
@@ -366,40 +368,9 @@ const ProjectSelectPage = () => {
         modelFilePath={editModelFilePath || undefined}
       />
 
-      <Dialog open={dotnetDialogOpen} onClose={() => setDotnetDialogOpen(false)} maxWidth='sm' fullWidth>
-        <DialogTitle>Yeni .NET projesi</DialogTitle>
-        <DialogContent>
-          <Typography variant='body2' color='text.secondary' sx={{ mb: 2 }}>
-            .NET 10 + EF Core + PostgreSQL, Clean Architecture: çözüm, 4 proje, test projesi ve core dosyaları. Var olan dosyaların
-            üzerine yazılmaz.
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-            <TextField label='Klasör' fullWidth value={dotnetRoot} InputProps={{ readOnly: true }} placeholder='Boş bir klasör seçin' />
-            <Button variant='outlined' onClick={handleBrowseDotnetRoot}>
-              Seç
-            </Button>
-          </Box>
-          <TextField
-            label='Uygulama adı'
-            fullWidth
-            value={dotnetApp}
-            onChange={e => setDotnetApp(e.target.value)}
-            placeholder='SharedFrame'
-            helperText='PascalCase; proje adları <Ad>.Api, <Ad>.Domain… olur'
-          />
-          {dotnetError && (
-            <Alert severity='error' sx={{ mt: 2 }}>
-              {dotnetError}
-            </Alert>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDotnetDialogOpen(false)}>Vazgeç</Button>
-          <Button variant='contained' onClick={handleCreateDotnetHost} disabled={!dotnetRoot || !dotnetApp || dotnetBusy}>
-            Oluştur
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {projectPath && <PythonImportDialog projectPath={projectPath} onClosed={handlePythonImportClosed} />}
+
+      <NewProjectDialog info={newProject} onClose={() => setNewProject(null)} onCreated={handleProjectCreated} />
 
       {/* Snackbar for notifications */}
       <Snackbar open={snackbarOpen} autoHideDuration={4000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>

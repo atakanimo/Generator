@@ -1,9 +1,7 @@
-using Microsoft.EntityFrameworkCore;
 using __App__.Api.Common;
 using __App__.Api.Endpoints;
 using __App__.Application;
 using __App__.Infrastructure;
-using __App__.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,11 +12,7 @@ builder.Services
 
 var app = builder.Build();
 
-if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
-{
-    using var scope = app.Services.CreateScope();
-    await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
-}
+await app.Services.InitializeDatabaseAsync(app.Configuration);
 
 app.UseApi();
 app.MapGet("/api/health", () => TypedResults.Ok()).AllowAnonymous();

@@ -1,0 +1,213 @@
+/**
+ * Python + FastAPI host gate (plan backend-python-fastapi PY4).
+ *
+ * In a temp folder (removed at the end; kept on failure or with --keep):
+ *  - the app's `bootstrapPythonProject` (IPC `project:bootstrapPython`) → manifest `backendStack: python-fastapi`;
+ *    a second `bootstrapPythonHost` writes nothing, a second `bootstrapPythonProject` is refused.
+ *  - `uv sync` → import check (`api.main`, `worker.main`) → `ruff check` → `lint-imports` → skeleton `pytest`.
+ *  - `uvicorn` with Mongo unreachable: `/api/v1/health` 200, contract envelope, `X-Request-Id` echoed.
+ *  - Assets (`src/generator-assets/python-fastapi/core/**`) byte for byte = the host copy and = StockExchange
+ *    (`src/alpha_terminal/core/**`); the skeleton's `tests/core/crud/test_crud.py` = StockExchange's; the registry
+ *    rendered for `subscription_plans` = StockExchange's `api/routers_generated.py`.
+ *
+ * Run:  node scripts/verify/python-bootstrap.mjs [--keep] [--no-stockexchange]
+ *       STOCKEXCHANGE_ROOT overrides ~/Projects/VarlikALL/StockExchange.
+ */
+import { build } from 'esbuild';
+import { spawn, spawnSync } from 'child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'fs';
+import { createServer } from 'net';
+import { homedir, tmpdir } from 'os';
+import { dirname, join, relative } from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
+const keep = process.argv.includes('--keep');
+const withStockExchange = !process.argv.includes('--no-stockexchange');
+const stockExchange = process.env.STOCKEXCHANGE_ROOT ?? join(homedir(), 'Projects/VarlikALL/StockExchange');
+const appName = 'SampleHost';
+
+let failed = 0;
+function check(name, ok, detail = '') {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  ${detail}` : ''}`);
+  if (!ok) failed++;
+}
+
+async function loadBundle() {
+  const outfile = join(root, 'scripts/verify/out/.harness/python-bundle.mjs');
+  mkdirSync(dirname(outfile), { recursive: true });
+  await build({
+    entryPoints: [join(root, 'scripts/verify/_python-entry.ts')],
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    outfile,
+    plugins: [
+      {
+        name: 'stub-electron',
+        setup(api) {
+          api.onResolve({ filter: /^electron$/ }, () => ({ path: 'electron', namespace: 'stub-electron' }));
+          api.onLoad({ filter: /.*/, namespace: 'stub-electron' }, () => ({
+            contents: 'export const app = { getAppPath: () => process.cwd(), isPackaged: false };',
+            loader: 'js'
+          }));
+        }
+      }
+    ],
+    logLevel: 'silent'
+  });
+  return import(pathToFileURL(outfile).href);
+}
+
+function listFiles(dir) {
+  const out = [];
+  for (const name of readdirSync(dir)) {
+    if (name === '.DS_Store' || name === '__pycache__') continue;
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) out.push(...listFiles(full));
+    else out.push(full);
+  }
+  return out.sort();
+}
+
+const hostEnv = (extra = {}) => {
+  const env = { ...process.env, ...extra };
+  delete env.VIRTUAL_ENV; // uv must use the host's own .venv
+  return env;
+};
+
+function run(cwd, cmd, args, extraEnv = {}) {
+  const r = spawnSync(cmd, args, { cwd, encoding: 'utf8', env: hostEnv(extraEnv), timeout: 600_000 });
+  return { ok: r.status === 0, output: `${r.stdout ?? ''}${r.stderr ?? ''}` };
+}
+
+function tail(text, lines = 25) {
+  return `\n${text.trim().split('\n').slice(-lines).join('\n')}`;
+}
+
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const srv = createServer();
+    srv.once('error', reject);
+    srv.listen(0, '127.0.0.1', () => {
+      const { port } = srv.address();
+      srv.close(() => resolve(port));
+    });
+  });
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const gen = await loadBundle();
+const host = mkdtempSync(join(tmpdir(), 'py-bootstrap-'));
+const pkg = gen.toPythonPackageName(appName);
+
+try {
+  // 1. Bootstrap through the app's function.
+  check('package name', pkg === 'sample_host' && gen.isValidPythonPackage(pkg) && !gen.isValidPythonPackage('class'), pkg);
+  const boot = gen.bootstrapPythonProject(host, appName);
+  const assetFiles = listFiles(join(gen.pythonAssetsDir(), 'core'));
+  const skeletonFiles = listFiles(join(gen.pythonAssetsDir(), '_skeleton'));
+  // + the two G registries: `api/routers_generated.py`, `api/indexes_generated.py`.
+  const expected = assetFiles.length + skeletonFiles.length + 2;
+  check('bootstrap: files created', boot.success && boot.files?.length === expected, boot.error ?? `${boot.files?.length} / ${expected}`);
+  check('bootstrap: manifest backendStack', gen.readWorkspaceManifest(host)?.workspace?.backendStack === 'python-fastapi');
+  const ws = gen.readWorkspaceManifest(host)?.workspace;
+  check('bootstrap: manifest database + id type', ws?.database === 'mongodb' && ws?.idType === 'objectid', JSON.stringify(ws));
+  check('bootstrap: registries are G', ['routers_generated.py', 'indexes_generated.py'].every((f) => readFileSync(join(host, 'src', pkg, 'api', f), 'utf8').startsWith('# <auto-generated by Generator />\n')));
+  const leftovers = listFiles(host).filter((f) => /__app(_dist)?__/.test(relative(host, f)) || /__app(_dist)?__/.test(readFileSync(f, 'utf8')));
+  check('bootstrap: no tokens left', leftovers.length === 0, leftovers.map((f) => relative(host, f)).join(', '));
+
+  // 2. Second run writes nothing.
+  const again = gen.bootstrapPythonHost(host, pkg);
+  const written = again.files.filter((f) => f.action === 'created' || f.action === 'updated');
+  check('second bootstrap writes nothing', written.length === 0 && again.files.length === expected, written.map((f) => relative(host, f.path)).join(', '));
+  const refused = gen.bootstrapPythonProject(host, appName);
+  check('second bootstrapPythonProject refused', !refused.success, refused.error ?? '');
+
+  // 3. uv sync, imports, lint, tests.
+  const sync = run(host, 'uv', ['sync', '--quiet']);
+  check('uv sync', sync.ok, sync.ok ? '' : tail(sync.output));
+  check('uv.lock written', existsSync(join(host, 'uv.lock')));
+  const imp = run(host, 'uv', ['run', '--no-sync', 'python', '-c', `import ${pkg}.api.main, ${pkg}.worker.main`], { JWT_SECRET: '' });
+  check('import api.main + worker.main', imp.ok, imp.ok ? '' : tail(imp.output));
+  const ruff = run(host, 'uv', ['run', '--no-sync', 'ruff', 'check', 'src', 'tests']);
+  check('ruff check', ruff.ok, ruff.ok ? '' : tail(ruff.output, 40));
+  const li = run(host, 'uv', ['run', '--no-sync', 'lint-imports']);
+  check('lint-imports', li.ok, li.ok ? /Contracts: .*/.exec(li.output)?.[0] ?? '' : tail(li.output));
+  const tests = run(host, 'uv', ['run', '--no-sync', 'pytest', '-q', '-p', 'no:cacheprovider']);
+  check('pytest', tests.ok, /\d+ passed[^\n]*/.exec(tests.output)?.[0] ?? tail(tests.output, 40));
+
+  // 4. uvicorn + health.
+  const port = await freePort();
+  const server = spawn('uv', ['run', '--no-sync', 'uvicorn', `${pkg}.api.main:app`, '--host', '127.0.0.1', '--port', String(port)], {
+    cwd: host,
+    env: hostEnv({
+      JWT_SECRET: 'gate-secret-0123456789abcdef0123456789abcdef',
+      MONGO_URI: 'mongodb://127.0.0.1:9',
+      MONGO_CONNECT_TIMEOUT_MS: '300',
+      MONGO_SERVER_SELECTION_TIMEOUT_MS: '300'
+    }),
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  let serverLog = '';
+  server.stdout.on('data', (d) => (serverLog += d));
+  server.stderr.on('data', (d) => (serverLog += d));
+  try {
+    let resp;
+    for (let i = 0; i < 60 && !resp; i++) {
+      try {
+        resp = await fetch(`http://127.0.0.1:${port}/api/v1/health`, { headers: { 'X-Request-Id': 'gate-trace-1' } });
+      } catch {
+        await sleep(250);
+      }
+    }
+    check('uvicorn: health 200', resp?.status === 200, resp ? `status=${resp.status}` : tail(serverLog));
+    if (resp) {
+      const body = await resp.json();
+      const keys = Object.keys(body).sort().join(',');
+      check('health: envelope', keys === 'data,errorData,isSuccess,traceId,uiMessage' && body.isSuccess === true && body.errorData === null, keys);
+      check('health: data', body.data?.status === 'ok' && body.data?.mongoConnected === false, JSON.stringify(body.data));
+      check('health: X-Request-Id echoed', body.traceId === 'gate-trace-1' && resp.headers.get('x-request-id') === 'gate-trace-1' && resp.headers.get('x-trace-id') === 'gate-trace-1');
+      const fresh = await fetch(`http://127.0.0.1:${port}/api/v1/health`);
+      const freshId = fresh.headers.get('x-request-id');
+      check('health: new trace id when none sent', !!freshId && (await fresh.json()).traceId === freshId, freshId ?? '');
+    }
+  } finally {
+    server.kill('SIGTERM');
+  }
+
+  // 5. Asset parity: Generator asset = host copy = StockExchange.
+  const coreDir = join(gen.pythonAssetsDir(), 'core');
+  const hostDiff = assetFiles.filter((f) => !readFileSync(join(host, 'src', pkg, 'core', relative(coreDir, f))).equals(readFileSync(f)));
+  check(`assets: host copy byte-identical (${assetFiles.length})`, hostDiff.length === 0, hostDiff.map((f) => relative(coreDir, f)).join(', '));
+  if (withStockExchange) {
+    const seCore = join(stockExchange, 'src/alpha_terminal/core');
+    if (!existsSync(seCore)) {
+      check('StockExchange present', false, `${seCore} (use --no-stockexchange to skip)`);
+    } else {
+      const seDiff = assetFiles.filter((f) => {
+        const target = join(seCore, relative(coreDir, f));
+        return !existsSync(target) || !readFileSync(target).equals(readFileSync(f));
+      });
+      check(`assets: StockExchange byte-identical (${assetFiles.length})`, seDiff.length === 0, seDiff.map((f) => relative(coreDir, f)).join(', '));
+      const skeletonTest = readFileSync(join(gen.pythonAssetsDir(), '_skeleton/tests/core/crud/test_crud.py'), 'utf8').split('__app__').join('alpha_terminal');
+      check('skeleton test_crud.py = StockExchange', skeletonTest === readFileSync(join(stockExchange, 'tests/core/crud/test_crud.py'), 'utf8'));
+      // StockExchange's registry lists every module in its manifest (PY-R imports them one by one).
+      const seManifest = gen.readWorkspaceManifest(stockExchange)?.models ?? [];
+      const registry = gen.renderRoutersRegistry(
+        'alpha_terminal',
+        seManifest.map((m) => ({ folder: gen.pythonModuleNames(m.model.entityName).folder, hasAdmin: m.model.api?.admin !== false }))
+      );
+      check('registry render = StockExchange routers_generated.py', registry === readFileSync(join(stockExchange, 'src/alpha_terminal/api/routers_generated.py'), 'utf8'));
+    }
+  } else {
+    console.log('SKIP  StockExchange parity (--no-stockexchange)');
+  }
+} finally {
+  if (failed || keep) console.log(`host kept: ${host}`);
+  else rmSync(host, { recursive: true, force: true });
+}
+
+console.log(failed ? `\n${failed} check(s) FAILED` : '\nall checks PASS');
+process.exit(failed ? 1 : 0);

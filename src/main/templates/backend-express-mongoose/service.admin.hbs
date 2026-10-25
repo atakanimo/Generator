@@ -30,7 +30,8 @@ export async function getAll(filters?: {{entityName}}ListBody) {
   const result = await crud.getAllPaginated(filtersQuery, {
     limit,
     page,
-    sort: resolveListSort(sortBy, sortOrder, hooks.defaultSort ?? { createdAt: -1, _id: -1 }){{beServicePopulateOptionLine fields}}
+    sort: resolveListSort(sortBy, sortOrder, hooks.defaultSort ?? { createdAt: -1, _id: -1 }){{beServicePopulateOptionLine fields}}{{#if listProjection}},
+    projection: '{{listProjection}}'{{/if}}
   });
   return mapListRows(result, hooks.mapRows?.bind(hooks));
 }

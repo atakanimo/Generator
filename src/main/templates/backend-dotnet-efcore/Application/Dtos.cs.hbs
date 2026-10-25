@@ -29,9 +29,11 @@ public sealed partial record {{entity}}Filters
 {{#each bodies}}
 
 {{#if update}}
-/// <summary>Kısmi güncelleme: <c>null</c> = değişmez.</summary>
-{{/if}}
+/// <summary>Kısmi güncelleme (JSON Merge Patch): gönderilmeyen alan değişmez, opsiyonel alana <c>null</c> alanı temizler.</summary>
+public sealed partial record {{body.name}} : PatchBody
+{{else}}
 public sealed partial record {{body.name}}
+{{/if}}
 {
 {{#each body.props}}
     {{{this}}}

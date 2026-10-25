@@ -22,6 +22,7 @@
     }
   },
   "include": ["src"],
+  "exclude": ["src/generator-assets/*/_skeleton"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
 

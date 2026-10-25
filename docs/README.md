@@ -16,6 +16,7 @@ Model dosyası → Parser (stack'e özel) → NormalizedModel v2 → manifest v3
 | [coding-rules.md](coding-rules.md) | Kod yazma kuralları, doğrulama sırası, commit politikası |
 | [backend/express-mongoose.md](backend/express-mongoose.md) | Express + Mongoose: üretilen dosyalar, custom bloklar, hook'lar, core asset'ler, ownership |
 | [backend/dotnet-efcore.md](backend/dotnet-efcore.md) | .NET 10 + EF Core: host düzeni, G / K dosyalar, partial'lar, servisler, ownership, parser, migration |
+| [backend/python-fastapi.md](backend/python-fastapi.md) | Python + FastAPI + MongoDB: yeni proje kurulumu, host düzeni, G / K dosyalar, hook'lar, alan türleri, `null` kuralı, modül testi, Pydantic içe aktarma |
 | [frontend/admin-base-config.md](frontend/admin-base-config.md) | Admin FE config üretimi ve dosya kuralı |
 | [frontend/client-data-layer.md](frontend/client-data-layer.md) | Mobil / web veri katmanı üretimi: tipler, servis, thunk, slice (UI yok) |
 | [admin-base-package.md](admin-base-package.md) | `@atakanimo/ata-admin-base` paketi: geliştirme, host kurulumu |
@@ -23,6 +24,10 @@ Model dosyası → Parser (stack'e özel) → NormalizedModel v2 → manifest v3
 | [verification.md](verification.md) | Doğrulama betikleri (`scripts/verify/`) ve kapılar |
 | [history/varlik360-migration.md](history/varlik360-migration.md) | Varlik360 geçişinin özeti ve açık işler |
 | [plans/backend-dotnet-efcore.md](plans/backend-dotnet-efcore.md) | .NET + EF Core: kararlar, açık işler |
+| [plans/backend-python-fastapi.md](plans/backend-python-fastapi.md) | Python + FastAPI: kararlar, aşamalar (PY0–PY12), StockExchange geçişi, açık işler |
+| [plans/backend-dotnet-database-providers.md](plans/backend-dotnet-database-providers.md) | .NET'te seçilebilir veritabanı (PostgreSQL / MongoDB) ve id tipi (PY10) |
 | [plans/client-data-layer.md](plans/client-data-layer.md) | Mobil / web istemci veri katmanı (tipler, servis, thunk, slice) üretimi |
+| [plans/GeneratorTest.md](plans/GeneratorTest.md) | Üretilebilen her alan türü / ayar için altı stack'te test planı (senaryo tabloları, bulgular) |
+| [plans/AlphaFeTests.md](plans/AlphaFeTests.md) | StockExchange (AlphaTerminal) üretilen FE dosyalarının test planı (Cursor'a verilir) |
 
 AI kuralları `.cursor/rules/*.mdc` altında; her kural ilgili dokümana bağlanır.

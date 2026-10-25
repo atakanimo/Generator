@@ -41,6 +41,8 @@ hiddenFromUpdate?: boolean;
 /** Never returned by generated CRUD (G2). */
 hidden?: boolean;
 /** Not writable through the normal API (G5). */
+/** `access.detailOnly`: left out of list reads. */
+detailOnly?: boolean;
 adminOnly?: boolean;
 relation?: {
   target: string;
@@ -172,7 +174,8 @@ export function normalizeField(field: V2Field): BeField {
   const relationTarget = field.reference?.target ? String(field.reference.target) : undefined;
   const isArray = Boolean(field.isArray);
   const normalizedType = mapFieldType(rawType, isArray);
-  const filterable = Boolean(field.filter?.searchable);
+  // `computed` (derived when read): no filter, never written.
+  const filterable = Boolean(field.filter?.searchable) && field.access?.computed !== true;
   const filterToken = filterTokenOf(field.filter);
   const populate = field.reference?.populate;
   const relationPopulateFields = Array.isArray(populate) ? populate.map(v => String(v).trim()).filter(Boolean) : undefined;
@@ -202,10 +205,11 @@ export function normalizeField(field: V2Field): BeField {
         : resolveFilterType(normalizedType)
       : undefined,
     defaultValue: typeof field.ui?.defaultValue === 'string' ? field.ui.defaultValue : '',
-    isReadonly: Boolean(field.access?.readonly),
+    isReadonly: Boolean(field.access?.readonly) || field.access?.computed === true,
     hiddenFromCreate: Boolean(field.access?.hiddenFromCreate),
     hiddenFromUpdate: Boolean(field.access?.hiddenFromUpdate),
     hidden: field.access?.hidden === true ? true : undefined,
+    detailOnly: field.access?.detailOnly === true ? true : undefined,
     adminOnly: field.access?.adminOnly === true ? true : undefined,
     relation:
       relationTarget && relationType

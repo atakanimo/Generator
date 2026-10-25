@@ -7,6 +7,9 @@ using {{app}}.Application.Common.Abstractions;
 using {{app}}.Application.Common.Errors;
 {{/if}}
 using {{app}}.Application.Common.Pagination;
+{{#if populateLoads.length}}
+using {{app}}.Application.Common.Relations;
+{{/if}}
 using {{app}}.Application.Common.Services;
 using {{app}}.Domain.{{folder}};
 
@@ -18,6 +21,9 @@ public sealed partial class {{className}}(IAppDbContext db, {{hooks}} hooks{{#if
 {
     protected override DbSet<{{entity}}> Set => Db.{{folder}};
     protected override Expression<Func<{{entity}}, {{entity}}Row>> Row => {{entity}}Projections.Row;
+{{#if hasListRow}}
+    protected override Expression<Func<{{entity}}, {{entity}}Row>> ListRow => {{entity}}Projections.ListRow;
+{{/if}}
 {{#if hasWriteRow}}
     protected override Expression<Func<{{entity}}, {{entity}}Row>> WriteRow => {{entity}}Projections.WriteRow;
 {{/if}}
@@ -82,6 +88,42 @@ public sealed partial class {{className}}(IAppDbContext db, {{hooks}} hooks{{#if
         {{#unless @first}}?? {{/unless}}{{{this}}}{{#if @last}};{{/if}}
 {{/each}}
 {{/if}}
+{{#if inUseChecks.length}}
+
+    /// <summary>Başka kayıtların reference verdiği kayıt silinmez (FK yok; 409, FK Restrict ile aynı cevap).</summary>
+    protected override async Task<Error?> CheckInUseAsync({{entity}} entity, CancellationToken cancellationToken) =>
+{{#each inUseChecks}}
+        {{{this}}}
+{{/each}}
+            ? Error.Conflict(Messages.InUse)
+            : null;
+{{/if}}
+{{#if detachReferences.length}}
+
+    /// <summary>Silinen kaydın id'si ona işaret eden <c>reference[]</c> listelerinden çıkar (join tablosu cascade'i gibi).</summary>
+    protected override async Task DetachReferencesAsync({{entity}} entity, CancellationToken cancellationToken)
+    {
+{{#each detachReferences}}
+        {{{this}}}
+{{/each}}
+    }
+{{/if}}
+{{#if populateLoads.length}}
+
+    /// <summary>Populate (join yok): sayfanın id'leri, hedef başına tek sorgu, kayıtlar bellekte. Yalnız list / getOne.</summary>
+    protected override async Task<IReadOnlyList<{{entity}}Row>> PopulateAsync(IReadOnlyList<{{entity}}Row> rows, CancellationToken cancellationToken)
+    {
+{{#each populateLoads}}
+        {{{this}}}
+{{/each}}
+        return rows.Select(r => r with
+        {
+{{#each populateAssigns}}
+            {{{this}}}
+{{/each}}
+        }).ToList();
+    }
+{{/if}}
 {{#if updateIncludes.length}}
 
     protected override IQueryable<{{entity}}> ForUpdate(IQueryable<{{entity}}> query) =>
@@ -89,7 +131,7 @@ public sealed partial class {{className}}(IAppDbContext db, {{hooks}} hooks{{#if
 {{/if}}
 {{#each relationLoaders}}
 
-    private async Task<Error?> Load{{nav}}Async({{../entity}} entity, List<Guid>? ids, CancellationToken cancellationToken)
+    private async Task<Error?> Load{{nav}}Async({{../entity}} entity, List<EntityId>? ids, CancellationToken cancellationToken)
     {
         if (ids is null)
         {

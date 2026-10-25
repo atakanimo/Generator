@@ -10,16 +10,17 @@ import { applyCustomBlockMerge, hasCustomToJsonTransformContent } from '../../ut
 import { getCustomBlockMarkersPresentInSource, getDefaultCustomBlockMarkerNames } from '../../utils/customBlockMarkers.js';
 import { handleError, ErrorCode } from '../../utils/errorHandler.js';
 import { log } from '../../utils/logger.js';
-import { getGeneratorRoot, getTemplatesDir } from '../../utils/templateHelpers.js';
+import { getTemplatesDir } from '../../utils/templateHelpers.js';
 import { join } from 'path';
 import { findAdminMountPath, findBackendAppFile, findNormalMountPath } from '../../utils/backendAppFile.js';
 import { kebabCase, moduleNameFromEntity } from '../../utils/namingUtils.js';
 import { mergeMongoAuditBackendTemplateFields } from '../../utils/mongoAuditFields.js';
 import { isGeneratorOwnedSource } from '../../utils/generatedFileOwnership.js';
-import { missingHostExports } from '../../utils/coreAssetImports.js';
+import { ensureExpressCoreAssets } from './expressCoreAssets.js';
 import {
   NORMAL_OPERATIONS,
   NORMAL_WRITE_OPERATIONS,
+  resolveAdminOperations,
   type NormalizedModel as V2Model,
   type NormalOperation
 } from '../../../shared/normalizedModel.js';
@@ -88,15 +89,12 @@ interface MergeConflictPolicy {
   onMalformedExistingMarkers: 'fail';
 }
 
-interface CoreBootstrapFile {
-  sourceRelativePath: string;
-  targetRelativePath: string;
-}
 
 /**
  * Backend Generator Class
  * Extends BaseGenerator to provide backend-specific code generation
  */
+
 export class BackendGenerator extends BaseGenerator {
   private isProtectedRoute: boolean;
   private shouldAddRoute: boolean;
@@ -261,161 +259,7 @@ export class BackendGenerator extends BaseGenerator {
       return;
     }
 
-    const generatorRoot = getGeneratorRoot();
-    const coreBootstrapFiles: CoreBootstrapFile[] = [
-      {
-        sourceRelativePath: 'src/generator-assets/express-mongoose/errors/error-codes.ts',
-        targetRelativePath: 'src/core/errors/error-codes.ts'
-      },
-      {
-        sourceRelativePath: 'src/generator-assets/express-mongoose/errors/error.helper.ts',
-        targetRelativePath: 'src/core/errors/error.helper.ts'
-      },
-      {
-        sourceRelativePath: 'src/generator-assets/express-mongoose/logging/logger.ts',
-        targetRelativePath: 'src/core/logging/logger.ts'
-      },
-      // logger.ts imports (bootstrap must be import-closed, plan 5 P2.1)
-      {
-        sourceRelativePath: 'src/generator-assets/express-mongoose/logging/job-log-context.ts',
-        targetRelativePath: 'src/core/logging/job-log-context.ts'
-      },
-      {
-        sourceRelativePath: 'src/generator-assets/express-mongoose/logging/pino-stdout-file-tee.ts',
-        targetRelativePath: 'src/core/logging/pino-stdout-file-tee.ts'
-      },
-      {
-        sourceRelativePath: 'src/generator-assets/express-mongoose/logging/daily-log-file-path.ts',
-        targetRelativePath: 'src/core/logging/daily-log-file-path.ts'
-      },
-      {
-        sourceRelativePath: 'src/generator-assets/express-mongoose/pagination/pagination.helper.ts',
-        targetRelativePath: 'src/core/pagination/pagination.helper.ts'
-      },
-      {
-        sourceRelativePath: 'src/generator-assets/express-mongoose/filters/filter-query.helper.ts',
-        targetRelativePath: 'src/core/filters/filter-query.helper.ts'
-      },
-      {
-        sourceRelativePath: 'src/generator-assets/express-mongoose/response/response.helper.ts',
-        targetRelativePath: 'src/core/response/response.helper.ts'
-      },
-      {
-        sourceRelativePath: 'src/generator-assets/express-mongoose/response/wire.ts',
-        targetRelativePath: 'src/core/response/wire.ts'
-      },
-      {
-        sourceRelativePath: 'src/generator-assets/express-mongoose/schema/list-pagination.schema.ts',
-        targetRelativePath: 'src/core/schema/list-pagination.schema.ts'
-      },
-      {
-        sourceRelativePath: 'src/generator-assets/express-mongoose/types/api-contract.ts',
-        targetRelativePath: 'src/core/types/api-contract.ts'
-      },
-      {
-        sourceRelativePath: 'src/generator-assets/express-mongoose/services/service-hooks.ts',
-        targetRelativePath: 'src/core/services/service-hooks.ts'
-      },
-      {
-        sourceRelativePath: 'src/generator-assets/express-mongoose/services/base-crud.service.ts',
-        targetRelativePath: 'src/core/services/base-crud.service.ts'
-      },
-      {
-        sourceRelativePath: 'src/generator-assets/express-mongoose/services/crud-projection.ts',
-        targetRelativePath: 'src/core/services/crud-projection.ts'
-      },
-      {
-        sourceRelativePath: 'src/generator-assets/express-mongoose/services/crud-scope.ts',
-        targetRelativePath: 'src/core/services/crud-scope.ts'
-      }
-    ];
-
-    this.logInfo('Core bootstrap check started', {
-      step: 'core-bootstrap-check',
-      fileCount: coreBootstrapFiles.length
-    });
-
-    for (const bootstrapFile of coreBootstrapFiles) {
-      const sourcePath = join(generatorRoot, bootstrapFile.sourceRelativePath);
-      const targetPath = join(this.projectRoot, bootstrapFile.targetRelativePath);
-
-      if (!safePathExists(sourcePath)) {
-        this.logError('Core bootstrap source missing', {
-          step: 'core-bootstrap-check',
-          file: sourcePath,
-          reason: 'source-not-found'
-        });
-        throw new Error(`Core bootstrap source missing: ${sourcePath}`);
-      }
-
-      if (safePathExists(targetPath)) {
-        const canonicalRead = safeReadFile(sourcePath);
-        const targetRead = safeReadFile(targetPath);
-        if (
-          canonicalRead.success &&
-          targetRead.success &&
-          canonicalRead.content !== undefined &&
-          targetRead.content !== undefined &&
-          canonicalRead.content !== targetRead.content
-        ) {
-          this.logWarn('Core helper differs from canonical asset (kept existing file)', {
-            step: 'core-bootstrap-check',
-            file: targetPath,
-            reason: 'canonical-deviation-detected',
-            action: 'skip-existing'
-          });
-        }
-
-        this.logInfo('Core bootstrap file skipped (already exists)', {
-          step: 'core-bootstrap-check',
-          file: targetPath,
-          action: 'skip'
-        });
-        continue;
-      }
-
-      const sourceRead = safeReadFile(sourcePath);
-      if (!sourceRead.success || sourceRead.content === undefined) {
-        this.logError('Core bootstrap read failed', {
-          step: 'core-bootstrap-create',
-          file: sourcePath,
-          reason: sourceRead.error ?? 'read-failed'
-        });
-        throw new Error(`Failed to read core bootstrap source: ${sourcePath}`);
-      }
-
-      // An existing (kept) sibling may be an older copy without a name this asset imports: skip, do not break the host.
-      const missing = missingHostExports(sourceRead.content, targetPath);
-      if (missing.length > 0) {
-        this.logWarn('Core bootstrap file skipped (host sibling lacks imported exports)', {
-          step: 'core-bootstrap-create',
-          file: targetPath,
-          reason: 'missing-host-exports',
-          missing
-        });
-        continue;
-      }
-
-      const writeResult = safeWriteFile(targetPath, sourceRead.content, {
-        ensureDirectory: true,
-        createBackup: false
-      });
-
-      if (!writeResult.success) {
-        this.logError('Core bootstrap file creation failed', {
-          step: 'core-bootstrap-create',
-          file: targetPath,
-          reason: writeResult.error ?? 'write-failed'
-        });
-        throw new Error(`Failed to create core bootstrap file: ${targetPath}`);
-      }
-
-      this.logInfo('Core bootstrap file created', {
-        step: 'core-bootstrap-create',
-        file: targetPath,
-        action: 'create'
-      });
-    }
+    ensureExpressCoreAssets(this.projectRoot);
   }
 
   /**
@@ -677,11 +521,20 @@ export class BackendGenerator extends BaseGenerator {
       });
     }
     const hasAdminOnly = model.fields.some(field => field.adminOnly === true);
+    const adminOpList = resolveAdminOperations(model.source.api);
     return {
       normalOps,
+      /** Admin routes (`api.adminOperations`; `list` always). */
+      adminOps: Object.fromEntries(NORMAL_OPERATIONS.map(op => [op, adminOpList.includes(op)])),
       hasNormalOps: Object.values(normalOps).some(Boolean),
       authScope: canWrite ? (isSelf ? "'self'" : 'true') : 'false',
       hiddenFields: model.fields.filter(field => field.hidden === true).map(field => field.name),
+      /** List reads leave out `hidden` and `detailOnly` fields (getOne reads `detailOnly`). Empty → no projection option. */
+      listProjection: model.fields
+        .filter(field => field.detailOnly === true)
+        .concat(model.fields.filter(field => field.hidden === true && field.detailOnly !== true))
+        .map(field => `-${field.name}`)
+        .join(' '),
       /** Admin update keeps `userId` in the body: an admin may reassign the owner (G5). */
       adminOwnershipInBody: model.ownership?.kind === 'field',
       /** Admin route uses `*AdminSchema` when the normal schema omits something (ownership field, adminOnly fields). */

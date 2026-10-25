@@ -7,11 +7,12 @@
  *   API_BASE=http://localhost:5091 JWT_SECRET=… JWT_ISSUER=… JWT_AUDIENCE=… node scripts/verify/dotnet-d2-documents-smoke.mjs
  */
 import { createHmac } from 'node:crypto';
+import { SUBJECT } from './_smoke-ids.mjs';
 const base=process.env.API_BASE??'http://localhost:5091', secret=process.env.JWT_SECRET;
 if(!secret){console.error('JWT_SECRET gerekli');process.exit(1);}
 const b64=v=>Buffer.from(JSON.stringify(v)).toString('base64url');
 const now=Math.floor(Date.now()/1000);
-const h=`${b64({alg:'HS256',typ:'JWT'})}.${b64({sub:'0199f000-0000-7000-8000-000000000001',role:'Admin',iat:now,exp:now+600,iss:process.env.JWT_ISSUER,aud:process.env.JWT_AUDIENCE})}`;
+const h=`${b64({alg:'HS256',typ:'JWT'})}.${b64({sub:SUBJECT,role:'admin',iat:now,exp:now+600,iss:process.env.JWT_ISSUER,aud:process.env.JWT_AUDIENCE})}`;
 const tok=`${h}.${createHmac('sha256',secret).update(h).digest('base64url')}`;
 const call=async(m,p,b)=>{const r=await fetch(base+p,{method:m,headers:{'content-type':'application/json',authorization:`Bearer ${tok}`},body:b&&JSON.stringify(b)});return {s:r.status,j:await r.json().catch(()=>null)}};
 let f=0;const ck=(n,ok,d)=>{if(!ok)f++;console.log(ok?'PASS':'FAIL',n,ok?'':JSON.stringify(d))};

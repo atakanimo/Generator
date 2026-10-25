@@ -9,6 +9,7 @@ public static class ApiSetup
         services.AddContractJson();
         services.AddContractAuth(configuration);
         services.AddExceptionHandler<EnvelopeExceptionHandler>();
+        services.Configure<RouteOptions>(options => options.SetParameterPolicy<EntityIdRouteConstraint>(EntityIdRouteConstraint.Name));
         services.AddOpenApi();
 
         var origins = configuration.GetSection("Cors:Origins").Get<string[]>() ?? [];

@@ -23,6 +23,7 @@ import {
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import type { NormalizedField, NormalizedModel, NormalizedObjectSubField } from '@shared/normalizedModel';
+import type { RelatedModelFieldInfo, SourceType } from '@shared/ipcTypes';
 import { typeTokenOf } from '@shared/fieldTypeToken';
 import {
   EDITOR_FIELD_TYPES,
@@ -42,6 +43,7 @@ import {
   withEnumNumbers,
   withEnumValues,
   withPattern,
+  withReferencePopulate,
   withReferenceTarget,
   withSubReference,
   type EditorFieldType,
@@ -60,12 +62,104 @@ interface AddModelModalProps {
   modelFilePath?: string;
 }
 
-const DEFAULT_FIELDS: NormalizedField[] = [
-  { name: 'value', kind: 'string', isArray: false, required: true, unique: true, trim: true },
-  { name: 'displayText', kind: 'string', isArray: false, required: true, unique: false, trim: true }
-];
-
 const newField = (): NormalizedField => ({ name: '', kind: 'string', isArray: false, required: false, unique: false, trim: false });
+
+/** A new model starts with one empty field: no flag is pre-checked (what to require / trim is the user's choice). */
+const DEFAULT_FIELDS: NormalizedField[] = [newField()];
+
+/** Editor type tokens are stack-free; `ObjectId` is shown as Reference (EF / Python references are not ObjectIds). */
+const typeLabel = (t: string): string => (t === 'ObjectId' ? 'Reference' : t);
+
+/** Help text of a reference field's target, in the host stack's words. */
+function refHelperText(sourceType: AddModelModalProps['sourceType']): string {
+  if (sourceType === 'nodejs-mongoose') return 'Target model (Mongoose ref name)';
+  if (sourceType === 'dotnet-ef') return 'Target entity (navigation + FK)';
+  if (sourceType === 'python-fastapi') return 'Target model (stored as ObjectId)';
+  return 'Target model name';
+}
+
+/** Populate + display of a reference field (same rule as the schema designer: read endpoints return
+ * `{ id, ...populate }`; `display` is the admin autocomplete / table field). Target fields come from the project. */
+function ReferencePopulateInput({
+  field,
+  projectPath,
+  sourceType,
+  onChange
+}: {
+  field: NormalizedField;
+  projectPath: string;
+  sourceType: AddModelModalProps['sourceType'];
+  onChange: (populate: string[], display?: string) => void;
+}) {
+  const target = referenceTargetOf(field).trim();
+  const [candidates, setCandidates] = useState<RelatedModelFieldInfo[]>([]);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!target || !projectPath || !window.electronAPI?.project?.getRelatedModelFields) {
+      setCandidates([]);
+      setLookupError(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const res = await window.electronAPI.project
+        .getRelatedModelFields(projectPath, target, (sourceType ?? undefined) as SourceType | undefined)
+        .catch((e: unknown) => ({ success: false, fields: undefined, error: e instanceof Error ? e.message : String(e) }));
+      if (cancelled) return;
+      setCandidates(res.success && res.fields ? res.fields : []);
+      setLookupError(res.success ? null : res.error || `"${target}" modeli bulunamadı`);
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [target, projectPath, sourceType]);
+
+  if (!target) return null;
+  const populate = field.reference?.populate ?? [];
+  const display = field.reference?.display ?? '';
+  const displayInfo = candidates.find(c => c.name === display);
+  return (
+    <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'flex-start', width: '100%' }}>
+      <Autocomplete
+        multiple
+        freeSolo={candidates.length === 0}
+        options={candidates.map(c => c.name)}
+        value={populate}
+        onChange={(_, value) => onChange(value as string[], display)}
+        renderTags={(value, getTagProps) =>
+          value.map((option, i) => <Chip size='small' label={option} {...getTagProps({ index: i })} key={option} />)
+        }
+        renderInput={params => (
+          <TextField
+            {...params}
+            size='small'
+            label='Populate'
+            helperText={lookupError ?? 'Okumada { id, ...alanlar } döner; boş → yalnız id'}
+            error={Boolean(lookupError) && candidates.length === 0 && populate.length > 0}
+          />
+        )}
+        sx={{ minWidth: 260, flex: 1 }}
+      />
+      <FormControl size='small' sx={{ minWidth: 180 }} disabled={populate.length === 0}>
+        <InputLabel>Display</InputLabel>
+        <Select value={populate.includes(display) ? display : ''} label='Display' onChange={e => onChange(populate, String(e.target.value))}>
+          {populate.map(name => (
+            <MenuItem key={name} value={name}>
+              {name}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+      {displayInfo && displayInfo.regexSearchable !== true && (
+        <Alert severity='warning' sx={{ py: 0 }}>
+          "{display}" hedefte regex filtrelenebilir değil: admin autocomplete arama yapamaz (K3).
+        </Alert>
+      )}
+    </Box>
+  );
+}
 
 /** Schema `default:` editor — typed by the field type; an enum field picks one of its values. */
 function SchemaDefaultInput({ field, onChange }: { field: NormalizedField; onChange: (value: NormalizedField['default']) => void }) {
@@ -149,6 +243,7 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
   open,
   onClose,
   onSave,
+  projectPath,
   sourceType,
   initialData,
   isEditMode = false
@@ -166,6 +261,8 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
   const isMongoose = sourceType === 'nodejs-mongoose';
   // .NET host (D5): no seed function; timestamps always come from `AuditableEntity`.
   const isDotnet = sourceType === 'dotnet-ef';
+  // Python host (PY5 / PY9): the model is the manifest row; `id`, `createdAt`, `updatedAt` always exist.
+  const isPython = sourceType === 'python-fastapi';
 
   useEffect(() => {
     if (open && initialData) {
@@ -412,13 +509,13 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
     onClose();
   };
 
-  if (!isMongoose && !isDotnet) {
+  if (!isMongoose && !isDotnet && !isPython) {
     return (
       <Dialog open={open} onClose={handleClose} maxWidth='md' fullWidth>
         <DialogTitle>Add Model</DialogTitle>
         <DialogContent>
           <Alert severity='info' sx={{ mt: 2 }}>
-            Model creation is supported for Node.js (Mongoose) and .NET (EF Core) projects.
+            Model creation is supported for Node.js (Mongoose), .NET (EF Core) and Python (FastAPI) projects.
           </Alert>
         </DialogContent>
         <DialogActions>
@@ -492,7 +589,7 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
                     >
                       {EDITOR_FIELD_TYPES.map(t => (
                         <MenuItem key={t} value={t}>
-                          {t}
+                          {typeLabel(t)}
                         </MenuItem>
                       ))}
                       {type === 'Other' && (
@@ -520,7 +617,7 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
                     />
                   )}
 
-                  {type !== 'Object' && (
+                  {type !== 'Object' && type !== 'Boolean' && type !== 'Map' && (
                     <FormControlLabel
                       control={
                         <Checkbox
@@ -726,7 +823,16 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
                       size='small'
                       placeholder='e.g., User'
                       sx={{ minWidth: 150 }}
-                      helperText='Mongoose ref name'
+                      helperText={refHelperText(sourceType)}
+                    />
+                  )}
+
+                  {type === 'ObjectId' && (
+                    <ReferencePopulateInput
+                      field={field}
+                      projectPath={projectPath}
+                      sourceType={sourceType}
+                      onChange={(populate, display) => updateField(index, f => withReferencePopulate(f, populate, display))}
                     />
                   )}
                 </Box>
@@ -792,7 +898,7 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
                           >
                             {EDITOR_SUB_FIELD_TYPES.map(t => (
                               <MenuItem key={t} value={t}>
-                                {t}
+                                {typeLabel(t)}
                               </MenuItem>
                             ))}
                           </Select>
@@ -826,6 +932,26 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
                             }
                             label='Trim'
                           />
+                        )}
+                        {subType === 'Number' && editorShowsNumberFormat(sourceType) && (
+                          <FormControl size='small' sx={{ minWidth: 110 }}>
+                            <InputLabel>Format</InputLabel>
+                            <Select
+                              value={sub.numberFormat === 'int' ? 'int' : 'float'}
+                              label='Format'
+                              onChange={e =>
+                                updateSubField(index, subIndex, s => {
+                                  const out = { ...s };
+                                  if (e.target.value === 'int') out.numberFormat = 'int';
+                                  else delete out.numberFormat;
+                                  return out;
+                                })
+                              }
+                            >
+                              <MenuItem value='float'>float</MenuItem>
+                              <MenuItem value='int'>int</MenuItem>
+                            </Select>
+                          </FormControl>
                         )}
                         {subType === 'Number' && (
                           <FormControlLabel
@@ -862,6 +988,11 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
             <Alert severity='info'>
               .NET: <code>id</code>, <code>createdAt</code> ve <code>updatedAt</code> her entity'de vardır (AuditableEntity). Kaydedince modül
               dosyaları üretilir; şema değiştiyse migration eklemeyi unutmayın.
+            </Alert>
+          ) : isPython ? (
+            <Alert severity='info'>
+              Python: <code>id</code>, <code>createdAt</code> ve <code>updatedAt</code> her modülde vardır. Kaydedince model manifest'e yazılır ve
+              modül üretilir (G dosyaları + ilk seferde K dosyaları ve modül testi).
             </Alert>
           ) : (
             <>

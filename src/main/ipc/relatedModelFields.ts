@@ -4,7 +4,7 @@ import { parseNormalizedModel, entityNameFromModelFileName } from './schemaParse
 import { mergeModel } from '../../shared/modelMerge.js';
 import { filterTokenOf, typeTokenOf } from '../../shared/fieldTypeToken.js';
 import type { RelatedModelFieldInfo, RelatedModelFieldsResult } from '../../shared/ipcTypes.js';
-import { findManifestModelByRelativePath, toProjectRelativePath } from '../utils/manifestSnapshot.js';
+import { findManifestModelByRelativePath, readWorkspaceManifest, toProjectRelativePath } from '../utils/manifestSnapshot.js';
 import type { NormalizedModel } from '../../shared/normalizedModel.js';
 import { findDotnetHost, listDotnetEntityFiles } from '../parsers/dotnet/dotnetHost.js';
 import { parseDotnetEntity } from '../parsers/dotnet/entityParser.js';
@@ -99,6 +99,7 @@ export async function getRelatedModelFieldNames(
   }
 
   if (sourceType === 'dotnet-ef') return dotnetRelatedFields(projectPath, trimmed);
+  if (sourceType === 'python-fastapi') return pythonRelatedFields(projectPath, trimmed);
   if (sourceType && sourceType !== 'nodejs-mongoose') {
     return {
       success: false,
@@ -154,6 +155,14 @@ function dotnetRelatedFields(projectPath: string, name: string): RelatedModelFie
   const row = findManifestModelByRelativePath(projectPath, toProjectRelativePath(projectPath, match.path));
   const merged = mergeModel(parsed, row, 'dotnet-ef');
   return { success: true, fields: relatedFieldInfos(parsed, merged), modelPath: match.path };
+}
+
+/** Python host (K1): the target's manifest row, by entity (`EventTypes`) or a ref variant of it. */
+function pythonRelatedFields(projectPath: string, name: string): RelatedModelFieldsResult {
+  const variants = relationRefNameVariants(name).map(v => v.toLowerCase());
+  const row = (readWorkspaceManifest(projectPath)?.models ?? []).find(r => variants.includes(r.model.entityName.toLowerCase()));
+  if (!row) return { success: false, error: `"${name}" için Python modülü manifest'te yok.` };
+  return { success: true, fields: relatedFieldInfos(row.model, row.model), modelPath: row.sourceRelativePath };
 }
 
 function relatedFieldInfos(parsedModel: NormalizedModel, merged: NormalizedModel): RelatedModelFieldInfo[] {

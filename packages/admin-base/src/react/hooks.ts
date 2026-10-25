@@ -108,6 +108,25 @@ export function useRelationOptions(field: RelationFieldConfig, search: string, o
   });
 }
 
+/**
+ * Yalnız id olarak gelen ilişki değerinin satırı (alt objedeki ilişkiler populate edilmez): hedefin `get-all`'u
+ * `filters.id` ile. Etiket için `display` gerekir; değer zaten populate edilmişse ya da `display` yoksa istek yok.
+ */
+export function useRelationRow(field: RelationFieldConfig, id: string | null) {
+  const { dataProvider, resources } = useAtaAdmin();
+  const target = resources.get(field.ref);
+  const body: ListBody = { filters: { id: id ?? '' }, limit: 1 };
+  return useQuery({
+    queryKey: resourceKeys.list(field.ref, body),
+    queryFn: async ({ signal }) => {
+      const page = await dataProvider.list<{ id: Id } & Record<string, unknown>>(target!, body, { signal, background: true });
+      return page.items[0] ?? null;
+    },
+    enabled: target !== undefined && id !== null && Boolean(field.display),
+    staleTime: 60_000
+  });
+}
+
 const NO_OPTIONS: readonly string[] = [];
 
 /**

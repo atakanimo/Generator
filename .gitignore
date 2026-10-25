@@ -26,3 +26,7 @@ dist-electron
 # Verification script output (regenerable)
 scripts/verify/out/
 
+
+# .NET asset şablonlarında yanlışlıkla oluşan build çıktısı (dotnet build asset klasöründe çalışırsa)
+src/generator-assets/**/bin/
+src/generator-assets/**/obj/

@@ -4,18 +4,25 @@
  */
 import type { NormalizedApi, NormalizedModel } from './normalizedModel.js';
 import type { ModelDraft } from './modelDraft.js';
+import type { BackendDatabase, BackendIdType, BackendStack, HostDatabase } from './backendDatabase.js';
 
-export type SourceType = 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | null;
+export type SourceType = 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | 'python-fastapi' | null;
 
 export interface ScannedModel {
   fileName: string;
   path: string;
+  /**
+   * Python hosts (PY7): `generated` = manifest module (schema designer / editor); `importable` = hand-written
+   * `modules/<m>/model.py` not imported yet (import dialog). Absent for the other stacks.
+   */
+  kind?: 'generated' | 'importable';
+  entityName?: string;
 }
 
 export interface ScanResult {
   success: boolean;
   models: ScannedModel[];
-  detectedType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm';
+  detectedType?: 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | 'python-fastapi';
   detectedTechnologies?: string[];
   discoveryInfo?: string;
   error?: string;
@@ -71,7 +78,10 @@ export interface BackendSelectedFiles {
 
 export interface ManifestWorkspacePrefs {
   /** Backend stack of the project (D5); detection is used when absent. */
-  backendStack?: 'nodejs-mongoose' | 'dotnet-ef';
+  backendStack?: BackendStack;
+  /** Written by the bootstrap together with `idType`, never changed (`backendDatabase.ts`). */
+  database?: BackendDatabase;
+  idType?: BackendIdType;
   frontendPath?: string;
   generationMode?: 'frontend' | 'backend' | 'fullstack';
   isProtectedRoute?: boolean;
@@ -168,6 +178,73 @@ export interface RelatedModelFieldsResult {
   error?: string;
 }
 
+/** One problem of the extra-field report (`src/main/parsers/python/mongoReport.ts`). */
+export interface CollectionReportIssue {
+  path: string;
+  docs: number;
+  types: string[];
+  expected?: string;
+  breaksAdminRead: boolean;
+}
+
+/** Read-only sample of the module's collection against the imported model (PY7). */
+export interface CollectionReport {
+  ok: boolean;
+  reason?: 'no-config' | 'remote-skipped' | 'no-driver' | 'unreachable' | 'error';
+  error?: string;
+  source?: string;
+  server?: string;
+  database?: string;
+  collection: string;
+  exists?: boolean;
+  total?: number;
+  scanned?: number;
+  sampled?: boolean;
+  extra: CollectionReportIssue[];
+  missing: CollectionReportIssue[];
+  mismatched: CollectionReportIssue[];
+  soft: CollectionReportIssue[];
+}
+
+/** `project:previewPythonImport`: parsed Pydantic class + extra-field report; nothing written. */
+export interface PythonImportPreview {
+  success: boolean;
+  entityName?: string;
+  collection?: string;
+  className?: string;
+  candidates?: string[];
+  model?: NormalizedModel;
+  warnings?: string[];
+  suggestions?: string[];
+  /** Fields that cannot be represented; the import is refused while any remain. */
+  unsupported?: string[];
+  report?: CollectionReport;
+  reportSummary?: string;
+  error?: string;
+}
+
+/** `project:importPythonModel`: manifest row + generate. */
+export interface PythonImportResult {
+  success: boolean;
+  entityName?: string;
+  /** The module's `model_generated.py` (schema designer / editor path from now on). */
+  filePath?: string;
+  sourceRelativePath?: string;
+  writtenFiles?: string[];
+  warnings?: string[];
+  notes?: string[];
+  error?: string;
+}
+
+/** New-host bootstrap (`project:bootstrapDotnet` / `bootstrapExpress` / `bootstrapPython`): created files, project-relative. */
+export interface BootstrapProjectResult {
+  success: boolean;
+  /** Python: snake_case package (`src/<package>`); Express: npm package name. */
+  package?: string;
+  files?: string[];
+  error?: string;
+}
+
 export interface ElectronAPI {
   dialog: {
     openDirectory: () => Promise<{ canceled: boolean; filePaths: string[] }>;
@@ -219,8 +296,20 @@ export interface ElectronAPI {
     loadModelDraft: (filePath: string, sourceType: SourceType) => Promise<LoadModelDraftResult>;
     getRelatedModelFields: (projectRoot: string, relationEntityName: string, sourceType?: SourceType) => Promise<RelatedModelFieldsResult>;
     updateModel: (filePath: string, sourceType: SourceType, draft: ModelDraft, projectPath?: string) => Promise<UpdateModelResult>;
-    /** New .NET 10 + EF Core host (solution, 4 projects, core assets) in `root`. */
-    bootstrapDotnet: (root: string, app: string) => Promise<{ success: boolean; files?: string[]; error?: string }>;
+    /** New .NET 10 + EF Core host (solution, 4 projects, core assets) in `root` for the chosen database / id type. */
+    bootstrapDotnet: (root: string, app: string, db: HostDatabase) => Promise<BootstrapProjectResult>;
+    /** New Python + FastAPI host (pyproject, `src/<package>`, core assets) in `root`; `app` becomes a snake_case package (PY4). */
+    bootstrapPython: (root: string, app: string) => Promise<BootstrapProjectResult>;
+    /** New Express + Mongoose + TypeScript host (skeleton + core assets) in `root`; `app` becomes a kebab-case npm name (PY9). */
+    bootstrapExpress: (root: string, app: string) => Promise<BootstrapProjectResult>;
+    /** PY7: parse a hand-written Pydantic module (`modules/<m>/model.py`) + extra-field report of its collection. */
+    previewPythonImport: (
+      projectPath: string,
+      filePath: string,
+      options?: { className?: string; report?: boolean; allowRemote?: boolean }
+    ) => Promise<PythonImportPreview>;
+    /** PY7: import the class (manifest row) and generate the module. */
+    importPythonModel: (projectPath: string, filePath: string, options?: { className?: string }) => Promise<PythonImportResult>;
   };
   // Database connection commands (for future use)
   database: {

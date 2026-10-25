@@ -47,7 +47,7 @@ Ortak: `name`, `label`, `isArray`, `required`, `nullable`, `readonly`, `hideOnCr
 - `sortable`: kolon sunucu sıralaması. Varsayılan skaler, dizi olmayan alanlarda açık; `false` kapatır. `true` ilişki / obje / dizi alanını sıralanabilir yapmaz.
 - `default`: sabit değer ya da `{ dynamic: 'now' | 'uuid' | 'currentUserId' }` (create formu açılınca hesaplanır).
 - `writeOnly` (ör. şifre; model `hidden` + yazılabilir): cevapta gelmez, tabloda ve filtrede yok; formda gizli giriş, edit'te boş başlar ve boşsa gönderilmez; `required` yalnızca create'te.
-- Update body'si formdaki yazılabilir alanların tamamıdır (`toWriteBody`); `readonly` / `hideOnUpdate` alanlar ve şema dışı anahtarlar düşer, ilişkiler id'ye iner.
+- Update body'si formdaki yazılabilir alanların tamamıdır (`toWriteBody`); `readonly` / `hideOnUpdate` alanlar ve şema dışı anahtarlar düşer, ilişkiler id'ye iner. Edit'te boşaltılan opsiyonel ya da `nullable` tekil alan `null` gider, BE alanı temizler (sözleşme §5, JSON Merge Patch); zorunlu alan ve boş `writeOnly` gönderilmez, dizi `[]` ile boşalır (0.1.8).
 
 ## `extendResource` (`src/schema/extend.ts`)
 

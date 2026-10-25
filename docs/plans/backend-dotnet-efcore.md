@@ -45,15 +45,22 @@ Eşlikte bilinen farklar (gerekçeleri `contract-parity.mjs`'te): bozuk id (.NET
 
 ## 4. Açık işler
 
+- **Seçilebilir veritabanı ve id tipi** (PostgreSQL / MongoDB, uuid v7 / ObjectId): [backend-dotnet-database-providers.md](backend-dotnet-database-providers.md).
 - **Arayüz denemesi:** yeni .NET projesi penceresi, model ekleme, generate bildirimi, admin config üretimi (Electron'da elle).
 - **Admin FE testi için host:** SharedFrame `apps/admin` admin-base kullanmıyor (eski SharedFrameAdmin, kendi sayfaları). Generator config'ini orada denemek için önce admin-base host'una geçirilmesi gerekir (Varlik360 admin geçişindeki gibi).
-- Kısmi update'te nullable alan boşaltılamıyor (`null` = değişmez): `Optional<T>` ya da JSON Merge Patch kararı; Express davranışıyla birlikte.
+- ~~Kısmi update'te nullable alan boşaltılamıyor~~ **Uygulandı (2026-10-23):** update'te JSON Merge Patch ([api-contract.md](../api-contract.md) §5). Gönderilmeyen alan değişmez, opsiyonel alana `null` alanı `NULL` yapar, zorunlu alana ve listeye `null` 400.
+  - **Yaklaşım:** update gövdeleri `PatchBody`'den türer (`Application/Common/Patch/PatchBody.cs`, asset). Her özelliğin `init`'i `Sent()` çağırır (C# 14 `field` anahtar kelimesi: `public string? Note { get; init { field = value; Sent(); } }`); System.Text.Json setter'ı yalnız JSON'da olan özellik için çağırdığından `body.Has(nameof(body.Note))` "gönderildi mi" bilgisini verir. `MapUpdate` opsiyonel alanı `Has` ise `null` dahil yazar; zorunlu alan ve liste için validator'da `NotNull().When(x => x.Has(...))` (mesaj `PatchBody.NullNotAllowed`), atama eskisi gibi `is not null`.
+  - **Neden bu, `Optional<T>` + converter değil:** özellik tipleri değişmez (`string?`, `Guid?`), elle yazılmış hook / servis kodu ve FluentValidation kuralları aynen derlenir; converter fabrikası, `JsonSerializerOptions` kaydı ve `.Value` açma yok. `JsonElement`'ten eşleme ise tip güvenliğini ve STJ doğrulamasını (strict, enum, decimal) kaybettirirdi. Bedeli: üretilen satır biraz uzun; gövde nesnesini kodda `with` / initializer ile kuran yer de `Has`'i doğru doldurur (initializer da `init`'i çağırır).
+  - Var olan host'lar: `PatchBody.cs` eksikse bootstrap oluşturur; modüller yeniden generate edilir (SharedFrame güncellendi).
 - 400 mesajları STJ'nin İngilizce metni; alan adı + yerelleştirilmiş metin. Accept-Language (Express `t()` karşılığı) yok.
 - `number` her zaman `double`; tamsayı bilgisi modelde yok.
 - Obje alt alanında iç içe obje / json / map; kendine m-n ilişki denenmedi; elle yazılmış entity'ye reference FK'sız.
 - Golden set fixture'ı Varlik360 kodunun gerisinde (`countryLabelKey`, bileşik unique, `createdAt` filtresi); `DailyPortfolio.portfolioValues` parser'dan hedefsiz `reference[]` geliyor (aslında alt doküman dizisi).
 - `regen-varlik360 --p5` iki tespit senaryosunda FAIL (HEAD'de de; .NET'ten bağımsız).
 - Asset değişiklikleri var olan host'lara gitmez (create-if-missing). SharedFrame'in `Common` dosyaları D0 sürümünde; geçişte güncel asset'lerle değiştirilmeli (`CrudServiceBase`, `Ref`, `RefJsonConverterFactory`, `JsonbConversion`, filtre aşırı yüklemeleri, 409 eşlemesi, tarih okuma).
+  - DB1 (2026-10-24, [backend-dotnet-database-providers.md](backend-dotnet-database-providers.md)): `Application/Common/Errors/IDbErrorClassifier.cs` ve `Infrastructure/Common/DbErrorClassifier.cs` eksikse bootstrap oluşturur; `Api/Common/EnvelopeExceptionHandler.cs` (sınıflandırıcıyı alır) elle değiştirilir ve `DependencyInjection.cs`'e `services.AddSingleton<IDbErrorClassifier, DbErrorClassifier>();` eklenir. `Program.cs` → `InitializeDatabaseAsync` isteğe bağlı (yeni host'larda migration adımı orada). Var olan manifest'ler okunurken `database: postgres`, `idType: uuid-v7` alır.
+  - DB2–DB4 (2026-10-24): `EntityId` (bkz. [backend-dotnet-database-providers.md](backend-dotnet-database-providers.md) §5.3); `Application/Common/Pagination/RowProjection.cs` eklenir, `CrudServiceBase.cs` (projeksiyon `RowProjection`'dan, `PopulateAsync` / `CheckInUseAsync` kancaları), `FilterExtensions.cs` (nullable `IN` eşitlik zinciri, `WhereAnyIdIn`), `RefJsonConverter.cs` (id `JsonSerializer` ile), `JsonSetup.cs` (`EntityIdJson.Converters`) + `Api/Common/EntityIdJson.cs` elle güncellenir. Modüllerin `Projections.cs` using'i ve entity yorumları generate'le değişir.
+  - İnceleme (2026-10-24): `CrudServiceBase.cs`'e `DetachReferencesAsync` kancası (yalnız MongoDB üretir). Postgres `JsonbConversion.cs` enum listelerini artık değerleriyle yazar (eskisi sıra numarasıyla); enum listesi verisi olan bir host'a bu dosya kopyalanmaz, önce veri çevrilir.
 
 ## 5. SharedFrame
 

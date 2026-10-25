@@ -3,6 +3,7 @@
  * Pure: no file system. The admin FE is config only; the package renders pages, tables and forms.
  */
 import type { FieldConstraints, NormalizedField, NormalizedModel, NormalizedObjectSubField } from '../../shared/normalizedModel.js';
+import { resolveAdminOperations } from '../../shared/normalizedModel.js';
 import { constraintsForField, isNumericEnum } from '../../shared/fieldConstraints.js';
 import { moduleNameFromEntity } from '../utils/namingUtils.js';
 
@@ -28,6 +29,8 @@ export interface AdminFieldConfig {
   /** Model `hidden` but writable (e.g. password): never in a response, written through the form. */
   writeOnly?: true;
   list?: true;
+  /** `false`: the BE does not sort by it (`access.computed`). */
+  sortable?: false;
   filter?: AdminFilterType;
   default?: string | number | boolean | null | AdminDynamicDefault;
   component?: 'textarea' | 'image';
@@ -132,19 +135,27 @@ function resolveFilter(field: NormalizedField, kind: AdminFieldKind): AdminFilte
   const explicit = field.filter.type ? FILTER_TYPE[field.filter.type] : undefined;
   // Enum fields filter by equality / `$in` unless another filter was chosen (contract §3, BE resolveTemplateFilterType).
   if (kind === 'enum' && !field.isArray && (explicit === undefined || explicit === 'regex' || explicit === 'eq')) return 'enum';
+  // A reference filters by id on every BE (Python `FilterField(…, 'reference')`, Express / .NET the same), whatever the
+  // model's filter type says; a text filter would send a search term the BE rejects.
+  if (kind === 'relation' && field.reference?.target) return 'relation';
   return explicit ?? defaultFilter(kind);
 }
 
 function subFieldConfig(sub: NormalizedObjectSubField): AdminFieldConfig | null {
-  const kind = SCALAR_KIND[sub.kind];
-  if (!kind || kind === 'object' || kind === 'map') return null;
+  let kind = SCALAR_KIND[sub.kind];
+  if (!kind) return null;
+  // Second-level object / map (e.g. markets `universe.symbolFilters`): the admin has one nesting level, so it is
+  // edited as JSON. Dropping it would make every save of the parent object erase it.
+  if (kind === 'object' || kind === 'map') kind = 'json';
   const out: AdminFieldConfig = { name: sub.name, kind };
   if (sub.required) out.required = true;
   if (sub.nullable) out.nullable = true;
+  if (sub.kind === 'number' && sub.numberFormat === 'int') out.numberFormat = 'int';
   if (kind === 'relation') {
     const target = sub.reference?.target ?? sub.reference?.ref;
     if (!target) return { name: sub.name, kind: 'string', ...(sub.required ? { required: true as const } : {}) };
     out.ref = adminResourceName(target);
+    if (sub.reference?.display) out.display = sub.reference.display;
   }
   return out;
 }
@@ -164,7 +175,8 @@ function fieldConfig(field: NormalizedField, skipped: SkippedField[]): AdminFiel
   if (field.access?.readonly) out.readonly = true;
   if (field.access?.hiddenFromCreate) out.hideOnCreate = true;
   if (field.access?.hiddenFromUpdate) out.hideOnUpdate = true;
-  if (field.ui?.list !== false) out.list = true;
+  // `detailOnly` is `null` on list rows: no table column (the detail view shows it).
+  if (field.ui?.list !== false && field.access?.detailOnly !== true) out.list = true;
   const filter = resolveFilter(field, kind);
   if (filter) out.filter = filter;
   const dynamicDefault = DYNAMIC_DEFAULT[field.ui?.defaultValue ?? ''];
@@ -202,9 +214,22 @@ function fieldConfig(field: NormalizedField, skipped: SkippedField[]): AdminFiel
     out.fields = (field.object?.fields ?? []).map(subFieldConfig).filter((s): s is AdminFieldConfig => s !== null);
     if (field.object?.typeName) out.typeName = field.object.typeName;
     delete out.filter;
+    // Opaque object (no modelled sub-fields, e.g. audit `details`): an empty sub-form edits nothing; JSON shows it all.
+    if (out.fields.length === 0) {
+      out.kind = 'json';
+      delete out.fields;
+      delete out.typeName;
+    }
   }
   if (kind === 'map') out.valueKind = 'number';
   if (kind === 'json') delete out.filter;
+  if (field.access?.computed === true) {
+    // Derived when read (live price …): shown, never written, no filter / sort on the BE.
+    out.readonly = true;
+    out.sortable = false;
+    delete out.filter;
+    delete out.default;
+  }
   if (field.access?.hidden === true) {
     // Hidden (G2) but writable: the form writes it, nothing shows it (contract §2.1).
     out.writeOnly = true;
@@ -238,10 +263,11 @@ export function toAdminResourceConfig(input: AdminResourceInput): { config: Admi
     label: model.ui?.label?.trim() || model.entityName.replace(/([a-z0-9])([A-Z])/g, '$1 $2'),
     fields
   };
-  const updatable = features?.updatable !== false;
-  const deletable = features?.deletable !== false;
-  if (!updatable || !deletable) {
-    config.operations = [...(updatable ? (['create', 'update'] as const) : []), ...(deletable ? (['delete'] as const) : [])];
-  }
+  // Model's admin operations (`api.adminOperations`) narrowed by the Generator UI table features.
+  const open = resolveAdminOperations(model.api);
+  const operations = (['create', 'update', 'delete'] as const).filter(
+    op => open.includes(op) && (op === 'delete' ? features?.deletable !== false : features?.updatable !== false)
+  );
+  if (operations.length < 3) config.operations = operations;
   return { config, skipped };
 }

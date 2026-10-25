@@ -10,8 +10,8 @@ namespace __App__.Application.Common.Services;
 public interface ICrudService<TRow, in TCreate, in TUpdate, TFilters> where TFilters : class
 {
     Task<Result<PaginatedList<TRow>>> ListAsync(ListBody<TFilters> body, CancellationToken cancellationToken);
-    Task<Result<TRow>> GetByIdAsync(Guid id, CancellationToken cancellationToken);
+    Task<Result<TRow>> GetByIdAsync(EntityId id, CancellationToken cancellationToken);
     Task<Result<TRow>> CreateAsync(TCreate body, CancellationToken cancellationToken);
-    Task<Result<TRow>> UpdateAsync(Guid id, TUpdate body, CancellationToken cancellationToken);
-    Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken);
+    Task<Result<TRow>> UpdateAsync(EntityId id, TUpdate body, CancellationToken cancellationToken);
+    Task<Result> DeleteAsync(EntityId id, CancellationToken cancellationToken);
 }

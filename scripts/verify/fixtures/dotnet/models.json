@@ -108,6 +108,9 @@
         "required": true,
         "filter": {
           "searchable": false
+        },
+        "access": {
+          "detailOnly": true
         }
       },
       {

@@ -101,10 +101,13 @@ function complexTypes(content: string): Map<string, Property[]> {
 function markerOf(p: Property) {
   const parts = (p.marker ?? '').split(/\s+/).filter(Boolean);
   const hasMarker = parts.length > 0 && parts[0] !== 'nav';
+  const flags = parts.slice(1);
   return {
     json: hasMarker ? parts[0] : camelCase(p.name),
-    flags: new Set(parts.slice(1)),
-    nav: parts[0] === 'nav'
+    flags: new Set(flags),
+    nav: parts[0] === 'nav',
+    /** `ref=<Folder>`: reference target of an id property without a navigation (document strategy). */
+    ref: flags.find((f) => f.startsWith('ref='))?.slice(4)
   };
 }
 
@@ -126,12 +129,21 @@ function parseDefault(init: string | undefined, kind: FieldKind, enumValues: str
   return undefined;
 }
 
+/** Id-typed property = reference: `EntityId` in generated entities (plan backend-dotnet-database-providers K6), `Guid` in hand-written ones. */
+const ID_TYPES = new Set(['EntityId', 'Guid']);
+
 function subField(p: Property): NormalizedObjectSubField {
   const nullable = p.type.endsWith('?');
   const base = p.type.replace(/\?$/, '');
   const { json, flags } = markerOf(p);
-  const kind: FieldKind = base === 'Guid' ? 'reference' : (SCALARS[base] ?? 'unknown');
-  return { name: json, kind, required: !nullable, ...(flags.has('trim') ? { trim: true } : {}) };
+  const kind: FieldKind = ID_TYPES.has(base) ? 'reference' : (SCALARS[base] ?? 'unknown');
+  return {
+    name: json,
+    kind,
+    required: !nullable,
+    ...(flags.has('trim') ? { trim: true } : {}),
+    ...(base === 'int' || base === 'long' ? { numberFormat: 'int' as const } : {})
+  };
 }
 
 /**
@@ -150,11 +162,11 @@ export function parseDotnetEntity(filePath: string, entityFolders: Map<string, s
   const props = properties(body);
   const navTypes = new Map(props.filter((p) => markerOf(p).nav).map((p) => [p.name, p.type.replace(/\?$/, '')]));
   const targetOf = (cls: string) => entityFolders.get(cls) ?? pluralize(cls);
-  const isEntity = (cls: string) => entityFolders.has(cls) || (!SCALARS[cls] && !enumMap.has(cls) && !complexMap.has(cls) && cls !== 'Guid');
+  const isEntity = (cls: string) => entityFolders.has(cls) || (!SCALARS[cls] && !enumMap.has(cls) && !complexMap.has(cls) && !ID_TYPES.has(cls));
 
   const fields: NormalizedField[] = [];
   for (const p of props) {
-    const { json, flags, nav } = markerOf(p);
+    const { json, flags, nav, ref } = markerOf(p);
     if (nav) continue;
     const nullable = p.type.endsWith('?');
     const base = p.type.replace(/\?$/, '');
@@ -165,11 +177,12 @@ export function parseDotnetEntity(filePath: string, entityFolders: Map<string, s
 
     const inner = list ?? base;
     const map = /^Dictionary<string,(\w+)>$/.exec(inner);
-    if (inner === 'Guid') {
+    if (ID_TYPES.has(inner)) {
       field.kind = 'reference';
       // FK `<Stem>Id` next to navigation `<Stem>` (`// nav`).
       const navType = !list && /Id$/.test(p.name) ? navTypes.get(p.name.slice(0, -2)) : undefined;
       if (navType) field.reference = { target: targetOf(navType) };
+      else if (ref) field.reference = { target: ref };
     } else if (SCALARS[inner]) {
       field.kind = SCALARS[inner];
       if (inner === 'int' || inner === 'long') field.numberFormat = 'int';

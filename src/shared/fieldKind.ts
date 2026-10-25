@@ -12,6 +12,7 @@ import {
 } from './schemaFieldTypes.js';
 import { DATE_ONLY_PATTERN, EMAIL_PATTERN, jsRegExpSource } from './fieldConstraints.js';
 import { kindFromTypeToken } from './fieldTypeToken.js';
+import { updateNullClears } from './normalizedModel.js';
 
 export type FieldKindName =
   | 'primaryKey'
@@ -166,7 +167,9 @@ export function emitZodFieldExpr(
   const required = mode === 'update' || mode === 'filter' ? false : Boolean(field.required);
   const inner = emitZodInner(field, mode);
   const base = field.isArray ? `z.array(${inner})` : inner;
-  const expr = field.nullable === true && mode !== 'filter' ? `${base}.nullable()` : base;
+  // Update: `null` clears an optional single field (`$unset`), a required one or an array rejects it (contract §5).
+  const acceptsNull = mode === 'update' ? updateNullClears(field) : field.nullable === true && mode !== 'filter';
+  const expr = acceptsNull ? `${base}.nullable()` : base;
   // Create: an omitted field takes the model default (Mongoose would apply it too), so it is not required.
   const def = field.schemaDefault;
   if (mode === 'create' && def !== undefined && def !== null && !field.isArray) {
