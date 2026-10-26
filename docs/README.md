@@ -23,10 +23,6 @@ Model dosyası → Parser (stack'e özel) → NormalizedModel v2 → manifest v3
 | [generator-ui.md](generator-ui.md) | Generator arayüzü: ekranlar, IPC, model editörü |
 | [verification.md](verification.md) | Doğrulama betikleri (`scripts/verify/`) ve kapılar |
 | [history/varlik360-migration.md](history/varlik360-migration.md) | Varlik360 geçişinin özeti ve açık işler |
-| [plans/backend-dotnet-efcore.md](plans/backend-dotnet-efcore.md) | .NET + EF Core: kararlar, açık işler |
-| [plans/backend-python-fastapi.md](plans/backend-python-fastapi.md) | Python + FastAPI: kararlar, aşamalar (PY0–PY12), StockExchange geçişi, açık işler |
-| [plans/backend-dotnet-database-providers.md](plans/backend-dotnet-database-providers.md) | .NET'te seçilebilir veritabanı (PostgreSQL / MongoDB) ve id tipi (PY10) |
-| [plans/client-data-layer.md](plans/client-data-layer.md) | Mobil / web istemci veri katmanı (tipler, servis, thunk, slice) üretimi |
-| Açık işler ve testler | StockExchange `documents/KalanIsler.md`, `documents/TestPlan.md` (Generator dahil tek liste / tek test planı) |
+| Açık konular | Stack dokümanlarının "Açık konular" bölümleri: [backend/python-fastapi.md](backend/python-fastapi.md#açık-konular), [frontend/client-data-layer.md](frontend/client-data-layer.md#açık-konular) |
 
 AI kuralları `.cursor/rules/*.mdc` altında; her kural ilgili dokümana bağlanır.

@@ -56,6 +56,8 @@ export interface AdminResourceConfig {
   name: string;
   endpoint: string;
   label?: string;
+  /** Field that names a record (delete confirmation shows its value). */
+  titleField?: string;
   fields: AdminFieldConfig[];
   operations?: AdminOperation[];
 }
@@ -247,6 +249,28 @@ function isWritable(field: NormalizedField): boolean {
 }
 
 /** Admin `ResourceSchema` of a model, plus the fields that could not be expressed. */
+const TITLE_NAMES = ['ticker', 'code', 'alias', 'key', 'slug', 'email', 'ip', 'name', 'title', 'label'];
+/** Longer text (descriptions, prompts) does not name a record. */
+const TITLE_MAX_LENGTH = 200;
+
+/**
+ * Field that names a record: `ui.titleField` when set, else a conventional name (`ticker`, `code`, `email`, `name` …),
+ * else a required unique text field. Only single, short text fields; none → the generic confirmation text.
+ */
+function resolveTitleField(model: NormalizedModel, fields: AdminFieldConfig[]): string | undefined {
+  const source = new Map(model.fields.map(f => [f.name, f]));
+  const text = fields.filter(f => {
+    const max = source.get(f.name)?.constraints?.maxLength;
+    return f.kind === 'string' && !f.isArray && !f.writeOnly && (max === undefined || max <= TITLE_MAX_LENGTH);
+  });
+  const explicit = model.ui?.titleField?.trim();
+  if (explicit && fields.some(f => f.name === explicit)) return explicit;
+  return (
+    TITLE_NAMES.map(name => text.find(f => f.name === name)).find(Boolean)?.name ??
+    text.find(f => f.required && source.get(f.name)?.unique)?.name
+  );
+}
+
 export function toAdminResourceConfig(input: AdminResourceInput): { config: AdminResourceConfig; skipped: SkippedField[] } {
   const { model, endpoint, features } = input;
   const skipped: SkippedField[] = [];
@@ -263,6 +287,8 @@ export function toAdminResourceConfig(input: AdminResourceInput): { config: Admi
     label: model.ui?.label?.trim() || model.entityName.replace(/([a-z0-9])([A-Z])/g, '$1 $2'),
     fields
   };
+  const titleField = resolveTitleField(model, fields);
+  if (titleField) config.titleField = titleField;
   // Model's admin operations (`api.adminOperations`) narrowed by the Generator UI table features.
   const open = resolveAdminOperations(model.api);
   const operations: AdminOperation[] = (['create', 'update', 'delete'] as const).filter(

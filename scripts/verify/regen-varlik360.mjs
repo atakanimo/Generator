@@ -449,9 +449,10 @@ async function p5Checks() {
   check(remerged.fields.find(f => f.name === 'email').access?.adminOnly === true, 'adminOnly lost in mergeModel');
 
   // 2) Detection from Varlik360 files (no stored api yet).
+  // Varlik360: yazmalar admin router'ında, normal router'da yalnız list / getOne.
   const expectDetected = {
-    Symbols: { normalOperations: ['list', 'getOne', 'create', 'update', 'delete'], requiresAuth: true, admin: true },
-    AppVersionConfigs: { normalOperations: ['list', 'getOne', 'create', 'update', 'delete'], requiresAuth: false, admin: true },
+    Symbols: { normalOperations: ['list', 'getOne'], requiresAuth: true, admin: true },
+    AppVersionConfigs: { normalOperations: ['list', 'getOne'], requiresAuth: false, admin: true },
     DailyFxRates: { normalOperations: [], requiresAuth: true, admin: false },
     AuditLog: { normalOperations: [], requiresAuth: true, admin: false }
   };

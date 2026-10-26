@@ -13,7 +13,11 @@ export const ErrorCodes = {
   TOO_MANY_REQUESTS: 429,
   REQUEST_TIMEOUT: 408,
   SERVICE_UNAVAILABLE: 503,
-  EMAIL_NOT_VERIFIED: 463
+  /** Plan / abonelik yükseltmesi gerekli (ücretli özellik). */
+  PLAN_REQUIRED: 460,
+  EMAIL_NOT_VERIFIED: 463,
+  /** Dış servis (sağlayıcı, ödeme, veri kaynağı) hata verdi ya da ulaşılamadı. */
+  UPSTREAM_ERROR: 502
 } as const;
 
 export type ErrorCodeKey = keyof typeof ErrorCodes;

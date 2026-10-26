@@ -15,9 +15,9 @@ public class Result
     public string? UiMessage { get; }
     public bool IsSuccess => Error is null;
 
-    public static Result Ok(string uiMessage = Messages.Success) => new(null, uiMessage);
+    public static Result Ok(string? uiMessage = null) => new(null, uiMessage ?? Messages.Success);
     public static Result Fail(Error error) => new(error, null);
-    public static Result<T> Ok<T>(T value, string uiMessage = Messages.Success) => new(value, null, uiMessage);
+    public static Result<T> Ok<T>(T value, string? uiMessage = null) => new(value, null, uiMessage ?? Messages.Success);
     public static Result<T> Fail<T>(Error error) => new(default, error, null);
 }
 

@@ -21,8 +21,8 @@ interface IApiResponse<T> {
 
 - `traceId` opsiyoneldir: isteğin kimliği. Gelen `X-Request-Id` (en çok 128 karakter) kullanılır, yoksa üretilir; yanıt başlığında da döner. Express: host'un istek bağlamındaki `requestId` (`@utils/requestContext`); .NET: `TraceIdMiddleware` (`HttpContext.TraceIdentifier` ile aynı). İstek dışında (job) yazılmaz.
 - `errorData.header` / `message` yerelleştirilmiş, kullanıcıya gösterilen metindir.
-- Hata kodları her stack'te aynı sayılardır. Tek kaynak `core/errors/error-codes.ts`: 400, 401, 403, 404, 408, 409, 422, 429, `EMAIL_NOT_VERIFIED` 463, 500, 503.
-- Generic asset'te projeye özel kod yok (ör. Varlik360'ın `PREMIUM_REQUIRED: 460` host'ta kalır).
+- Hata kodları her stack'te aynı sayılardır. Tek kaynak `core/errors/error-codes.ts`: 400, 401, 403, 404, 408, 409, 422, 429, `PLAN_REQUIRED` 460, `EMAIL_NOT_VERIFIED` 463, 500, `UPSTREAM_ERROR` 502, 503.
+- Projeye özel alt kodlar (K9): 461–462, 464–479 (4xx) ve 560–579 (5xx); 460 ve 463 ortak (karar 2026-10-26: `PLAN_REQUIRED` Varlik360 `PREMIUM_REQUIRED` ve StockExchange `PLAN_REQUIRED` ile aynı anlam). Generic asset'te başka projeye özel kod yok.
 
 ## 2. Uçlar (resource başına)
 
@@ -75,6 +75,8 @@ type PaginatedList<T> = { items: T[]; total: number; hasMore: boolean; currentPa
 - Filtreler yalnızca `filters` içinden okunur. Kökteki alan filtre değildir.
 - Body ve `filters` **strict**: bilinmeyen anahtar → 400.
 - Varsayılan sıralama: `createdAt desc, id desc` (BE'de hook ile değiştirilebilir).
+- **Null sırası (karar 2026-10-26):** `null` en küçük değer sayılır: `asc`'de başta, `desc`'te sonda. MongoDB, Express ve SQL Server böyle sıralar; .NET PostgreSQL'de sıralamaya önce "null mı" anahtarı eklenir (`QueryableExtensions.ExplicitNullOrder`). Bilinen fark: SQL Server `uniqueidentifier`'ı son 6 bayta göre sıralar, `sortBy: id` orada oluşturma sırası vermez.
+- **409 alan adı (karar 2026-10-26):** unique çakışmasında (servis ön kontrolü ya da yarışta veritabanı) mesajdaki alan JSON alan adıdır. İlişkisel .NET'te unique index adı `ux_<tablo>__<jsonAlan>` (`HasDatabaseName`), sınıflandırıcı alanı ondan alır; MongoDB index adı zaten `<jsonAlan>_1`.
 
 | `filterType` | Gönderilen değer | Anlamı |
 | --- | --- | --- |

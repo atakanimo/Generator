@@ -7,7 +7,7 @@
  * JSON Merge Patch `null` rule (api-contract §5: `null` clears an optional single field, a required field / array 400),
  * validation (missing required field, unknown / readonly / hidden-from-create field, limits, enum, format, bad id),
  * missing reference target (400), unique (409), list (paging, default sort, one filter, one sort key), delete → 404.
- * Runs on the skeleton's `tests/conftest.py` fixtures (`client`, `make_token`, `mock_db`; mongomock).
+ * Runs on the skeleton's `tests/conftest.py` fixtures (`client`, `make_token`, `mock_db`; real test Mongo, PY2c).
  */
 import type { FilterType, NormalizedField, NormalizedObjectSubField } from '../../../shared/normalizedModel.js';
 import { updateNullClears } from '../../../shared/normalizedModel.js';
@@ -68,6 +68,10 @@ export interface PythonTestContext {
   nullRequired?: { field: string };
   filter?: { body: string };
   sort?: { field: string; firstIsFirst: boolean };
+  /** `date-range` filter (gün bazlı, `from` = `to` = ilk kaydın günü): yalnız ilk kayıt döner. */
+  dateFilter?: { body: string };
+  /** Opsiyonel unique alan: iki kayıtta da boş bırakılınca çakışma yok. */
+  optionalUnique?: string;
 }
 
 /** Python literal of a JSON value; `{ $expr }` is printed verbatim (e.g. `refs["userId"][0]`). */
@@ -494,18 +498,32 @@ export function buildPythonTestContext(fields: PyTestField[]): PythonTestContext
   }
   let sort: { field: string; firstIsFirst: boolean } | undefined;
   if (twoRecords) {
-    // mongomock cannot compare `Decimal128`: decimals are sorted in the real-Mongo smoke only.
+    // Tests run on real Mongo (PY2c), so `Decimal128` sorts too; decimal strings compare numerically.
     const key = visible.find((f) => {
       const v0 = values0.get(f.name);
       const v1 = values1.get(f.name);
-      return f.category === 'scalar' && f.type !== 'DecimalStr' && v0 !== undefined && !same(v0, v1) && typeof v0 === typeof v1 && typeof v0 !== 'object';
+      return f.category === 'scalar' && v0 !== undefined && !same(v0, v1) && typeof v0 === typeof v1 && typeof v0 !== 'object';
     });
     if (key) {
       const v0 = values0.get(key.name) as string | number | boolean;
       const v1 = values1.get(key.name) as string | number | boolean;
-      sort = { field: key.name, firstIsFirst: v0 < v1 };
+      const firstIsFirst = key.type === 'DecimalStr' ? Number(v0) < Number(v1) : v0 < v1;
+      sort = { field: key.name, firstIsFirst };
     }
   }
+
+  let dateFilter: { body: string } | undefined;
+  if (twoRecords) {
+    const date = visible.find((f) => f.filter === 'date-range' && f.category === 'scalar' && values0.has(f.name) && !same(values0.get(f.name), values1.get(f.name)));
+    const v0 = date ? values0.get(date.name) : undefined;
+    if (date && typeof v0 === 'string') {
+      const day = v0.slice(0, 10);
+      dateFilter = { body: block({ filters: { [date.name]: { from: day, to: day } } }, 4, 'payload = ') };
+    }
+  }
+  const optionalUnique = twoRecords
+    ? create.find((f) => f.unique && !f.requiredStrict && !isArrayCategory(f.category) && values0.has(f.name))
+    : undefined;
 
   // Unique on update: the second record takes the first one's value → 409.
   const uniqueUpdate = twoRecords ? visible.find((f) => f.unique && f.inUpdate && single(f) && values0.has(f.name)) : undefined;
@@ -550,6 +568,8 @@ export function buildPythonTestContext(fields: PyTestField[]): PythonTestContext
     nullClear: clearable ? { field: clearable.name } : undefined,
     nullRequired: notNull ? { field: notNull.name } : undefined,
     filter,
-    sort
+    sort,
+    dateFilter,
+    optionalUnique: optionalUnique?.name
   };
 }

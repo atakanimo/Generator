@@ -1,17 +1,13 @@
 import { DATE_ONLY_PATTERN, EMAIL_PATTERN } from '../../shared/fieldConstraints.js';
+import { entityNameFromFileName } from '../../shared/modelCandidates.js';
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Kept for existing main-process callers; the derivation lives in `shared/modelCandidates`. */
 export function entityNameFromModelFileName(fileName: string): string {
-  const base = fileName
-    .replace(/\.(model|schema|entity)\.(ts|js)$/i, '')
-    .replace(/\.(ts|js)$/i, '');
-  return base
-    .split(/[-_]/)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join('');
+  return entityNameFromFileName(fileName);
 }
 
 /** Scan from `openIndex` (must point at `{` or `(`) to matching close; returns index after close. */

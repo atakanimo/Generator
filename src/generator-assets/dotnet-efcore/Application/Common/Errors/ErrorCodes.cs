@@ -11,7 +11,11 @@ public static class ErrorCodes
     public const int Conflict = 409;
     public const int UnprocessableEntity = 422;
     public const int TooManyRequests = 429;
+    /// <summary>Plan / abonelik yükseltmesi gerekli (ücretli özellik).</summary>
+    public const int PlanRequired = 460;
     public const int EmailNotVerified = 463;
     public const int InternalServerError = 500;
+    /// <summary>Dış servis (sağlayıcı, ödeme, veri kaynağı) hata verdi ya da ulaşılamadı.</summary>
+    public const int UpstreamError = 502;
     public const int ServiceUnavailable = 503;
 }

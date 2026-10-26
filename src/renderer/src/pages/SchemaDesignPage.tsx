@@ -9,6 +9,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Autocomplete,
   Select,
   MenuItem,
   FormControl,
@@ -32,15 +33,18 @@ import {
 } from '@mui/material';
 import { Save as SaveIcon, Code as CodeIcon, FolderOpen } from '@mui/icons-material';
 import { useAppSelector, useAppDispatch } from '../store/hooks';
-import { updateFieldConfig, updateModelApi,
-  updateModelLabel, markModelApiSaved, saveSchemaConfig, generateFrontend, generateBackend, setFrontendPath, patchWorkspaceGeneratePrefs, persistWorkspaceManifest, buildManifestWorkspacePayload } from '../features/project/projectSlice';
+import {
+  updateFieldConfig, updateModelApi,
+  updateModelLabel, markModelApiSaved, saveSchemaConfig, generateFrontend, generateBackend, setFrontendPath, patchWorkspaceGeneratePrefs, persistWorkspaceManifest, buildManifestWorkspacePayload
+} from '../features/project/projectSlice';
 import type { NormalizedField, NormalizedModel, RelationType } from '@shared/normalizedModel';
 import type { RelationPropertyObjectSubField } from '@shared/relationDisplayMeta';
 import { uiComponentOptionsFor, type UIComponent } from '@shared/modelMerge';
 import { FILTER_TOKENS, filterFromToken, filterTokenOf, type FilterToken } from '@shared/fieldTypeToken';
-import { fieldTypeLabel, isReferenceField, modelApiSettings } from '../features/project/modelEdits';
+import { FieldPatch, fieldTypeLabel, isReferenceField, modelApiSettings } from '../features/project/modelEdits';
+import { modelCandidatesFromScanned } from '@shared/modelCandidates';
 import ModelApiSettingsPanel, { resolveModelApi } from '../components/ModelApiSettingsPanel';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
 
@@ -85,6 +89,7 @@ const SchemaDesignPage = () => {
     projectPath,
     frontendPath,
     sourceType,
+    modelsFound,
     savingStatus,
     savingError,
     lastSavedFilePath,
@@ -109,6 +114,7 @@ const SchemaDesignPage = () => {
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
   const baseUrl = '/api';
   const [relationPicker, setRelationPicker] = useState<RelationPopulatePickerState>(relationPickerInitial);
+  const modelOptions = useMemo(() => modelCandidatesFromScanned(modelsFound), [modelsFound]);
 
   useEffect(() => {
     if (!projectPath || !workspaceManifestLoaded) return;
@@ -246,14 +252,19 @@ const SchemaDesignPage = () => {
   // HiddenFromCreate / HiddenFromUpdate controls removed (Task 51)
 
   const handleRelationEntityChange = (fieldIndex: number, relationEntityName: string) => {
-    dispatch(
-      updateFieldConfig({
-        fieldIndex,
-        updates: {
-          reference: { target: relationEntityName, populate: undefined, display: undefined, displayObjectFields: undefined }
-        }
-      })
-    );
+    const field = selectedModelSchema.fields[fieldIndex];
+    const updates: FieldPatch = {
+      reference: { target: relationEntityName, populate: undefined, display: undefined, displayObjectFields: undefined }
+    };
+    if (relationEntityName.trim() || isReferenceField(field)) {
+      if (!field.ui?.component || field.ui.component === 'TextField') {
+        updates.ui = { component: 'Autocomplete' };
+      }
+      if (!field.filter?.type || field.filter.type === 'regex') {
+        updates.filter = { searchable: field.filter?.searchable ?? true, type: 'reference' };
+      }
+    }
+    dispatch(updateFieldConfig({ fieldIndex, updates }));
   };
 
   const handleRelationTypeChange = (fieldIndex: number, relationType: RelationType) => {
@@ -277,21 +288,25 @@ const SchemaDesignPage = () => {
       // Capitalize first letter
       relationEntityName = relationEntityName.charAt(0).toUpperCase() + relationEntityName.slice(1);
     }
-    dispatch(
-      updateFieldConfig({
-        fieldIndex,
-        updates: {
-          reference: {
-            include: includeRelation,
-            target: includeRelation ? relationEntityName : undefined,
-            display: includeRelation ? field.reference?.display : undefined,
-            populate: includeRelation ? field.reference?.populate : undefined,
-            displayObjectFields: includeRelation ? field.reference?.displayObjectFields : undefined,
-            relationType: includeRelation ? field.reference?.relationType || (field.isArray ? 'oneToMany' : 'manyToOne') : undefined
-          }
-        }
-      })
-    );
+    const updates: FieldPatch = {
+      reference: {
+        include: includeRelation,
+        target: includeRelation ? relationEntityName : undefined,
+        display: includeRelation ? field.reference?.display : undefined,
+        populate: includeRelation ? field.reference?.populate : undefined,
+        displayObjectFields: includeRelation ? field.reference?.displayObjectFields : undefined,
+        relationType: includeRelation ? field.reference?.relationType || (field.isArray ? 'oneToMany' : 'manyToOne') : undefined
+      }
+    };
+    if (includeRelation || isReferenceField(field)) {
+      if (!field.ui?.component || field.ui.component === 'TextField') {
+        updates.ui = { component: 'Autocomplete' };
+      }
+      if (!field.filter?.type || field.filter.type === 'regex') {
+        updates.filter = { searchable: field.filter?.searchable ?? true, type: 'reference' };
+      }
+    }
+    dispatch(updateFieldConfig({ fieldIndex, updates }));
   };
 
   const openRelationPopulatePicker = async (fieldIndex: number) => {
@@ -404,11 +419,11 @@ const SchemaDesignPage = () => {
     const relationPropertyObjectFields =
       displayFieldMeta && String(displayFieldMeta.type).toLowerCase() === 'object' && displayFieldMeta.objectFields?.length
         ? displayFieldMeta.objectFields.map(sub => ({
-            name: sub.name,
-            type: sub.type ?? 'string',
-            required: sub.required ?? false,
-            trim: sub.trim,
-          }))
+          name: sub.name,
+          type: sub.type ?? 'string',
+          required: sub.required ?? false,
+          trim: sub.trim,
+        }))
         : undefined;
     dispatch(
       updateFieldConfig({
@@ -1085,13 +1100,25 @@ const SchemaDesignPage = () => {
                             }}
                           >
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, flex: '0 1 auto' }}>
-                              <TextField
+                              <Autocomplete
+                                freeSolo
+                                options={modelOptions}
                                 value={field.reference?.target || ''}
-                                onChange={e => handleRelationEntityChange(index, e.target.value)}
-                                size='small'
-                                placeholder='Target model'
-                                sx={{ minWidth: 140 }}
-                                variant='outlined'
+                                onChange={(_, val) => handleRelationEntityChange(index, (val as string) || '')}
+                                onInputChange={(_, val, reason) => {
+                                  if (reason === 'input' || reason === 'clear') {
+                                    handleRelationEntityChange(index, val || '');
+                                  }
+                                }}
+                                renderInput={params => (
+                                  <TextField
+                                    {...params}
+                                    size='small'
+                                    placeholder='Target model'
+                                    variant='outlined'
+                                  />
+                                )}
+                                sx={{ minWidth: 180 }}
                               />
                               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
                                 <FormControl size='small' sx={{ minWidth: 130 }}>

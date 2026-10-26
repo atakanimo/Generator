@@ -1,6 +1,6 @@
 """{{entity}} admin CRUD testi (Generator, K: ilk generate'te yazılır, sonra sizindir; model değişince yeniden yazılmaz).
 
-Üretilen uçları in-process istemciyle ve sahte Mongo'yla (mongomock, `tests/conftest.py`) uçtan uca dener: zarf ve auth,
+Üretilen uçları in-process istemciyle ve gerçek test Mongo'suyla (`tests/conftest.py`) uçtan uca dener: zarf ve auth,
 create / getOne / update / delete, varsayılanlar, doğrulama, unique (409), liste (sayfalama, filtre, sıralama) ve
 update'te `null` kuralı (api-contract §5); yalnız açık admin işlemleri (`api.adminOperations`), kapalılar 404 / 405. Örnek değerler modelden üretildi; `hooks.py` / `service.py`'ye iş kuralı
 ekledikçe ya da model değiştikçe burayı güncelleyin.
@@ -312,6 +312,21 @@ async def test_list_paging_filter_sort(client, h, refs) -> None:
 {{#if test.sort}}
     page = await listed({"sortBy": "{{test.sort.field}}", "sortOrder": "asc"})
     assert [i["id"] for i in page["items"]] == {{#if test.sort.firstIsFirst}}[first["id"], second["id"]]{{else}}[second["id"], first["id"]]{{/if}}
+{{/if}}
+{{#if test.dateFilter}}
+{{{test.dateFilter.body}}}
+    page = await listed(payload)
+    assert [i["id"] for i in page["items"]] == [first["id"]]  # gün bazlı tarih aralığı
+{{/if}}
+{{#if test.optionalUnique}}
+
+
+async def test_optional_unique_empty(client, h, refs) -> None:
+    # Opsiyonel unique alan iki kayıtta da boş: çakışma yok (sparse / partial index).
+    for i in (0, 1):
+        payload = body(i, refs)
+        payload.pop("{{test.optionalUnique}}", None)
+        await create(client, h, payload)
 {{/if}}
 {{/if}}
 {{#if adminOps.export}}

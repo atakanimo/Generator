@@ -12,7 +12,7 @@ import { useMemo, useState } from 'react';
 import type { Id, ListBody } from '../contract/api.js';
 import { useResourceList, useResourceMutations } from '../react/hooks.js';
 import { detailViewOptions, type AnyResource, type CollectionAction, type RowAction } from '../schema/extend.js';
-import { canPerform } from '../schema/resource.js';
+import { canPerform, recordTitle } from '../schema/resource.js';
 import {
   ActionInputDialog,
   ConfirmDialog,
@@ -269,7 +269,7 @@ export function ResourcePage({ resource }: ResourcePageProps) {
 
       <ConfirmDialog
         open={deleting !== null}
-        title={text('deleteTitle')}
+        title={(name => (name ? text('deleteTitleNamed', { name }) : text('deleteTitle')))(deleting ? recordTitle(resource, deleting) : undefined)}
         description={text('deleteDescription')}
         confirmLabel={text('delete')}
         onConfirm={async () => {

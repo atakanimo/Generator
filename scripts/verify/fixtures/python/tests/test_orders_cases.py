@@ -1,6 +1,6 @@
 """Üretilmiş `orders` modülü (regen-python, `fixtures/python/py6-kinds.models.json`): `access` (readonly,
 hiddenFromCreate / Update, hidden, adminOnly), alt alanda decimal / reference / iç içe obje / json / map, opak obje,
-decimal dizisi ve kısıtları, populate'te gizli alan yok (mongomock)."""
+decimal dizisi ve kısıtları, populate'te gizli alan yok (gerçek test Mongo'su)."""
 
 from __future__ import annotations
 

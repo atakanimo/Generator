@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using __App__.Application.Common.Abstractions;
 using __App__.Application.Common.Errors;
@@ -34,7 +35,8 @@ public static class DependencyInjection
 
     /// <summary>
     /// Açılışta şema: <c>Database:EnsureIndexesOnStartup</c> açıksa collection'lar ve modeldeki index'ler (unique dahil)
-    /// kurulur; idempotent, yeni index'i var olan collection'a ekler. MongoDB'de migration yok.
+    /// kurulur; idempotent, yeni index'i var olan collection'a ekler. MongoDB'de migration yok. Var olan veride tekrar
+    /// yüzünden kurulamayan unique index API'yi düşürmez, hata loglanır (Express ile aynı).
     /// </summary>
     public static async Task InitializeDatabaseAsync(this IServiceProvider services, IConfiguration configuration)
     {
@@ -44,6 +46,14 @@ public static class DependencyInjection
         }
 
         using var scope = services.CreateScope();
-        await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreatedAsync();
+        try
+        {
+            await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreatedAsync();
+        }
+        catch (MongoCommandException ex) when (ex.Code == 11000)
+        {
+            scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Database")
+                .LogError(ex, "Unique index could not be created: existing documents have duplicate values.");
+        }
     }
 }

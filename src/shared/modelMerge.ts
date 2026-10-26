@@ -32,6 +32,10 @@ export type UIComponent =
 
 const token = (field: NormalizedField): string => typeTokenOf(field).toLowerCase();
 
+export function isReference(field: NormalizedField): boolean {
+  return field.kind === 'reference' || token(field) === 'schema' || Boolean(field.reference?.target);
+}
+
 function isActiveRelation(field: NormalizedField): boolean {
   return field.reference?.include === true && token(field) === 'schema' && Boolean(field.reference.target);
 }
@@ -46,9 +50,27 @@ function withReference(field: NormalizedField, reference: Partial<NormalizedRefe
   return canonicalField({ ...field, reference });
 }
 
-/** Drop relationType (and keep relation meta consistent) when the relation is off. */
+/** Drop relationType (and keep relation meta consistent) when the relation is off. Auto-fit UI / filter on references. */
 export function sanitizeFieldRelationMeta(field: NormalizedField): NormalizedField {
-  return withReference(field, { ...field.reference, relationType: resolveRelationType(field) });
+  const isRef = isReference(field);
+  let ui = field.ui;
+  let filter = field.filter;
+  if (isRef) {
+    if (!ui?.component || ui.component === 'TextField') {
+      ui = { ...ui, component: 'Autocomplete' };
+    }
+    if (!filter?.type || filter.type === 'regex') {
+      filter = { ...filter, searchable: filter?.searchable ?? true, type: 'reference' };
+    }
+  }
+  return withReference(
+    {
+      ...field,
+      ...(ui ? { ui } : {}),
+      ...(filter ? { filter } : {})
+    },
+    { ...field.reference, relationType: resolveRelationType(field) }
+  );
 }
 
 /** Mongo `_id`: always required, ObjectId (`reference`). */
@@ -109,6 +131,9 @@ export function getComponentForType(field: { name: string; type: string; isArray
   const name = field.name.toLowerCase();
   const type = field.type.toLowerCase();
 
+  if (type === 'schema' || type === 'reference' || type === 'objectid') {
+    return 'Autocomplete';
+  }
   if (field.isArray) {
     return 'MultiSelect';
   }
@@ -131,7 +156,7 @@ function defaultFilterToken(field: NormalizedField): FilterToken {
   const name = field.name.toLowerCase();
   const t = token(field);
   if (name === '_id' || name === 'id') return 'objectId';
-  if (t === 'schema' && !field.isArray) return 'objectId';
+  if (t === 'schema' || isReference(field)) return 'objectId';
   if (t === 'boolean') return 'boolean';
   if (t === 'number') return 'exact';
   if (t === 'date') return 'date-range';
@@ -168,7 +193,7 @@ export function enrichFieldWithUIConfig(field: NormalizedField): NormalizedField
         list: true,
         component: fitComponent(
           field,
-          isActiveRelation(field)
+          isReference(field) || isActiveRelation(field)
             ? 'Autocomplete'
             : isNestedObjectArray || isMapField || isObjectField
               ? getComponentForType(componentView)
@@ -203,6 +228,15 @@ function mergeField(code: NormalizedField, saved: NormalizedField): NormalizedFi
   const codeSubs = code.object?.fields;
   const savedSubs = saved.object?.fields;
   const defaults = enrichFieldWithUIConfig(code);
+  const isRef = isReference(code);
+  const savedFilterToken = filterTokenOf(saved.filter);
+  const filterToken = isRef && (!savedFilterToken || savedFilterToken === 'regex')
+    ? 'objectId'
+    : (savedFilterToken || filterTokenOf(defaults.filter));
+  const rawComponent = saved.ui?.component ?? defaults.ui?.component;
+  const component = isRef && (!rawComponent || rawComponent === 'TextField')
+    ? 'Autocomplete'
+    : fitComponent(code, rawComponent ?? 'Autocomplete');
 
   return {
     ...saved,
@@ -221,7 +255,7 @@ function mergeField(code: NormalizedField, saved: NormalizedField): NormalizedFi
     filter: {
       // Object fields are not filterable; if a field became an object, drop stale searchable config.
       searchable: token(code) === 'object' ? false : saved.filter?.searchable !== undefined ? saved.filter.searchable : true,
-      ...filterFromToken(filterTokenOf(saved.filter) || filterTokenOf(defaults.filter))
+      ...filterFromToken(filterToken)
     },
     access: {
       readonly: saved.access?.readonly ?? defaults.access?.readonly,
@@ -233,6 +267,7 @@ function mergeField(code: NormalizedField, saved: NormalizedField): NormalizedFi
     ui: {
       ...saved.ui,
       list: saved.ui?.list !== undefined ? saved.ui.list : true,
+      component,
       defaultValue: saved.ui?.defaultValue ?? ''
     },
     // Schema options come from the model file (P3): a stale saved `unique` would add a real DB index.

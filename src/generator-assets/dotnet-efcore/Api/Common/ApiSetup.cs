@@ -20,6 +20,11 @@ public static class ApiSetup
 
     public static WebApplication UseApi(this WebApplication app)
     {
+        // Önce dil: exception handler ve status code sayfaları da istek dilinde yazar.
+        app.UseRequestLocalization(options => options
+            .SetDefaultCulture("tr")
+            .AddSupportedCultures("tr", "en")
+            .AddSupportedUICultures("tr", "en"));
         app.UseMiddleware<TraceIdMiddleware>();
         app.UseExceptionHandler(_ => { });
         app.UseStatusCodePages(context => context.HttpContext.Response.StatusCode switch

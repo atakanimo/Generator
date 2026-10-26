@@ -1,16 +1,20 @@
-"""Ortak fixture'lar: sahte Mongo (mongomock-motor), in-process HTTP istemcisi, JWT üretici.
+"""Ortak fixture'lar: gerçek test Mongo'su (PyMongo Async), in-process HTTP istemcisi, JWT üretici.
 
-Testler gerçek Mongo'ya bağlanmaz: varsayılan `MONGO_URI` erişilemeyen porta gider, lifespan'ın bağlantısı sahte DB'ye
-yönlendirilir. Uygulama modülleri ayarlar ortamdan okunduktan sonra import edilsin diye fixture'ların içinde import edilir.
+Test Mongo'su: `TEST_MONGO_URI` varsa o, yoksa testcontainers ile geçici `mongo:7` (Docker gerekir; oturum sonunda
+kapanır). `TestMongoClient` açtığı her veritabanına `__app___test_` önekini koyar (uygulamanın asıl veritabanına
+yazılamaz); kullanılan veritabanları her testten sonra silinir. Varsayılan `MONGO_URI` erişilemeyen porta gider,
+lifespan'ın bağlantısı test veritabanına yönlendirilir. Uygulama modülleri ayarlar ortamdan okunduktan sonra
+import edilsin diye fixture'ların içinde import edilir.
 """
 
 from __future__ import annotations
 
 import os
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
+from pymongo import AsyncMongoClient, MongoClient
 
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("MONGO_URI", "mongodb://127.0.0.1:9")
@@ -26,15 +30,110 @@ if TYPE_CHECKING:
     from httpx import AsyncClient
 
 
-@pytest.fixture
-def mock_db(monkeypatch: pytest.MonkeyPatch):
-    """Lifespan `connect_to_mongo` / `close_mongo_connection`'ı sahte DB'ye bağlar."""
-    from mongomock_motor import AsyncMongoMockClient
+TEST_DB_PREFIX = "__app___test_"
+_FORBIDDEN = {"admin", "local", "config"}
 
+_uri: str | None = None
+_container: Any = None
+_used: set[str] = set()
+
+
+def start_server() -> str:
+    """Oturum başında bir kez çağrılır (`_test_mongo_server`); test Mongo URI'sini döner."""
+    global _uri, _container
+    if _uri is not None:
+        return _uri
+    env_uri = os.environ.get("TEST_MONGO_URI")
+    if env_uri:
+        _uri = env_uri
+    else:
+        from testcontainers.community.mongodb import MongoDbContainer
+
+        # Kimlik bilgisi testcontainers'ın geçici varsayılanıdır; yerel `.env` okunmaz.
+        _container = MongoDbContainer("mongo:7")
+        _container.start()
+        _uri = _container.get_connection_url()
+    return _uri
+
+
+def stop_server() -> None:
+    global _container, _uri
+    if _container is not None:
+        _container.stop()
+    _container = None
+    _uri = None
+
+
+def test_db_name(name: str) -> str:
+    if name in _FORBIDDEN:
+        name = f"x_{name}"
+    full = name if name.startswith(TEST_DB_PREFIX.rstrip("_")) else f"{TEST_DB_PREFIX}{name}"
+    _used.add(full)
+    return full
+
+
+class TestMongoClient(AsyncMongoClient):
+    """`AsyncMongoClient`; veritabanı adları `__app___test_` önekli (ana DB'ye yazım imkânsız)."""
+
+    __test__ = False  # pytest bunu test sınıfı sanmasın
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("uuidRepresentation", "standard")
+        super().__init__(start_server(), **kwargs)
+
+    def __getitem__(self, name: str) -> Any:
+        return super().__getitem__(test_db_name(name))
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return self[name]
+
+    def get_database(self, name: str | None = None, *args: Any, **kwargs: Any) -> Any:
+        return super().get_database(test_db_name(name or "default"), *args, **kwargs)
+
+    def get_default_database(self, *args: Any, **kwargs: Any) -> Any:
+        return self.get_database("default", **kwargs)
+
+
+def drop_test_databases() -> None:
+    """Bu testin açtığı `__app___test_*` veritabanlarını siler (senkron istemci; event loop'tan bağımsız)."""
+    if not _used or _uri is None:
+        return
+    with MongoClient(_uri) as sync_client:
+        for name in list(_used):
+            if name.startswith(TEST_DB_PREFIX.rstrip("_")):
+                sync_client.drop_database(name)
+    _used.clear()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _test_mongo_server():
+    start_server()
+    yield
+    drop_test_databases()
+    stop_server()
+
+
+@pytest.fixture(autouse=True)
+def _drop_test_databases():
+    yield
+    drop_test_databases()
+
+
+@pytest.fixture
+def mongo_client() -> TestMongoClient:
+    """Gerçek test Mongo'suna `AsyncMongoClient` (veritabanı adları `__app___test_` önekli)."""
+    return TestMongoClient()
+
+
+@pytest.fixture
+def mock_db(monkeypatch: pytest.MonkeyPatch, mongo_client: TestMongoClient):
+    """Lifespan `connect_to_mongo` / `close_mongo_connection`'ı test veritabanına bağlar (ad tarihî: artık sahte değil)."""
     import __app__.api.main as main_module
     import __app__.core.db as db_module
 
-    client = AsyncMongoMockClient()
+    client = mongo_client
     db = client["__app___test"]
 
     async def fake_connect() -> None:

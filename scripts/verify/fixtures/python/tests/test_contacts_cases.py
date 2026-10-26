@@ -1,5 +1,5 @@
 """Üretilmiş `contacts` modülü (regen-python): PY5 alan türleri (int / float, numeric enum, enum dizisi, e-posta + desen,
-sadece tarih, opsiyonel unique, obje ve obje dizisi), filtreler ve sıralama (mongomock)."""
+sadece tarih, opsiyonel unique, obje ve obje dizisi), filtreler ve sıralama (gerçek test Mongo'su)."""
 
 from __future__ import annotations
 

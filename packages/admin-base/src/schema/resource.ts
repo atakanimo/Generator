@@ -15,6 +15,8 @@ export interface ResourceSchema<Fs extends readonly FieldConfig[] = readonly Fie
   /** Admin base path; paket path türetmez (ör. `/api/userSubscriptions/admin`). */
   endpoint: string;
   label?: string;
+  /** Kaydı adlandıran alan (ör. `name`, `ticker`): silme onayında «değer» gösterilir. Yoksa genel metin. */
+  titleField?: string;
   fields: Fs;
   defaultSort?: { field: string; order: SortOrder };
   /** `false` → hiçbir kolon sıralanmaz, `defaultSort` yok sayılır (BE liste ucu sıralama desteklemiyorsa). */
@@ -32,6 +34,14 @@ export interface ResourceSchema<Fs extends readonly FieldConfig[] = readonly Fie
 }
 
 export type ResourceOperation = 'create' | 'update' | 'delete' | 'export';
+
+/** Satırın adı (`titleField` değeri); alan yoksa, boşsa ya da metin / sayı değilse `undefined`. */
+export function recordTitle(resource: Pick<ResourceSchema, 'titleField'>, row: Record<string, unknown>): string | undefined {
+  if (!resource.titleField) return undefined;
+  const value = row[resource.titleField];
+  if (typeof value === 'number') return String(value);
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
 
 export function canPerform(resource: Pick<ResourceSchema, 'operations'>, operation: ResourceOperation): boolean {
   if (operation === 'export') return resource.operations?.includes('export') ?? false;

@@ -12,7 +12,10 @@ public sealed class EnvelopeExceptionHandler(ILogger<EnvelopeExceptionHandler> l
         if (exception is BadHttpRequestException or JsonException)
         {
             logger.LogInformation(exception, "Bad request body");
-            var message = (exception.InnerException ?? exception) is JsonException json ? json.Message : Messages.InvalidBody;
+            // System.Text.Json'ın İngilizce teknik metni yerine alan adı (JSON yolu) ve istek dilinde mesaj.
+            var message = (exception.InnerException ?? exception) is JsonException { Path: { Length: > 2 } path }
+                ? string.Format(Messages.InvalidValue, path.TrimStart('$', '.'))
+                : Messages.InvalidBody;
             await httpContext.WriteEnvelopeAsync(Error.BadRequest(message));
             return true;
         }

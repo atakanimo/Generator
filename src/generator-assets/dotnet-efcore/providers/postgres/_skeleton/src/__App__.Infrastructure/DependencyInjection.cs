@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using __App__.Application.Common.Abstractions;
 using __App__.Application.Common.Errors;
+using __App__.Application.Common.Pagination;
 using __App__.Infrastructure.Common;
 using __App__.Infrastructure.Persistence;
 
@@ -16,6 +17,7 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("Default")
             ?? throw new InvalidOperationException("ConnectionStrings__Default is not set.");
 
+        QueryableExtensions.ExplicitNullOrder = true;
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<TimestampInterceptor>();
         services.AddDbContext<AppDbContext>((sp, options) => options

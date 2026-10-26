@@ -1,26 +1,28 @@
 """MongoDB bağlantısı (plan K5).
 
-Sürücü yalnız bu dosyada. Kod (`core/crud` dahil) yalnızca `Database` takma adına ve Motor ile PyMongo Async'te ortak
-API'ye (`find`, `to_list(length=…)`, `insert_one` …) göre yazılır; sürücü değişince yalnız bu dosya değişir.
+Sürücü (PyMongo Async, `pymongo.AsyncMongoClient`) yalnız bu dosyada. Kod (`core/crud` dahil) yalnızca `Database`
+takma adına göre yazılır; sürücü değişince yalnız bu dosya değişir. PyMongo Async'te `aggregate()` ve
+`client.close()` `await` ister.
 """
 
 from __future__ import annotations
 
 import logging
 
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from pymongo import AsyncMongoClient
+from pymongo.asynchronous.database import AsyncDatabase
 
 from __app__.core.config import settings
 from __app__.core.errors.app_error import AppError
 from __app__.core.errors.common_codes import CommonErrorCodes
 
-Database = AsyncIOMotorDatabase
+Database = AsyncDatabase
 
 log = logging.getLogger(__name__)
 
 
 class _MongoState:
-    client: AsyncIOMotorClient | None = None
+    client: AsyncMongoClient | None = None
     db: Database | None = None
     is_connected: bool = False
 
@@ -28,8 +30,8 @@ class _MongoState:
 _state = _MongoState()
 
 
-def open_mongo_client(uri: str, **options: object) -> AsyncIOMotorClient:
-    return AsyncIOMotorClient(uri, uuidRepresentation="standard", **options)
+def open_mongo_client(uri: str, **options: object) -> AsyncMongoClient:
+    return AsyncMongoClient(uri, uuidRepresentation="standard", **options)
 
 
 async def connect_to_mongo() -> None:
@@ -45,7 +47,7 @@ async def connect_to_mongo() -> None:
         await client.admin.command("ping")
     except Exception as exc:
         log.warning("mongo connection failed: %s", exc)
-        client.close()
+        await client.close()
         return
     _state.client = client
     _state.db = client[settings.MONGO_DB_NAME]
@@ -54,7 +56,7 @@ async def connect_to_mongo() -> None:
 
 async def close_mongo_connection() -> None:
     if _state.client is not None:
-        _state.client.close()
+        await _state.client.close()
     _state.client = None
     _state.db = None
     _state.is_connected = False

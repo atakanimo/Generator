@@ -104,7 +104,22 @@ export function withEditorType(field: NormalizedField, type: Exclude<EditorField
     case 'Map':
       return { ...base, kind: 'map', isArray: false, unique: false, trim: false };
     case 'ObjectId':
-      return { ...base, kind: 'reference', isArray: false, unique: field.unique, trim: false };
+      return {
+        ...base,
+        kind: 'reference',
+        isArray: false,
+        unique: field.unique,
+        trim: false,
+        ui: {
+          ...field.ui,
+          component: 'Autocomplete'
+        },
+        filter: {
+          ...field.filter,
+          searchable: field.filter?.searchable ?? true,
+          type: 'reference'
+        }
+      };
     case 'Number':
       return { ...base, kind: 'number', isArray: false, unique: field.unique, trim: false };
     case 'Boolean':
@@ -287,6 +302,14 @@ export function normalizeEditedField(field: NormalizedField): NormalizedField {
     return out;
   }
   if (!editorTypeHasDefault(editorTypeOf(out))) delete out.default;
+  if (out.kind === 'reference') {
+    if (!out.ui?.component || out.ui.component === 'TextField') {
+      out.ui = { ...out.ui, component: 'Autocomplete' };
+    }
+    if (!out.filter?.type || out.filter.type === 'regex') {
+      out.filter = { ...out.filter, searchable: out.filter?.searchable ?? true, type: 'reference' };
+    }
+  }
   tidyTypeDetails(out);
   return out;
 }

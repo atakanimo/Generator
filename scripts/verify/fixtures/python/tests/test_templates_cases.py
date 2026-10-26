@@ -1,5 +1,5 @@
 """Üretilmiş `templates` modülü (regen-python, golden `fixtures/dotnet/models.json`): `reference` (tekil, dizi, hedefsiz
-dizi), ilişki kontrolü (400), populate (list / getOne obje, create / update id), reference filtresi (mongomock)."""
+dizi), ilişki kontrolü (400), populate (list / getOne obje, create / update id), reference filtresi (gerçek test Mongo'su)."""
 
 from __future__ import annotations
 

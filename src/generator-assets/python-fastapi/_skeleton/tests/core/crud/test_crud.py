@@ -1,4 +1,4 @@
-"""core/crud: liste gövdesi, filtreler, sıralama, sayfalama, wire ve CrudService (mongomock)."""
+"""core/crud: liste gövdesi, filtreler, sıralama, sayfalama, wire ve CrudService (gerçek test Mongo'su)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from typing import ClassVar
 
 import pytest
 from bson import ObjectId
-from mongomock_motor import AsyncMongoMockClient
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from __app__.core.crud import (
@@ -192,8 +191,8 @@ class Service(CrudService[Filters, Create, Update, Row]):
 
 
 @pytest.fixture
-def service() -> Service:
-    db = AsyncMongoMockClient()["crud_test"]
+def service(mongo_client) -> Service:
+    db = mongo_client["crud_test"]
     return Service(Repo(db), Hooks())
 
 

@@ -9,7 +9,7 @@
  *     (PY8, K `tests/modules/<m>/test_admin_crud.py`) on its own, then the whole suite (skeleton tests, module tests and
  *     `fixtures/python/tests/test_<m>_cases.py`: golden-set semantics the generic module test cannot express)
  *     → uvicorn on a throwaway Docker Mongo (`mongo:7`) + HTTP smoke (CRUD, 409, 400, 404, dates; PY6: populate,
- *     relation check, decimal range / sort and `Decimal128` storage, hidden fields — what mongomock cannot run).
+ *     relation check, decimal range / sort and `Decimal128` storage, hidden fields over HTTP; pytest also runs on real Mongo).
  * (b) StockExchange copy (`out/regen-python/stockexchange`: `pyproject.toml` + `src/`; the real repo is never written):
  *     `SubscriptionPlans` generated → only its G files and the manifest change; every G file = StockExchange's file, or
  *     = `ruff format` of it (PY3 was hand-written; the generator writes ruff-format output); K files, assets and the
@@ -184,7 +184,7 @@ const keep = gen.generatePythonBackend(host, models[1]);
 check('host: K file edit kept', readFileSync(hooksPath, 'utf8').endsWith('# user edit\n') && (keep.writtenFiles ?? []).length === 0);
 writeFileSync(hooksPath, hooksBefore);
 
-// Golden-set cases beyond the generated module tests (skeleton's fixtures: mongomock, `make_token`).
+// Golden-set cases beyond the generated module tests (skeleton's fixtures: real test Mongo, `make_token`).
 for (const file of readdirSync(join(fixtures, 'tests'))) {
   const folder = /^test_(.+)_cases\.py$/.exec(file)?.[1];
   if (!folder) continue;
@@ -275,7 +275,7 @@ if (withDocker) {
     check('smoke: delete', (await call('DELETE', `${sp}/${id}`)).status === 200);
     check('smoke: get after delete 404', (await call('GET', `${sp}/${id}`)).status === 404);
 
-    // PY6 on real Mongo: decimal range / sort (mongomock cannot compare Decimal128), populate, relation check, hidden.
+    // PY6 over HTTP on real Mongo: decimal range / sort, populate, relation check, hidden.
     const mp = '/admin-crud/membership-plans';
     for (const [code, price] of [['d1', '9.99'], ['d2', '100'], ['d3', '250.5']]) {
       await call('POST', `${mp}/create`, { code, price, limits: { watermark: true }, tiers: [{ name: 't', price }] });

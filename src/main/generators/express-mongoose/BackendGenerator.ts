@@ -208,8 +208,10 @@ export class BackendGenerator extends BaseGenerator {
         normalRouteWanted
       });
 
-      // Add route to index if needed
-      if (normalRouteWanted && this.shouldAddRoute && (this.sourceType === 'nodejs-mongoose' || this.sourceType === 'nodejs-typeorm')) {
+      // Add route to index if needed: only when the route file is generated now or already there (an unselected
+      // route file must not leave an import of a missing module in the app file).
+      const normalRouteFile = this.selectedFiles.route || this.normalRouteFileExists(moduleName);
+      if (normalRouteWanted && normalRouteFile && this.shouldAddRoute && (this.sourceType === 'nodejs-mongoose' || this.sourceType === 'nodejs-typeorm')) {
         if (this.updateExistingFiles) {
           this.addRouteToIndex(moduleName, normalizedModel.camelName);
         } else {
@@ -222,7 +224,9 @@ export class BackendGenerator extends BaseGenerator {
       }
 
       // Add admin route to index if isAdminUser
-      if (this.isAdminUser && (this.sourceType === 'nodejs-mongoose' || this.sourceType === 'nodejs-typeorm')) {
+      const adminRouteFile =
+        this.selectedFiles.routeAdmin || safePathExists(join(this.projectRoot, 'src', 'modules', moduleName, `${moduleName}.routes.admin.ts`));
+      if (this.isAdminUser && adminRouteFile && (this.sourceType === 'nodejs-mongoose' || this.sourceType === 'nodejs-typeorm')) {
         if (this.updateExistingFiles) {
           this.addAdminRouteToIndex(moduleName, normalizedModel.camelName);
         } else {

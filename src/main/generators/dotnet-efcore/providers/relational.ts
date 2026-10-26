@@ -77,7 +77,7 @@ export function relationalConfig({ app, names, fields }: DotnetEntityConfigInput
         }
         lines.push(`builder.Property(x => x.${f.prop}).HasMaxLength(${max});`);
       }
-      lines.push(`builder.HasIndex(x => x.${f.category === 'ref' ? f.fk : f.prop}).IsUnique();`);
+      lines.push(`builder.HasIndex(x => x.${f.category === 'ref' ? f.fk : f.prop}).IsUnique().HasDatabaseName(${JSON.stringify(`ux_${names.table}__${f.json}`)});`);
     }
   }
   lines.push('builder.HasIndex(x => x.CreatedAt);');

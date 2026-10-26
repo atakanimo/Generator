@@ -2,10 +2,424 @@
   "manifestVersion": 3,
   "models": [
     {
-      "sourceRelativePath": "src/modules/daily-portfolio/daily-portfolio.model.ts",
+      "sourceRelativePath": "src/modules/ip-blacklist/ip-blacklist.model.ts",
       "model": {
         "schemaVersion": 2,
-        "entityName": "DailyPortfolio",
+        "entityName": "IpBlacklist",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": " Id",
+              "list": true,
+              "component": "Autocomplete",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "ip",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "unique": true,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Ip",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "reason",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "native": {
+              "tsType": "string | null",
+              "tsOptional": true
+            },
+            "default": null,
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Reason",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "source",
+            "kind": "enum",
+            "isArray": false,
+            "required": true,
+            "native": {
+              "tsType": "IpBlacklistSource",
+              "tsOptional": false
+            },
+            "enum": {
+              "values": [
+                "manual",
+                "auto_probe"
+              ]
+            },
+            "default": "manual",
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Source",
+              "list": true,
+              "component": "Select",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "hitCount",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "native": {
+              "tsType": "number",
+              "tsOptional": false
+            },
+            "default": 0,
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": "Hit Count",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "lastHitAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "native": {
+              "tsType": "Date | null",
+              "tsOptional": true
+            },
+            "default": null,
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": "Last Hit At",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "isActive",
+            "kind": "boolean",
+            "isArray": false,
+            "required": true,
+            "native": {
+              "tsType": "boolean",
+              "tsOptional": false
+            },
+            "default": true,
+            "filter": {
+              "searchable": true,
+              "type": "boolean"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Is Active",
+              "list": true,
+              "component": "Switch",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Oluşturulma",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Güncellenme",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ],
+        "api": {
+          "normalOperations": [],
+          "requiresAuth": true,
+          "admin": true
+        },
+        "ui": {
+          "label": "IP Kara Liste"
+        }
+      }
+    },
+    {
+      "sourceRelativePath": "src/modules/symbol-types/symbol-types.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "SymbolTypes",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": "ID",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "value",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Value",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "displayText",
+            "kind": "object",
+            "isArray": false,
+            "required": true,
+            "native": {
+              "tsType": "{ tr: string; en: string; }",
+              "tsOptional": false
+            },
+            "object": {
+              "fields": [
+                {
+                  "name": "tr",
+                  "kind": "string",
+                  "required": true,
+                  "trim": true
+                },
+                {
+                  "name": "en",
+                  "kind": "string",
+                  "required": true,
+                  "trim": true
+                }
+              ]
+            },
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Display Text",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "countryLabelKey",
+            "kind": "enum",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "native": {
+              "options": [
+                "set: (value: string | null | undefined) => {\n        if (value == null || String(value).trim() === '') return null;\n        return value;\n      }"
+              ],
+              "tsType": "string | null",
+              "tsOptional": false
+            },
+            "enum": {
+              "values": [
+                "TR",
+                "TRFON",
+                "TRMADEN",
+                "US",
+                "USETF",
+                "USMADEN",
+                "UK",
+                "JP"
+              ]
+            },
+            "default": null,
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Country Label Key",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Oluşturulma",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Güncellenme",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ],
+        "api": {
+          "normalOperations": [
+            "list",
+            "getOne"
+          ],
+          "requiresAuth": true,
+          "admin": true
+        },
+        "ui": {
+          "label": "Sembol Türleri"
+        }
+      }
+    },
+    {
+      "sourceRelativePath": "src/modules/transactions/transactions.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "Transactions",
         "fields": [
           {
             "name": "_id",
@@ -27,29 +441,25 @@
             }
           },
           {
-            "name": "snapshotDate",
-            "kind": "date",
+            "name": "userId",
+            "kind": "reference",
             "isArray": false,
             "required": true,
-            "filter": {
-              "searchable": true,
-              "type": "date-range"
+            "native": {
+              "tsType": "mongoose.Types.ObjectId",
+              "tsOptional": false
             },
-            "access": {
-              "readonly": false
+            "reference": {
+              "include": true,
+              "target": "Users",
+              "display": "name",
+              "populate": [
+                "_id",
+                "email",
+                "name"
+              ],
+              "relationType": "manyToOne"
             },
-            "ui": {
-              "label": "Snapshot Date",
-              "list": true,
-              "component": "DatePicker",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "portfolioValues",
-            "kind": "reference",
-            "isArray": true,
-            "required": true,
             "filter": {
               "searchable": true,
               "type": "reference"
@@ -58,10 +468,211 @@
               "readonly": false
             },
             "ui": {
-              "label": "Portfolio Values",
+              "label": "User Id",
               "list": true,
-              "component": "MultiSelect",
+              "component": "Autocomplete",
               "defaultValue": ""
+            }
+          },
+          {
+            "name": "symbolId",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "native": {
+              "tsType": "mongoose.Types.ObjectId",
+              "tsOptional": false
+            },
+            "reference": {
+              "include": true,
+              "target": "Symbols",
+              "display": "displayText",
+              "populate": [
+                "_id",
+                "value",
+                "displayText",
+                "description",
+                "currency"
+              ],
+              "relationType": "manyToOne"
+            },
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Symbol Id",
+              "list": true,
+              "component": "Autocomplete",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "quantity",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "native": {
+              "tsType": "number",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Quantity",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "price",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "native": {
+              "tsType": "number",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Price",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "transactionType",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Transaction Type",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "notes",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Notes",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "priceCurrency",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Price Currency",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "realizedPnL",
+            "kind": "number",
+            "isArray": false,
+            "required": false,
+            "native": {
+              "tsType": "number",
+              "tsOptional": true
+            },
+            "default": 0,
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Realized PnL",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": 0
+            }
+          },
+          {
+            "name": "addToCashBalance",
+            "kind": "boolean",
+            "isArray": false,
+            "required": true,
+            "native": {
+              "tsType": "boolean",
+              "tsOptional": false
+            },
+            "default": true,
+            "filter": {
+              "searchable": true,
+              "type": "boolean"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Add To Cash Balance",
+              "list": true,
+              "component": "Switch",
+              "defaultValue": true
             }
           },
           {
@@ -79,7 +690,7 @@
               "hiddenFromUpdate": true
             },
             "ui": {
-              "label": "Created At",
+              "label": "Oluşturulma",
               "list": true,
               "component": "DatePicker",
               "defaultValue": ""
@@ -91,7 +702,7 @@
             "isArray": false,
             "required": false,
             "filter": {
-              "searchable": true,
+              "searchable": false,
               "type": "date-range"
             },
             "access": {
@@ -100,61 +711,26 @@
               "hiddenFromUpdate": true
             },
             "ui": {
-              "label": "Updated At",
+              "label": "Güncellenme",
               "list": true,
               "component": "DatePicker",
               "defaultValue": ""
             }
           }
         ],
-        "nestedSchemas": [
-          {
-            "entityName": "DailyPortfolioValue",
-            "fields": [
-              {
-                "name": "userId",
-                "kind": "reference",
-                "isArray": false,
-                "required": true,
-                "filter": {
-                  "searchable": true,
-                  "type": "reference"
-                },
-                "access": {
-                  "readonly": false
-                },
-                "ui": {
-                  "label": "User Id",
-                  "list": true,
-                  "component": "TextField",
-                  "defaultValue": ""
-                }
-              },
-              {
-                "name": "value",
-                "kind": "decimal",
-                "isArray": false,
-                "required": true,
-                "native": {
-                  "type": "schema.types.decimal128"
-                },
-                "filter": {
-                  "searchable": true,
-                  "type": "regex"
-                },
-                "access": {
-                  "readonly": false
-                },
-                "ui": {
-                  "label": "Value",
-                  "list": true,
-                  "component": "TextField",
-                  "defaultValue": ""
-                }
-              }
-            ]
-          }
-        ]
+        "api": {
+          "normalOperations": [
+            "list",
+            "getOne",
+            "update",
+            "delete"
+          ],
+          "requiresAuth": true,
+          "admin": true
+        },
+        "ui": {
+          "label": "İşlemler"
+        }
       }
     },
     {
@@ -187,6 +763,10 @@
             "kind": "reference",
             "isArray": false,
             "required": true,
+            "native": {
+              "tsType": "mongoose.Types.ObjectId",
+              "tsOptional": false
+            },
             "reference": {
               "include": true,
               "target": "Users",
@@ -221,6 +801,10 @@
             "isArray": false,
             "required": true,
             "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
             "filter": {
               "searchable": true,
               "type": "regex"
@@ -241,6 +825,10 @@
             "isArray": false,
             "required": true,
             "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
             "filter": {
               "searchable": true,
               "type": "regex"
@@ -260,6 +848,10 @@
             "kind": "boolean",
             "isArray": false,
             "required": true,
+            "native": {
+              "tsType": "boolean",
+              "tsOptional": false
+            },
             "filter": {
               "searchable": true,
               "type": "boolean"
@@ -280,7 +872,7 @@
             "isArray": false,
             "required": false,
             "filter": {
-              "searchable": true,
+              "searchable": false,
               "type": "date-range"
             },
             "access": {
@@ -289,7 +881,7 @@
               "hiddenFromUpdate": true
             },
             "ui": {
-              "label": "Created At",
+              "label": "Oluşturulma",
               "list": true,
               "component": "DatePicker",
               "defaultValue": ""
@@ -301,7 +893,7 @@
             "isArray": false,
             "required": false,
             "filter": {
-              "searchable": true,
+              "searchable": false,
               "type": "date-range"
             },
             "access": {
@@ -310,20 +902,34 @@
               "hiddenFromUpdate": true
             },
             "ui": {
-              "label": "Updated At",
+              "label": "Güncellenme",
               "list": true,
               "component": "DatePicker",
               "defaultValue": ""
             }
           }
-        ]
+        ],
+        "api": {
+          "normalOperations": [
+            "list",
+            "getOne",
+            "create",
+            "update",
+            "delete"
+          ],
+          "requiresAuth": true,
+          "admin": true
+        },
+        "ui": {
+          "label": "Bildirimler"
+        }
       }
     },
     {
-      "sourceRelativePath": "src/modules/users/users.model.ts",
+      "sourceRelativePath": "src/modules/user-watch-list/user-watch-list.model.ts",
       "model": {
         "schemaVersion": 2,
-        "entityName": "Users",
+        "entityName": "UserWatchList",
         "fields": [
           {
             "name": "_id",
@@ -345,251 +951,58 @@
             }
           },
           {
-            "name": "email",
-            "kind": "string",
-            "isArray": false,
-            "required": true,
-            "trim": true,
-            "filter": {
-              "searchable": true,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Email",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "password",
-            "kind": "string",
-            "isArray": false,
-            "required": false,
-            "trim": true,
-            "filter": {
-              "searchable": false,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Password",
-              "list": false,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "name",
-            "kind": "string",
-            "isArray": false,
-            "required": false,
-            "trim": true,
-            "filter": {
-              "searchable": true,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Name",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "googleId",
-            "kind": "string",
-            "isArray": false,
-            "required": false,
-            "trim": true,
-            "filter": {
-              "searchable": true,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Google Id",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "appleId",
-            "kind": "string",
-            "isArray": false,
-            "required": false,
-            "trim": true,
-            "filter": {
-              "searchable": true,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Apple Id",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "profileImage",
-            "kind": "string",
-            "isArray": false,
-            "required": false,
-            "trim": true,
-            "filter": {
-              "searchable": false,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Profile Image",
-              "list": true,
-              "component": "ImageField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "lastActivity",
-            "kind": "date",
-            "isArray": false,
-            "required": false,
-            "filter": {
-              "searchable": true,
-              "type": "date-range"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Last Activity",
-              "list": true,
-              "component": "DatePicker",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "isActive",
-            "kind": "boolean",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": true,
-              "type": "boolean"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Is Active",
-              "list": true,
-              "component": "Switch",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "isVerified",
-            "kind": "boolean",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": true,
-              "type": "boolean"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Is Verified",
-              "list": true,
-              "component": "Switch",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "fcmTokens",
-            "kind": "string",
-            "isArray": true,
-            "required": false,
-            "filter": {
-              "searchable": false,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Fcm Tokens",
-              "list": true,
-              "component": "MultiSelect",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "otpCode",
-            "kind": "string",
-            "isArray": false,
-            "required": false,
-            "trim": true,
-            "filter": {
-              "searchable": false,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Otp Code",
-              "list": false,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "otpExpiresAt",
-            "kind": "date",
-            "isArray": false,
-            "required": false,
-            "filter": {
-              "searchable": false,
-              "type": "date-range"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Otp Expires At",
-              "list": false,
-              "component": "DatePicker",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "currencySymbolId",
+            "name": "userId",
             "kind": "reference",
             "isArray": false,
-            "required": false,
+            "required": true,
+            "native": {
+              "tsType": "mongoose.Types.ObjectId",
+              "tsOptional": false
+            },
+            "reference": {
+              "include": true,
+              "target": "Users",
+              "display": "name",
+              "populate": [
+                "email",
+                "name",
+                "isActive",
+                "isVerified",
+                "deviceLanguageTag"
+              ],
+              "relationType": "manyToOne"
+            },
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "User Id",
+              "list": true,
+              "component": "Autocomplete",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "symbolId",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "native": {
+              "tsType": "mongoose.Types.ObjectId",
+              "tsOptional": false
+            },
             "reference": {
               "include": true,
               "target": "Symbols",
               "display": "displayText",
               "populate": [
+                "_id",
                 "value",
+                "symbolTypeId",
                 "displayText"
               ],
               "relationType": "manyToOne"
@@ -602,88 +1015,33 @@
               "readonly": false
             },
             "ui": {
-              "label": "Currency Symbol Id",
+              "label": "Symbol Id",
               "list": true,
               "component": "Autocomplete",
               "defaultValue": ""
             }
           },
           {
-            "name": "deviceLanguageTag",
-            "kind": "string",
+            "name": "notificationsEnabled",
+            "kind": "boolean",
             "isArray": false,
             "required": true,
-            "trim": true,
+            "native": {
+              "tsType": "boolean",
+              "tsOptional": false
+            },
+            "default": false,
             "filter": {
               "searchable": true,
-              "type": "regex"
+              "type": "boolean"
             },
             "access": {
               "readonly": false
             },
             "ui": {
-              "label": "Device Language Tag",
+              "label": "Notifications Enabled",
               "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "deviceTimeZone",
-            "kind": "string",
-            "isArray": false,
-            "required": true,
-            "trim": true,
-            "filter": {
-              "searchable": false,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Device Time Zone",
-              "list": true,
-              "component": "DatePicker",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "lastPortfolioSnapshotLocalDate",
-            "kind": "string",
-            "isArray": false,
-            "required": false,
-            "trim": true,
-            "filter": {
-              "searchable": false,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Last Portfolio Snapshot Local Date",
-              "list": true,
-              "component": "DatePicker",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "appBuildNumber",
-            "kind": "number",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": false,
-              "type": "eq"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "App Build Number",
-              "list": true,
-              "component": "NumberField",
+              "component": "Switch",
               "defaultValue": ""
             }
           },
@@ -693,7 +1051,7 @@
             "isArray": false,
             "required": false,
             "filter": {
-              "searchable": true,
+              "searchable": false,
               "type": "date-range"
             },
             "access": {
@@ -702,7 +1060,7 @@
               "hiddenFromUpdate": true
             },
             "ui": {
-              "label": "Created At",
+              "label": "Oluşturulma",
               "list": true,
               "component": "DatePicker",
               "defaultValue": ""
@@ -723,327 +1081,26 @@
               "hiddenFromUpdate": true
             },
             "ui": {
-              "label": "Updated At",
+              "label": "Güncellenme",
               "list": true,
               "component": "DatePicker",
               "defaultValue": ""
             }
           }
-        ]
-      }
-    },
-    {
-      "sourceRelativePath": "src/modules/app-version-configs/app-version-configs.model.ts",
-      "model": {
-        "schemaVersion": 2,
-        "entityName": "AppVersionConfigs",
-        "fields": [
-          {
-            "name": "_id",
-            "kind": "reference",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": false,
-              "type": "reference"
-            },
-            "access": {
-              "readonly": true
-            },
-            "ui": {
-              "label": " Id",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "platform",
-            "kind": "string",
-            "isArray": false,
-            "required": true,
-            "unique": true,
-            "trim": true,
-            "filter": {
-              "searchable": false,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Platform",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "minSupportedBuildNumber",
-            "kind": "number",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": false,
-              "type": "eq"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Min Supported Build Number",
-              "list": true,
-              "component": "NumberField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "recommendedBuildNumber",
-            "kind": "number",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": false,
-              "type": "eq"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Recommended Build Number",
-              "list": true,
-              "component": "NumberField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "latestBuildNumber",
-            "kind": "number",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": false,
-              "type": "eq"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Latest Build Number",
-              "list": true,
-              "component": "NumberField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "latestVersionName",
-            "kind": "string",
-            "isArray": false,
-            "required": true,
-            "trim": true,
-            "filter": {
-              "searchable": false,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Latest Version Name",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "storeUrl",
-            "kind": "string",
-            "isArray": false,
-            "required": true,
-            "trim": true,
-            "filter": {
-              "searchable": false,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Store Url",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "createdAt",
-            "kind": "date",
-            "isArray": false,
-            "required": false,
-            "filter": {
-              "searchable": false,
-              "type": "date-range"
-            },
-            "access": {
-              "readonly": true,
-              "hiddenFromCreate": true,
-              "hiddenFromUpdate": true
-            },
-            "ui": {
-              "label": "Created At",
-              "list": true,
-              "component": "DatePicker",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "updatedAt",
-            "kind": "date",
-            "isArray": false,
-            "required": false,
-            "filter": {
-              "searchable": false,
-              "type": "date-range"
-            },
-            "access": {
-              "readonly": true,
-              "hiddenFromCreate": true,
-              "hiddenFromUpdate": true
-            },
-            "ui": {
-              "label": "Updated At",
-              "list": true,
-              "component": "DatePicker",
-              "defaultValue": ""
-            }
-          }
-        ]
-      }
-    },
-    {
-      "sourceRelativePath": "src/modules/symbol-types/symbol-types.model.ts",
-      "model": {
-        "schemaVersion": 2,
-        "entityName": "SymbolTypes",
-        "fields": [
-          {
-            "name": "_id",
-            "kind": "reference",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": true,
-              "type": "reference"
-            },
-            "access": {
-              "readonly": true
-            },
-            "ui": {
-              "label": " Id",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "value",
-            "kind": "string",
-            "isArray": false,
-            "required": true,
-            "trim": true,
-            "filter": {
-              "searchable": true,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Value",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "displayText",
-            "kind": "object",
-            "isArray": false,
-            "required": true,
-            "trim": true,
-            "object": {
-              "fields": [
-                {
-                  "name": "tr",
-                  "kind": "string",
-                  "required": true,
-                  "trim": true
-                },
-                {
-                  "name": "en",
-                  "kind": "string",
-                  "required": true,
-                  "trim": true
-                }
-              ]
-            },
-            "filter": {
-              "searchable": false,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Display Text",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "createdAt",
-            "kind": "date",
-            "isArray": false,
-            "required": false,
-            "filter": {
-              "searchable": true,
-              "type": "date-range"
-            },
-            "access": {
-              "readonly": true,
-              "hiddenFromCreate": true,
-              "hiddenFromUpdate": true
-            },
-            "ui": {
-              "label": "Created At",
-              "list": true,
-              "component": "DatePicker",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "updatedAt",
-            "kind": "date",
-            "isArray": false,
-            "required": false,
-            "filter": {
-              "searchable": true,
-              "type": "date-range"
-            },
-            "access": {
-              "readonly": true,
-              "hiddenFromCreate": true,
-              "hiddenFromUpdate": true
-            },
-            "ui": {
-              "label": "Updated At",
-              "list": true,
-              "component": "DatePicker",
-              "defaultValue": ""
-            }
-          }
-        ]
+        ],
+        "api": {
+          "normalOperations": [
+            "getOne",
+            "create",
+            "update",
+            "delete"
+          ],
+          "requiresAuth": true,
+          "admin": true
+        },
+        "ui": {
+          "label": "Takip Listesi"
+        }
       }
     },
     {
@@ -1076,8 +1133,11 @@
             "kind": "string",
             "isArray": false,
             "required": true,
-            "unique": true,
             "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
             "filter": {
               "searchable": true,
               "type": "regex"
@@ -1097,6 +1157,10 @@
             "kind": "reference",
             "isArray": false,
             "required": true,
+            "native": {
+              "tsType": "mongoose.Types.ObjectId",
+              "tsOptional": false
+            },
             "reference": {
               "include": true,
               "target": "SymbolTypes",
@@ -1127,7 +1191,10 @@
             "kind": "object",
             "isArray": false,
             "required": true,
-            "trim": true,
+            "native": {
+              "tsType": "{ tr: string; en: string; }",
+              "tsOptional": false
+            },
             "object": {
               "fields": [
                 {
@@ -1164,6 +1231,10 @@
             "isArray": false,
             "required": false,
             "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
             "filter": {
               "searchable": true,
               "type": "regex"
@@ -1184,6 +1255,10 @@
             "isArray": false,
             "required": true,
             "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
             "filter": {
               "searchable": true,
               "type": "regex"
@@ -1203,6 +1278,10 @@
             "kind": "boolean",
             "isArray": false,
             "required": false,
+            "native": {
+              "tsType": "boolean",
+              "tsOptional": false
+            },
             "filter": {
               "searchable": true,
               "type": "boolean"
@@ -1223,270 +1302,6 @@
             "isArray": false,
             "required": false,
             "filter": {
-              "searchable": true,
-              "type": "date-range"
-            },
-            "access": {
-              "readonly": true,
-              "hiddenFromCreate": true,
-              "hiddenFromUpdate": true
-            },
-            "ui": {
-              "label": "Created At",
-              "list": true,
-              "component": "DatePicker",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "updatedAt",
-            "kind": "date",
-            "isArray": false,
-            "required": false,
-            "filter": {
-              "searchable": true,
-              "type": "date-range"
-            },
-            "access": {
-              "readonly": true,
-              "hiddenFromCreate": true,
-              "hiddenFromUpdate": true
-            },
-            "ui": {
-              "label": "Updated At",
-              "list": true,
-              "component": "DatePicker",
-              "defaultValue": ""
-            }
-          }
-        ]
-      }
-    },
-    {
-      "sourceRelativePath": "src/modules/fund-daily-metrics/fund-daily-metrics.model.ts",
-      "model": {
-        "schemaVersion": 2,
-        "entityName": "FundDailyMetrics",
-        "fields": [
-          {
-            "name": "_id",
-            "kind": "reference",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": true,
-              "type": "reference"
-            },
-            "access": {
-              "readonly": true
-            },
-            "ui": {
-              "label": " Id",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "dateKey",
-            "kind": "string",
-            "isArray": false,
-            "required": true,
-            "trim": true,
-            "filter": {
-              "searchable": true,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Date Key",
-              "list": true,
-              "component": "DatePicker",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "ticker",
-            "kind": "string",
-            "isArray": false,
-            "required": true,
-            "trim": true,
-            "filter": {
-              "searchable": true,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Ticker",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "price",
-            "kind": "number",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": true,
-              "type": "eq"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Price",
-              "list": true,
-              "component": "NumberField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "previousClose",
-            "kind": "number",
-            "isArray": false,
-            "required": false,
-            "filter": {
-              "searchable": true,
-              "type": "eq"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Previous Close",
-              "list": true,
-              "component": "NumberField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "change",
-            "kind": "number",
-            "isArray": false,
-            "required": false,
-            "filter": {
-              "searchable": true,
-              "type": "eq"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Change",
-              "list": true,
-              "component": "NumberField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "changePercent",
-            "kind": "number",
-            "isArray": false,
-            "required": false,
-            "filter": {
-              "searchable": true,
-              "type": "eq"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Change Percent",
-              "list": true,
-              "component": "NumberField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "currency",
-            "kind": "string",
-            "isArray": false,
-            "required": false,
-            "trim": true,
-            "filter": {
-              "searchable": true,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Currency",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "asOf",
-            "kind": "date",
-            "isArray": false,
-            "required": false,
-            "filter": {
-              "searchable": true,
-              "type": "date-range"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "As Of",
-              "list": true,
-              "component": "DatePicker",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "stale",
-            "kind": "boolean",
-            "isArray": false,
-            "required": false,
-            "filter": {
-              "searchable": true,
-              "type": "boolean"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Stale",
-              "list": true,
-              "component": "Switch",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "source",
-            "kind": "string",
-            "isArray": false,
-            "required": false,
-            "trim": true,
-            "filter": {
-              "searchable": false,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Source",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "createdAt",
-            "kind": "date",
-            "isArray": false,
-            "required": false,
-            "filter": {
               "searchable": false,
               "type": "date-range"
             },
@@ -1496,7 +1311,7 @@
               "hiddenFromUpdate": true
             },
             "ui": {
-              "label": "Created At",
+              "label": "Oluşturulma",
               "list": true,
               "component": "DatePicker",
               "defaultValue": ""
@@ -1517,432 +1332,24 @@
               "hiddenFromUpdate": true
             },
             "ui": {
-              "label": "Updated At",
+              "label": "Güncellenme",
               "list": true,
               "component": "DatePicker",
               "defaultValue": ""
             }
           }
-        ]
-      }
-    },
-    {
-      "sourceRelativePath": "src/modules/transactions/transactions.model.ts",
-      "model": {
-        "schemaVersion": 2,
-        "entityName": "Transactions",
-        "fields": [
-          {
-            "name": "_id",
-            "kind": "reference",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": true,
-              "type": "reference"
-            },
-            "access": {
-              "readonly": true
-            },
-            "ui": {
-              "label": " Id",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "userId",
-            "kind": "reference",
-            "isArray": false,
-            "required": true,
-            "reference": {
-              "include": true,
-              "target": "Users",
-              "display": "name",
-              "populate": [
-                "_id",
-                "email",
-                "name"
-              ],
-              "relationType": "manyToOne"
-            },
-            "filter": {
-              "searchable": true,
-              "type": "reference"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "User Id",
-              "list": true,
-              "component": "Autocomplete",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "symbolId",
-            "kind": "reference",
-            "isArray": false,
-            "required": true,
-            "reference": {
-              "include": true,
-              "target": "Symbols",
-              "display": "displayText",
-              "populate": [
-                "_id",
-                "value",
-                "displayText",
-                "description",
-                "currency"
-              ],
-              "relationType": "manyToOne"
-            },
-            "filter": {
-              "searchable": true,
-              "type": "reference"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Symbol Id",
-              "list": true,
-              "component": "Autocomplete",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "quantity",
-            "kind": "number",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": true,
-              "type": "eq"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Quantity",
-              "list": true,
-              "component": "NumberField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "price",
-            "kind": "number",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": true,
-              "type": "eq"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Price",
-              "list": true,
-              "component": "NumberField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "transactionType",
-            "kind": "string",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": true,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Transaction Type",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "notes",
-            "kind": "string",
-            "isArray": false,
-            "required": false,
-            "trim": true,
-            "filter": {
-              "searchable": true,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Notes",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "priceCurrency",
-            "kind": "string",
-            "isArray": false,
-            "required": true,
-            "trim": true,
-            "filter": {
-              "searchable": true,
-              "type": "regex"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Price Currency",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "realizedPnL",
-            "kind": "number",
-            "isArray": false,
-            "required": false,
-            "filter": {
-              "searchable": true,
-              "type": "eq"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Realized PnL",
-              "list": true,
-              "component": "NumberField",
-              "defaultValue": 0
-            }
-          },
-          {
-            "name": "addToCashBalance",
-            "kind": "boolean",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": true,
-              "type": "boolean"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Add To Cash Balance",
-              "list": true,
-              "component": "Switch",
-              "defaultValue": true
-            }
-          },
-          {
-            "name": "createdAt",
-            "kind": "date",
-            "isArray": false,
-            "required": false,
-            "filter": {
-              "searchable": true,
-              "type": "date-range"
-            },
-            "access": {
-              "readonly": true,
-              "hiddenFromCreate": true,
-              "hiddenFromUpdate": true
-            },
-            "ui": {
-              "label": "Created At",
-              "list": true,
-              "component": "DatePicker",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "updatedAt",
-            "kind": "date",
-            "isArray": false,
-            "required": false,
-            "filter": {
-              "searchable": true,
-              "type": "date-range"
-            },
-            "access": {
-              "readonly": true,
-              "hiddenFromCreate": true,
-              "hiddenFromUpdate": true
-            },
-            "ui": {
-              "label": "Updated At",
-              "list": true,
-              "component": "DatePicker",
-              "defaultValue": ""
-            }
-          }
-        ]
-      }
-    },
-    {
-      "sourceRelativePath": "src/modules/user-watch-list/user-watch-list.model.ts",
-      "model": {
-        "schemaVersion": 2,
-        "entityName": "UserWatchList",
-        "fields": [
-          {
-            "name": "_id",
-            "kind": "reference",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": true,
-              "type": "reference"
-            },
-            "access": {
-              "readonly": true
-            },
-            "ui": {
-              "label": " Id",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "userId",
-            "kind": "reference",
-            "isArray": false,
-            "required": true,
-            "reference": {
-              "include": true,
-              "target": "Users",
-              "display": "name",
-              "populate": [
-                "email",
-                "name",
-                "isActive",
-                "isVerified",
-                "deviceLanguageTag"
-              ],
-              "relationType": "manyToOne"
-            },
-            "filter": {
-              "searchable": true,
-              "type": "reference"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "User Id",
-              "list": true,
-              "component": "Autocomplete",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "symbolId",
-            "kind": "reference",
-            "isArray": false,
-            "required": true,
-            "reference": {
-              "include": true,
-              "target": "Symbols",
-              "display": "displayText",
-              "populate": [
-                "_id",
-                "value",
-                "symbolTypeId",
-                "displayText"
-              ],
-              "relationType": "manyToOne"
-            },
-            "filter": {
-              "searchable": true,
-              "type": "reference"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Symbol Id",
-              "list": true,
-              "component": "Autocomplete",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "notificationsEnabled",
-            "kind": "boolean",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": true,
-              "type": "boolean"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Notifications Enabled",
-              "list": true,
-              "component": "Switch",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "createdAt",
-            "kind": "date",
-            "isArray": false,
-            "required": false,
-            "filter": {
-              "searchable": true,
-              "type": "date-range"
-            },
-            "access": {
-              "readonly": true,
-              "hiddenFromCreate": true,
-              "hiddenFromUpdate": true
-            },
-            "ui": {
-              "label": "Created At",
-              "list": true,
-              "component": "DatePicker",
-              "defaultValue": ""
-            }
-          },
-          {
-            "name": "updatedAt",
-            "kind": "date",
-            "isArray": false,
-            "required": false,
-            "filter": {
-              "searchable": true,
-              "type": "date-range"
-            },
-            "access": {
-              "readonly": true,
-              "hiddenFromCreate": true,
-              "hiddenFromUpdate": true
-            },
-            "ui": {
-              "label": "Updated At",
-              "list": true,
-              "component": "DatePicker",
-              "defaultValue": ""
-            }
-          }
-        ]
+        ],
+        "api": {
+          "normalOperations": [
+            "list",
+            "getOne"
+          ],
+          "requiresAuth": true,
+          "admin": true
+        },
+        "ui": {
+          "label": "Semboller"
+        }
       }
     },
     {
@@ -1966,17 +1373,27 @@
             "ui": {
               "label": " Id",
               "list": true,
-              "component": "TextField",
+              "component": "Autocomplete",
               "defaultValue": ""
             }
           },
           {
             "name": "code",
-            "kind": "string",
+            "kind": "enum",
             "isArray": false,
             "required": true,
             "unique": true,
             "trim": true,
+            "native": {
+              "tsType": "SubscriptionCode",
+              "tsOptional": false
+            },
+            "enum": {
+              "values": [
+                "free",
+                "premium"
+              ]
+            },
             "filter": {
               "searchable": true,
               "type": "regex"
@@ -1987,7 +1404,7 @@
             "ui": {
               "label": "Code",
               "list": true,
-              "component": "TextField",
+              "component": "Select",
               "defaultValue": ""
             }
           },
@@ -1997,6 +1414,10 @@
             "isArray": false,
             "required": true,
             "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
             "filter": {
               "searchable": true,
               "type": "regex"
@@ -2016,6 +1437,11 @@
             "kind": "boolean",
             "isArray": false,
             "required": true,
+            "native": {
+              "tsType": "boolean",
+              "tsOptional": false
+            },
+            "default": true,
             "filter": {
               "searchable": true,
               "type": "boolean"
@@ -2035,8 +1461,12 @@
             "kind": "number",
             "isArray": false,
             "required": true,
+            "native": {
+              "tsType": "number",
+              "tsOptional": false
+            },
             "filter": {
-              "searchable": false,
+              "searchable": true,
               "type": "eq"
             },
             "access": {
@@ -2055,6 +1485,11 @@
             "isArray": false,
             "required": false,
             "trim": true,
+            "native": {
+              "tsType": "string | null",
+              "tsOptional": false
+            },
+            "default": null,
             "filter": {
               "searchable": true,
               "type": "regex"
@@ -2074,6 +1509,10 @@
             "kind": "object",
             "isArray": false,
             "required": true,
+            "native": {
+              "tsType": "ISubscriptionLimits",
+              "tsOptional": false
+            },
             "object": {
               "fields": [
                 {
@@ -2165,7 +1604,7 @@
             "isArray": false,
             "required": false,
             "filter": {
-              "searchable": true,
+              "searchable": false,
               "type": "date-range"
             },
             "access": {
@@ -2174,7 +1613,7 @@
               "hiddenFromUpdate": true
             },
             "ui": {
-              "label": "Created At",
+              "label": "Oluşturulma",
               "list": true,
               "component": "DatePicker",
               "defaultValue": ""
@@ -2186,7 +1625,7 @@
             "isArray": false,
             "required": false,
             "filter": {
-              "searchable": true,
+              "searchable": false,
               "type": "date-range"
             },
             "access": {
@@ -2195,7 +1634,7 @@
               "hiddenFromUpdate": true
             },
             "ui": {
-              "label": "Updated At",
+              "label": "Güncellenme",
               "list": true,
               "component": "DatePicker",
               "defaultValue": ""
@@ -2441,7 +1880,332 @@
               }
             ]
           }
-        ]
+        ],
+        "api": {
+          "normalOperations": [
+            "list",
+            "getOne"
+          ],
+          "requiresAuth": true,
+          "admin": true
+        },
+        "ui": {
+          "label": "Abonelikler"
+        }
+      }
+    },
+    {
+      "sourceRelativePath": "src/modules/fund-daily-metrics/fund-daily-metrics.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "FundDailyMetrics",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": " Id",
+              "list": true,
+              "component": "Autocomplete",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "dateKey",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Date Key",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "ticker",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Ticker",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "price",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "native": {
+              "tsType": "number",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Price",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "previousClose",
+            "kind": "number",
+            "isArray": false,
+            "required": false,
+            "native": {
+              "tsType": "number",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Previous Close",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "change",
+            "kind": "number",
+            "isArray": false,
+            "required": false,
+            "native": {
+              "tsType": "number",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Change",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "changePercent",
+            "kind": "number",
+            "isArray": false,
+            "required": false,
+            "native": {
+              "tsType": "number",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Change Percent",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "currency",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Currency",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "asOf",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "native": {
+              "tsType": "Date",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "As Of",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "stale",
+            "kind": "boolean",
+            "isArray": false,
+            "required": false,
+            "native": {
+              "tsType": "boolean",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "boolean"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Stale",
+              "list": true,
+              "component": "Switch",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "source",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Source",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Oluşturulma",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Güncellenme",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ],
+        "api": {
+          "normalOperations": [
+            "getOne"
+          ],
+          "requiresAuth": true,
+          "admin": true
+        },
+        "ui": {
+          "label": "Fon Günlük Metrikleri"
+        }
       }
     },
     {
@@ -2465,7 +2229,7 @@
             "ui": {
               "label": " Id",
               "list": true,
-              "component": "TextField",
+              "component": "Autocomplete",
               "defaultValue": ""
             }
           },
@@ -2475,12 +2239,15 @@
             "isArray": false,
             "required": true,
             "unique": true,
+            "native": {
+              "tsType": "mongoose.Types.ObjectId",
+              "tsOptional": false
+            },
             "reference": {
               "include": true,
               "target": "Users",
               "display": "name",
               "populate": [
-                "_id",
                 "email",
                 "name"
               ],
@@ -2505,16 +2272,17 @@
             "kind": "reference",
             "isArray": false,
             "required": true,
+            "native": {
+              "tsType": "mongoose.Types.ObjectId",
+              "tsOptional": false
+            },
             "reference": {
               "include": true,
               "target": "Subscriptions",
               "display": "name",
               "populate": [
-                "_id",
                 "code",
-                "name",
-                "revenueCatEntitlementId",
-                "limits"
+                "name"
               ],
               "relationType": "manyToOne"
             },
@@ -2534,9 +2302,22 @@
           },
           {
             "name": "status",
-            "kind": "string",
+            "kind": "enum",
             "isArray": false,
             "required": true,
+            "native": {
+              "tsType": "UserSubscriptionStatus",
+              "tsOptional": false
+            },
+            "enum": {
+              "values": [
+                "active",
+                "canceled",
+                "expired",
+                "grace_period",
+                "billing_retry"
+              ]
+            },
             "filter": {
               "searchable": true,
               "type": "regex"
@@ -2547,15 +2328,27 @@
             "ui": {
               "label": "Status",
               "list": true,
-              "component": "TextField",
+              "component": "Select",
               "defaultValue": ""
             }
           },
           {
             "name": "provider",
-            "kind": "string",
+            "kind": "enum",
             "isArray": false,
             "required": true,
+            "native": {
+              "tsType": "UserSubscriptionProvider",
+              "tsOptional": false
+            },
+            "enum": {
+              "values": [
+                "none",
+                "revenuecat",
+                "manual"
+              ]
+            },
+            "default": "none",
             "filter": {
               "searchable": true,
               "type": "regex"
@@ -2566,7 +2359,7 @@
             "ui": {
               "label": "Provider",
               "list": true,
-              "component": "TextField",
+              "component": "Select",
               "defaultValue": ""
             }
           },
@@ -2575,6 +2368,11 @@
             "kind": "boolean",
             "isArray": false,
             "required": true,
+            "native": {
+              "tsType": "boolean",
+              "tsOptional": false
+            },
+            "default": false,
             "filter": {
               "searchable": true,
               "type": "boolean"
@@ -2594,6 +2392,10 @@
             "kind": "date",
             "isArray": false,
             "required": false,
+            "native": {
+              "tsType": "Date",
+              "tsOptional": true
+            },
             "filter": {
               "searchable": true,
               "type": "date-range"
@@ -2613,6 +2415,10 @@
             "kind": "date",
             "isArray": false,
             "required": false,
+            "native": {
+              "tsType": "Date",
+              "tsOptional": true
+            },
             "filter": {
               "searchable": true,
               "type": "date-range"
@@ -2632,8 +2438,12 @@
             "kind": "date",
             "isArray": false,
             "required": false,
+            "native": {
+              "tsType": "Date",
+              "tsOptional": true
+            },
             "filter": {
-              "searchable": false,
+              "searchable": true,
               "type": "date-range"
             },
             "access": {
@@ -2651,8 +2461,12 @@
             "kind": "date",
             "isArray": false,
             "required": false,
+            "native": {
+              "tsType": "Date",
+              "tsOptional": true
+            },
             "filter": {
-              "searchable": false,
+              "searchable": true,
               "type": "date-range"
             },
             "access": {
@@ -2670,6 +2484,12 @@
             "kind": "number",
             "isArray": false,
             "required": true,
+            "native": {
+              "tsType": "number",
+              "tsOptional": false,
+              "doc": "/** Free DeepDive günlük kota: bugün kullanılan scan sayısı */"
+            },
+            "default": 0,
             "filter": {
               "searchable": true,
               "type": "eq"
@@ -2690,8 +2510,13 @@
             "isArray": false,
             "required": false,
             "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": true,
+              "doc": "/** UTC gün anahtarı YYYY-MM-DD; gün değişince used sıfırlanır */"
+            },
             "filter": {
-              "searchable": false,
+              "searchable": true,
               "type": "regex"
             },
             "access": {
@@ -2700,7 +2525,7 @@
             "ui": {
               "label": "Deep Dive Daily Date",
               "list": true,
-              "component": "DatePicker",
+              "component": "TextField",
               "defaultValue": ""
             }
           },
@@ -2710,7 +2535,7 @@
             "isArray": false,
             "required": false,
             "filter": {
-              "searchable": true,
+              "searchable": false,
               "type": "date-range"
             },
             "access": {
@@ -2719,7 +2544,7 @@
               "hiddenFromUpdate": true
             },
             "ui": {
-              "label": "Created At",
+              "label": "Oluşturulma",
               "list": true,
               "component": "DatePicker",
               "defaultValue": ""
@@ -2740,20 +2565,30 @@
               "hiddenFromUpdate": true
             },
             "ui": {
-              "label": "Updated At",
+              "label": "Güncellenme",
               "list": true,
               "component": "DatePicker",
               "defaultValue": ""
             }
           }
-        ]
+        ],
+        "api": {
+          "normalOperations": [
+            "getOne"
+          ],
+          "requiresAuth": true,
+          "admin": true
+        },
+        "ui": {
+          "label": "Kullanıcı Abonelikleri"
+        }
       }
     },
     {
-      "sourceRelativePath": "src/modules/ip-blacklist/ip-blacklist.model.ts",
+      "sourceRelativePath": "src/modules/users/users.model.ts",
       "model": {
         "schemaVersion": 2,
-        "entityName": "IpBlacklist",
+        "entityName": "Users",
         "fields": [
           {
             "name": "_id",
@@ -2761,7 +2596,7 @@
             "isArray": false,
             "required": true,
             "filter": {
-              "searchable": false,
+              "searchable": true,
               "type": "reference"
             },
             "access": {
@@ -2770,37 +2605,145 @@
             "ui": {
               "label": " Id",
               "list": true,
-              "component": "TextField",
+              "component": "Autocomplete",
               "defaultValue": ""
             }
           },
           {
-            "name": "ip",
+            "name": "email",
             "kind": "string",
             "isArray": false,
             "required": true,
-            "unique": true,
             "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
             "filter": {
               "searchable": true,
               "type": "regex"
             },
             "access": {
-              "readonly": false
+              "readonly": false,
+              "adminOnly": true
             },
             "ui": {
-              "label": "IP",
+              "label": "Email",
               "list": true,
               "component": "TextField",
               "defaultValue": ""
             }
           },
           {
-            "name": "reason",
+            "name": "password",
             "kind": "string",
             "isArray": false,
             "required": false,
             "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false,
+              "hidden": true,
+              "adminOnly": true
+            },
+            "ui": {
+              "label": "Password",
+              "list": false,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "name",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Name",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "googleId",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false,
+              "adminOnly": true
+            },
+            "ui": {
+              "label": "Google Id",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "appleId",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false,
+              "adminOnly": true
+            },
+            "ui": {
+              "label": "Apple Id",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "profileImage",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
             "filter": {
               "searchable": false,
               "type": "regex"
@@ -2809,69 +2752,31 @@
               "readonly": false
             },
             "ui": {
-              "label": "Reason",
+              "label": "Profile Image",
               "list": true,
-              "component": "TextArea",
+              "component": "TextField",
               "defaultValue": ""
             }
           },
           {
-            "name": "source",
-            "kind": "string",
-            "isArray": false,
-            "required": true,
-            "trim": true,
-            "filter": {
-              "searchable": true,
-              "type": "eq"
-            },
-            "access": {
-              "readonly": false
-            },
-            "ui": {
-              "label": "Source",
-              "list": true,
-              "component": "TextField",
-              "defaultValue": "manual"
-            }
-          },
-          {
-            "name": "hitCount",
-            "kind": "number",
-            "isArray": false,
-            "required": true,
-            "filter": {
-              "searchable": false,
-              "type": "eq"
-            },
-            "access": {
-              "readonly": true,
-              "hiddenFromCreate": true,
-              "hiddenFromUpdate": true
-            },
-            "ui": {
-              "label": "Hit Count",
-              "list": true,
-              "component": "NumberField",
-              "defaultValue": "0"
-            }
-          },
-          {
-            "name": "lastHitAt",
+            "name": "lastActivity",
             "kind": "date",
             "isArray": false,
             "required": false,
+            "native": {
+              "tsType": "Date | null",
+              "tsOptional": true
+            },
             "filter": {
               "searchable": false,
               "type": "date-range"
             },
             "access": {
-              "readonly": true,
-              "hiddenFromCreate": true,
-              "hiddenFromUpdate": true
+              "readonly": false,
+              "adminOnly": true
             },
             "ui": {
-              "label": "Last Hit At",
+              "label": "Last Activity",
               "list": true,
               "component": "DatePicker",
               "defaultValue": ""
@@ -2882,18 +2787,263 @@
             "kind": "boolean",
             "isArray": false,
             "required": true,
+            "native": {
+              "tsType": "boolean",
+              "tsOptional": false
+            },
             "filter": {
               "searchable": true,
               "type": "boolean"
             },
             "access": {
-              "readonly": false
+              "readonly": false,
+              "adminOnly": true
             },
             "ui": {
               "label": "Is Active",
               "list": true,
               "component": "Switch",
-              "defaultValue": "true"
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "isVerified",
+            "kind": "boolean",
+            "isArray": false,
+            "required": true,
+            "native": {
+              "tsType": "boolean",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "boolean"
+            },
+            "access": {
+              "readonly": false,
+              "adminOnly": true
+            },
+            "ui": {
+              "label": "Is Verified",
+              "list": true,
+              "component": "Switch",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "fcmTokens",
+            "kind": "string",
+            "isArray": true,
+            "required": false,
+            "native": {
+              "tsType": "string[]",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false,
+              "adminOnly": true
+            },
+            "ui": {
+              "label": "Fcm Tokens",
+              "list": true,
+              "component": "Chips",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "otpCode",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": true
+            },
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false,
+              "hidden": true,
+              "adminOnly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Otp Code",
+              "list": false,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "otpExpiresAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "native": {
+              "tsType": "Date",
+              "tsOptional": true
+            },
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": false,
+              "hidden": true,
+              "adminOnly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Otp Expires At",
+              "list": false,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "baseCurrency",
+            "kind": "enum",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "native": {
+              "options": [
+                "uppercase: true"
+              ],
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "enum": {
+              "values": [
+                "TRY",
+                "USD",
+                "CAD",
+                "EUR",
+                "GBP",
+                "JPY"
+              ]
+            },
+            "default": "TRY",
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Base Currency",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "deviceLanguageTag",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Device Language Tag",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "deviceTimeZone",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "default": "Europe/Istanbul",
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Device Time Zone",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "lastPortfolioSnapshotLocalDate",
+            "kind": "string",
+            "isArray": false,
+            "required": false,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": true
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false,
+              "adminOnly": true
+            },
+            "ui": {
+              "label": "Last Portfolio Snapshot Local Date",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "appBuildNumber",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "native": {
+              "tsType": "number",
+              "tsOptional": false
+            },
+            "default": 30,
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false,
+              "adminOnly": true
+            },
+            "ui": {
+              "label": "App Build Number",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
             }
           },
           {
@@ -2911,7 +3061,7 @@
               "hiddenFromUpdate": true
             },
             "ui": {
-              "label": "Created At",
+              "label": "Oluşturulma",
               "list": true,
               "component": "DatePicker",
               "defaultValue": ""
@@ -2932,13 +3082,730 @@
               "hiddenFromUpdate": true
             },
             "ui": {
-              "label": "Updated At",
+              "label": "Güncellenme",
               "list": true,
               "component": "DatePicker",
               "defaultValue": ""
             }
           }
-        ]
+        ],
+        "ownership": {
+          "kind": "self"
+        },
+        "api": {
+          "normalOperations": [
+            "update"
+          ],
+          "requiresAuth": true,
+          "admin": true
+        },
+        "ui": {
+          "label": "Kullanıcılar"
+        }
+      }
+    },
+    {
+      "sourceRelativePath": "src/modules/user-asset-categories/user-asset-categories.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "UserAssetCategories",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": " Id",
+              "list": true,
+              "component": "Autocomplete",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "userId",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "unique": true,
+            "native": {
+              "tsType": "mongoose.Types.ObjectId",
+              "tsOptional": false
+            },
+            "reference": {
+              "include": true,
+              "target": "Users",
+              "display": "name",
+              "populate": [
+                "email",
+                "name"
+              ],
+              "relationType": "manyToOne"
+            },
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "User Id",
+              "list": true,
+              "component": "Autocomplete",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "countryCode",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "native": {
+              "options": [
+                "uppercase: true"
+              ],
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Country Code",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "items",
+            "kind": "object",
+            "isArray": true,
+            "required": true,
+            "native": {
+              "options": [
+                "default: []"
+              ],
+              "tsType": "IUserAssetCategoryItem[]",
+              "tsOptional": false
+            },
+            "object": {
+              "fields": [
+                {
+                  "name": "symbolTypeId",
+                  "kind": "reference",
+                  "required": true,
+                  "reference": {
+                    "include": true,
+                    "target": "SymbolTypes",
+                    "ref": "SymbolTypes"
+                  },
+                  "native": {
+                    "type": "objectId"
+                  }
+                },
+                {
+                  "name": "sortOrder",
+                  "kind": "number",
+                  "required": true
+                },
+                {
+                  "name": "show",
+                  "kind": "boolean",
+                  "required": true
+                }
+              ],
+              "typeName": "IUserAssetCategoryItem",
+              "schemaName": "UserAssetCategoryItemSchema"
+            },
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Items",
+              "list": true,
+              "component": "MultiSelect",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Oluşturulma",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Güncellenme",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ],
+        "nestedSchemas": [
+          {
+            "entityName": "UserAssetCategoryItem",
+            "fields": [
+              {
+                "name": "symbolTypeId",
+                "kind": "reference",
+                "isArray": false,
+                "required": true,
+                "reference": {
+                  "include": true,
+                  "target": "SymbolTypes",
+                  "relationType": "manyToOne"
+                },
+                "filter": {
+                  "searchable": true,
+                  "type": "reference"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "Symbol Type Id",
+                  "list": true,
+                  "component": "Autocomplete",
+                  "defaultValue": ""
+                }
+              },
+              {
+                "name": "sortOrder",
+                "kind": "number",
+                "isArray": false,
+                "required": true,
+                "filter": {
+                  "searchable": true,
+                  "type": "eq"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "Sort Order",
+                  "list": true,
+                  "component": "NumberField",
+                  "defaultValue": ""
+                }
+              },
+              {
+                "name": "show",
+                "kind": "boolean",
+                "isArray": false,
+                "required": true,
+                "filter": {
+                  "searchable": true,
+                  "type": "boolean"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "Show",
+                  "list": true,
+                  "component": "Switch",
+                  "defaultValue": ""
+                }
+              }
+            ]
+          }
+        ],
+        "api": {
+          "normalOperations": [],
+          "requiresAuth": true,
+          "admin": true
+        },
+        "ui": {
+          "label": "Varlık Kategorileri"
+        }
+      }
+    },
+    {
+      "sourceRelativePath": "src/modules/daily-portfolio/daily-portfolio.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "DailyPortfolio",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": " Id",
+              "list": true,
+              "component": "Autocomplete",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "snapshotDate",
+            "kind": "date",
+            "isArray": false,
+            "required": true,
+            "native": {
+              "tsType": "Date",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Snapshot Date",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "portfolioValues",
+            "kind": "object",
+            "isArray": true,
+            "required": true,
+            "native": {
+              "tsType": "IDailyPortfolioValue[]",
+              "tsOptional": false
+            },
+            "object": {
+              "fields": [
+                {
+                  "name": "userId",
+                  "kind": "reference",
+                  "required": true,
+                  "native": {
+                    "type": "objectId"
+                  }
+                },
+                {
+                  "name": "value",
+                  "kind": "decimal",
+                  "required": true,
+                  "native": {
+                    "type": "number"
+                  }
+                },
+                {
+                  "name": "currency",
+                  "kind": "string",
+                  "required": false
+                }
+              ],
+              "typeName": "IDailyPortfolioValue",
+              "schemaName": "DailyPortfolioValueSchema"
+            },
+            "filter": {
+              "searchable": false,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Portfolio Values",
+              "list": true,
+              "component": "MultiSelect",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Oluşturulma",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Güncellenme",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ],
+        "nestedSchemas": [
+          {
+            "entityName": "DailyPortfolioValue",
+            "fields": [
+              {
+                "name": "userId",
+                "kind": "reference",
+                "isArray": false,
+                "required": true,
+                "filter": {
+                  "searchable": true,
+                  "type": "reference"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "User Id",
+                  "list": true,
+                  "component": "Autocomplete",
+                  "defaultValue": ""
+                }
+              },
+              {
+                "name": "value",
+                "kind": "decimal",
+                "isArray": false,
+                "required": true,
+                "native": {
+                  "type": "schema.types.decimal128"
+                },
+                "filter": {
+                  "searchable": true,
+                  "type": "regex"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "Value",
+                  "list": true,
+                  "component": "NumberField",
+                  "defaultValue": ""
+                }
+              },
+              {
+                "name": "currency",
+                "kind": "string",
+                "isArray": false,
+                "required": false,
+                "filter": {
+                  "searchable": true,
+                  "type": "regex"
+                },
+                "access": {
+                  "readonly": false
+                },
+                "ui": {
+                  "label": "Currency",
+                  "list": true,
+                  "component": "TextField",
+                  "defaultValue": ""
+                }
+              }
+            ]
+          }
+        ],
+        "api": {
+          "normalOperations": [],
+          "requiresAuth": true,
+          "admin": true
+        },
+        "ui": {
+          "label": "Günlük Portföy"
+        }
+      }
+    },
+    {
+      "sourceRelativePath": "src/modules/app-version-configs/app-version-configs.model.ts",
+      "model": {
+        "schemaVersion": 2,
+        "entityName": "AppVersionConfigs",
+        "fields": [
+          {
+            "name": "_id",
+            "kind": "reference",
+            "isArray": false,
+            "required": true,
+            "filter": {
+              "searchable": true,
+              "type": "reference"
+            },
+            "access": {
+              "readonly": true
+            },
+            "ui": {
+              "label": " Id",
+              "list": true,
+              "component": "Autocomplete",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "platform",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "unique": true,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Platform",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "minSupportedBuildNumber",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "native": {
+              "tsType": "number",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Min Supported Build Number",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "recommendedBuildNumber",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "native": {
+              "tsType": "number",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Recommended Build Number",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "latestBuildNumber",
+            "kind": "number",
+            "isArray": false,
+            "required": true,
+            "native": {
+              "tsType": "number",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "eq"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Latest Build Number",
+              "list": true,
+              "component": "NumberField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "latestVersionName",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Latest Version Name",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "storeUrl",
+            "kind": "string",
+            "isArray": false,
+            "required": true,
+            "trim": true,
+            "native": {
+              "tsType": "string",
+              "tsOptional": false
+            },
+            "filter": {
+              "searchable": true,
+              "type": "regex"
+            },
+            "access": {
+              "readonly": false
+            },
+            "ui": {
+              "label": "Store Url",
+              "list": true,
+              "component": "TextField",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "createdAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Oluşturulma",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          },
+          {
+            "name": "updatedAt",
+            "kind": "date",
+            "isArray": false,
+            "required": false,
+            "filter": {
+              "searchable": false,
+              "type": "date-range"
+            },
+            "access": {
+              "readonly": true,
+              "hiddenFromCreate": true,
+              "hiddenFromUpdate": true
+            },
+            "ui": {
+              "label": "Güncellenme",
+              "list": true,
+              "component": "DatePicker",
+              "defaultValue": ""
+            }
+          }
+        ],
+        "api": {
+          "normalOperations": [
+            "list",
+            "getOne"
+          ],
+          "requiresAuth": false,
+          "admin": true
+        },
+        "ui": {
+          "label": "Uygulama Sürümleri"
+        }
       }
     }
   ],

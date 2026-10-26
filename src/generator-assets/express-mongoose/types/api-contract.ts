@@ -13,6 +13,13 @@ export interface IApiResponse<T> {
   isSuccess: boolean;
   uiMessage: string | null;
   errorData: IErrorData | null;
-  /** Request id from the host request context (`@utils/requestContext`). Omitted outside a request. */
+  /** İstek kimliği. Middleware doldurur; yoksa alan yazılmaz. */
   traceId?: string;
 }
+
+/** Generic ascending/descending sort order — tüm liste endpoint'lerinde ortak. */
+export type SortOrder = 'asc' | 'desc';
+
+/** Zod schema'larda `order` alanı için ortak tuple. */
+export const SORT_ORDER_VALUES = ['asc', 'desc'] as const;
+

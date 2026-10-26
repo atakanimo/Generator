@@ -76,7 +76,7 @@ Bilinen: `regen-varlik360 --p5` iki tespit senaryosunda FAIL (Symbols, AppVersio
 
 ## Python + FastAPI
 
-Plan: [plans/backend-python-fastapi.md](plans/backend-python-fastapi.md) (PY4–PY8), stack dokümanı [backend/python-fastapi.md](backend/python-fastapi.md). Ortak katman asset'leri (`src/generator-assets/python-fastapi/core/**`) kaynak, StockExchange'in `src/alpha_terminal/core/` kopyaları onlarla bayt bayt aynı tutulur.
+Stack dokümanı ve kararlar: [backend/python-fastapi.md](backend/python-fastapi.md). Ortak katman asset'leri (`src/generator-assets/python-fastapi/core/**`) kaynak, StockExchange'in `src/alpha_terminal/core/` kopyaları onlarla bayt bayt aynı tutulur.
 
 | Komut | Kontrol | Süre |
 | --- | --- | --- |

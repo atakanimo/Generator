@@ -157,6 +157,22 @@ roundTrip('golden', golden);
 const gold2 = gen.generateDotnetModules(out, app, golden, db).files.filter(f => f.action === 'created' || f.action === 'updated');
 check('golden: idempotent', gold2.length === 0, gold2.map(f => relative(out, f.path)).join(', '));
 
+// Obje alt alanı json / map / obje: desteklenmiyor, generate açık hatayla reddeder (çökme ya da sessiz çıktı yok).
+for (const kind of ['json', 'map', 'object']) {
+  const model = {
+    schemaVersion: 2, entityName: 'NestedProbes',
+    fields: [{ name: 'settings', kind: 'object', isArray: false, required: false, object: { fields: [{ name: 'inner', kind, required: false }] } }]
+  };
+  let message = '';
+  try {
+    const r = gen.generateDotnetModules(out, app, [model], db);
+    message = r?.success === false ? String(r.error ?? '') : '';
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  check(`nested sub-field ${kind}: refused with a clear error`, message.includes('desteklenmiyor'), message || 'generated without error');
+}
+
 // Python parity host (backend-python-fastapi PY3): the .NET side of `contract-parity --suite subscription-plans`.
 const pyModels = JSON.parse(readFileSync(join(root, 'scripts/verify/fixtures/python/subscription-plans.models.json'), 'utf8'));
 reset(join(outBase, 'python-parity'));

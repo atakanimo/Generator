@@ -13,7 +13,8 @@ import {
   ListItemButton,
   Divider,
   Snackbar,
-  Chip
+  Chip,
+  Tooltip
 } from '@mui/material';
 import { FolderOpen, Add as AddIcon, Edit as EditIcon, CreateNewFolder } from '@mui/icons-material';
 import { useAppSelector, useAppDispatch } from '../store/hooks';
@@ -38,6 +39,17 @@ import { NEW_PROJECT_STACKS, type BackendStackInfo } from '@shared/backendStacks
 import type { ModelDraft } from '@shared/modelDraft';
 import { useState, useEffect } from 'react';
 
+function toRelativePath(fullPath: string, root: string): string {
+  if (!root || !fullPath) return fullPath || '';
+  const normalizedRoot = root.replace(/\\/g, '/').replace(/\/+$/, '');
+  const normalizedPath = fullPath.replace(/\\/g, '/');
+  if (normalizedPath === normalizedRoot) return '.';
+  if (normalizedPath.startsWith(normalizedRoot + '/')) {
+    return normalizedPath.slice(normalizedRoot.length + 1);
+  }
+  return fullPath;
+}
+
 const ProjectSelectPage = () => {
   const dispatch = useAppDispatch();
   const {
@@ -48,6 +60,7 @@ const ProjectSelectPage = () => {
     error,
     modelsFound,
     selectedModelSchema,
+    selectedModelSourceRelativePath,
     parsingStatus,
     parsingError,
     creatingModelStatus,
@@ -58,6 +71,7 @@ const ProjectSelectPage = () => {
     lastUpdatedModelPath
   } = useAppSelector(state => state.project);
   const [addModelModalOpen, setAddModelModalOpen] = useState(false);
+  const [loadingModelPath, setLoadingModelPath] = useState<string | null>(null);
   const [editModelDraft, setEditModelDraft] = useState<ModelDraft | null>(null);
   const [editModelFilePath, setEditModelFilePath] = useState<string | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
@@ -88,11 +102,19 @@ const ProjectSelectPage = () => {
     }
   };
 
-  const handleModelClick = (model: ScannedModel) => {
+  const handleModelClick = async (model: ScannedModel) => {
     if (!projectPath) return;
-    // Python (PY7): a hand-written `model.py` is imported first; generated modules open in the schema designer.
-    if (model.kind === 'importable') dispatch(openPythonImport(model.path));
-    else dispatch(parseModelFile({ filePath: model.path, projectRoot: projectPath }));
+    // Python (PY7): a hand-written \`model.py\` is imported first; generated modules open in the schema designer.
+    if (model.kind === 'importable') {
+      dispatch(openPythonImport(model.path));
+    } else {
+      setLoadingModelPath(model.path);
+      try {
+        await dispatch(parseModelFile({ filePath: model.path, projectRoot: projectPath }));
+      } finally {
+        setLoadingModelPath(null);
+      }
+    }
   };
 
   const handlePythonImportClosed = (imported: boolean) => {
@@ -296,32 +318,74 @@ const ProjectSelectPage = () => {
             <Typography variant='h6' gutterBottom sx={{ mb: 2 }}>
               Found Models ({modelsFound.length})
             </Typography>
-            <List>
-              {modelsFound.map((model, index) => (
-                <Box key={model.path}>
-                  <ListItem disablePadding>
-                    <ListItemButton onClick={() => handleModelClick(model)}>
-                      <ListItemText primary={model.fileName} secondary={model.path} />
-                      {model.kind === 'importable' && <Chip size='small' color='info' label='Elle yazılmış: içe aktar' sx={{ ml: 2 }} />}
-                      {parsingStatus === 'parsing' && <CircularProgress size={20} sx={{ ml: 2 }} />}
-                    </ListItemButton>
-                    {model.kind !== 'importable' && (
-                    <IconButton
-                      edge='end'
-                      aria-label='edit'
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEditModel(model.path);
-                      }}
-                      sx={{ mr: 1 }}
+            <List disablePadding>
+              {modelsFound.map((model, index) => {
+                const relPath = toRelativePath(model.path, projectPath);
+                const isSelected = selectedModelSourceRelativePath === relPath;
+                const displayName = model.entityName || model.fileName;
+
+                return (
+                  <Box key={model.path}>
+                    <ListItem
+                      disablePadding
+                      secondaryAction={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {model.kind === 'importable' && (
+                            <Chip size='small' color='info' label='Elle yazılmış: içe aktar' />
+                          )}
+                          {model.kind !== 'importable' && (
+                            <Tooltip title='Modeli Düzenle'>
+                              <IconButton
+                                edge='end'
+                                aria-label='edit'
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditModel(model.path);
+                                }}
+                                sx={{ mr: 0.5 }}
+                              >
+                                <EditIcon />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                        </Box>
+                      }
                     >
-                      <EditIcon />
-                    </IconButton>
-                    )}
-                  </ListItem>
-                  {index < modelsFound.length - 1 && <Divider />}
-                </Box>
-              ))}
+                      <ListItemButton
+                        onClick={() => handleModelClick(model)}
+                        selected={isSelected}
+                        sx={{
+                          py: 1.5,
+                          pr: model.kind === 'importable' ? 24 : 8,
+                          borderRadius: 1
+                        }}
+                      >
+                        <ListItemText
+                          primary={
+                            <Typography variant='subtitle1' component='div' sx={{ fontWeight: 600 }}>
+                              {displayName}
+                            </Typography>
+                          }
+                          secondary={relPath}
+                          secondaryTypographyProps={{
+                            sx: {
+                              fontFamily: 'monospace',
+                              fontSize: '0.8rem',
+                              color: 'text.secondary',
+                              mt: 0.25,
+                              wordBreak: 'break-all'
+                            }
+                          }}
+                        />
+                        {loadingModelPath === model.path && (
+                          <CircularProgress size={20} sx={{ ml: 2 }} />
+                        )}
+                      </ListItemButton>
+                    </ListItem>
+                    {index < modelsFound.length - 1 && <Divider />}
+                  </Box>
+                );
+              })}
             </List>
           </Paper>
         )}

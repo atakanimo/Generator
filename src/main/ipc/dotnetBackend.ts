@@ -10,7 +10,7 @@ import { join } from 'path';
 import type { NormalizedModel } from '../../shared/normalizedModel.js';
 import type { ModelDraft } from '../../shared/modelDraft.js';
 import type { GenerateBackendResult } from '../../shared/ipcTypes.js';
-import { DATABASE_LABELS, hostDatabaseError, type HostDatabase } from '../../shared/backendDatabase.js';
+import { DATABASE_LABELS, STACK_DATABASES, hostDatabaseError, type HostDatabase } from '../../shared/backendDatabase.js';
 import { mergeModel } from '../../shared/modelMerge.js';
 import { generateDotnetModules } from '../generators/dotnet-efcore/DotnetEfGenerator.js';
 import { bootstrapDotnetHost } from '../generators/dotnet-efcore/DotnetHostBootstrap.js';
@@ -84,7 +84,11 @@ export function resolveDotnetHostDatabase(host: DotnetHost): HostDatabase {
       );
     }
   }
-  const db = { database: workspace?.database ?? host.database, idType: workspace?.idType ?? host.idType };
+  const database = workspace?.database ?? host.database;
+  // A host made before K6 has no `EntityId` alias to read the id type from; a database with a single id type
+  // (Postgres, SQL Server: uuid v7, what those hosts used) decides it, and generate adds the alias (ensureDotnetHost).
+  const onlyIdType = STACK_DATABASES['dotnet-ef'].find((e) => e.database === database)?.idTypes;
+  const db = { database, idType: workspace?.idType ?? host.idType ?? (onlyIdType?.length === 1 ? onlyIdType[0] : undefined) };
   if (!db.database || !db.idType) {
     throw new Error(
       `Veritabanı / id tipi belirlenemedi (manifest'te yok, projede ${label(host)}): .generator/manifest.json ` +

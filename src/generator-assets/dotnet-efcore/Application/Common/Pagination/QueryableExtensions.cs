@@ -25,6 +25,12 @@ public sealed class SortMap<TEntity> where TEntity : IEntity
 
 public static class QueryableExtensions
 {
+    /// <summary>
+    /// Null değerler en küçük sayılır (artanda başta, azalanda sonda; sözleşme §2). SQL Server ve MongoDB böyle sıralar;
+    /// PostgreSQL tersini yaptığı için onun Infrastructure'ı açar ve sıralamaya önce "null mı" anahtarı eklenir.
+    /// </summary>
+    public static bool ExplicitNullOrder { get; set; }
+
     /// <summary>Varsayılan sıralama: <c>createdAt desc, id desc</c>.</summary>
     public static IOrderedQueryable<T> OrderByDefault<T>(this IQueryable<T> query) where T : IEntity, ITimestamped =>
         query.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id);
@@ -43,7 +49,11 @@ public static class QueryableExtensions
         }
 
         var descending = sortOrder != SortOrder.Asc;
-        var ordered = Order(query, map[sortBy], descending ? nameof(Queryable.OrderByDescending) : nameof(Queryable.OrderBy));
+        var key = map[sortBy];
+        var ordered = ExplicitNullOrder && IsNullable(key.ReturnType)
+            ? Order(Order(query, IsNull(key), descending ? nameof(Queryable.OrderBy) : nameof(Queryable.OrderByDescending)),
+                key, descending ? nameof(Queryable.ThenByDescending) : nameof(Queryable.ThenBy))
+            : Order(query, key, descending ? nameof(Queryable.OrderByDescending) : nameof(Queryable.OrderBy));
         return sortBy == "id"
             ? ordered
             : Order(ordered, map["id"], descending ? nameof(Queryable.ThenByDescending) : nameof(Queryable.ThenBy));
@@ -60,6 +70,11 @@ public static class QueryableExtensions
         var items = await query.Skip(skip).Take(currentLimit).ToListAsync(cancellationToken);
         return new PaginatedList<TRow>(items, total, skip + items.Count < total, currentPage, currentLimit);
     }
+
+    private static bool IsNullable(Type type) => !type.IsValueType || Nullable.GetUnderlyingType(type) is not null;
+
+    private static LambdaExpression IsNull(LambdaExpression key) =>
+        Expression.Lambda(Expression.Equal(key.Body, Expression.Constant(null, key.ReturnType)), key.Parameters);
 
     private static IOrderedQueryable<T> Order<T>(IQueryable<T> query, LambdaExpression key, string method)
     {

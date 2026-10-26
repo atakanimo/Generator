@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Backend: Python + FastAPI (hand-written code in generated hosts)
 
-Source: `docs/backend/python-fastapi.md`. Contract: `docs/api-contract.md`. Decisions: `docs/plans/backend-python-fastapi.md`. A host may copy this file into its own `.cursor/rules/`.
+Source: `docs/backend/python-fastapi.md`. Contract: `docs/api-contract.md`. Decisions: `docs/backend/python-fastapi.md` § Kararlar. A host may copy this file into its own `.cursor/rules/`.
 
 ## Files you may and may not edit
 

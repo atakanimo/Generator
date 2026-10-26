@@ -1,6 +1,6 @@
 # İstemci veri katmanı (mobil / web)
 
-Mobil ve web istemcileri için **yalnızca veri katmanı** üretilir: tipler, servis çağrıları, RTK thunk'ları ve slice parçaları. Ekran / bileşen üretilmez. Plan ve durum: [plans/client-data-layer.md](../plans/client-data-layer.md).
+Mobil ve web istemcileri için **yalnızca veri katmanı** üretilir: tipler, servis çağrıları, RTK thunk'ları ve slice parçaları. Ekran / bileşen üretilmez. Kararlar ve açıklar: [§ Kararlar](#kararlar), [§ Açık konular](#açık-konular).
 
 ```
 NormalizedModel v2 + manifest → resolveNormalApi (src/shared/normalApi.ts) → clientContext → client-redux şablonları
@@ -107,3 +107,30 @@ Normal router mount yolu BE'den okunur (`findNormalMountPath`: Express app dosya
 ## Doğrulama
 
 `node scripts/verify/regen-client.mjs [--adopt] [--keep]` ([verification.md](../verification.md#istemci-veri-katmanı)).
+
+## Kararlar
+
+Plan (`docs/plans/client-data-layer.md`) silindi (2026-10-26); C1–C3 ve C5 aşama notları (Varlik360 mobile taşıması, SharedFrame web) git geçmişinde.
+
+| # | Konu | Karar |
+| --- | --- | --- |
+| 1 | Kapsam | Tipler + servis + thunk + slice; ekran, bileşen, hook yok |
+| 2 | State | RTK `createAsyncThunk` + `createSlice`; RTK Query / TanStack Query yok (ekranlar değişmesin) |
+| 3 | Adlandırma | Varlik360 mobile: `services/<x>.service.ts`, `store/thunks/<x>.thunk.ts`, `store/slices/<x>.slice.ts`; `getAll`, `getById`, `create`, `update`, `delete<E>`; thunk'lar `fetch<E>List`, `fetch<E>ById`, `create<E>`, `update<E>`, `delete<E>`; selector `Get<E>State` |
+| 4 | Dosya sahipliği | `<x>.<katman>.generated.ts` her üretimde yeniden yazılır; `<x>.<katman>.ts` bir kez oluşur, kullanıcının |
+| 5 | Thunk uzantısı | G dosyası fabrika verir (`create<E>Thunks(hooks)`); `after*` hook'ları K dosyasında, import döngüsü yok |
+| 6 | Slice uzantısı | G dosyası parçaları verir (`<e>InitialState`, `<e>BaseReducers`, `add<E>BaseCases`); `createSlice` K dosyasında |
+| 7 | rootReducer | Otomatik değiştirilmez; bildirim eklenecek satırları verir |
+| 8 | İstemci tanımı | Manifest `workspace.clients[]` (`{ id, label, root, preset }`); model başına `api.clients[<id>]` |
+| 9 | Preset | `redux-rn` (Varlik360 mobile), `redux-web` (SharedFrame web) |
+| 10 | URL | Normal router mount yolu BE'den; bulunamazsa `baseUrl` + modül |
+| 11 | Ortak tipler | `services/common.generated.ts`, servisler re-export eder |
+| 12 | Liste sayfalama | Liste thunk'ı `append?: boolean` (sonsuz kaydırma, `skipLoading`) |
+| 13 | Normal uç kuralı | Tek kaynak `src/shared/normalApi.ts` (`resolveNormalApi`); Express / .NET ileride buna geçmeli |
+| 14 | `readonly` | Create ve update'te yazılmaz (sözleşme §5) |
+| 15 | Update sonrası ilişki | Cevapta id; slice `merge<E>Saved`: id değişmediyse populate edilmiş obje kalır |
+
+## Açık konular
+
+- **C4 Generator arayüzü:** hedef listesi (BE / Admin / istemciler), model başına istemci + katman seçimi, generate bildirimi.
+- **Uçtan uca kontrol:** Varlik360 mobile simülatörde (update sonrası satır birleştirme, delete'in kaydı gerçekten silmesi, `read-all` URL'i), SharedFrame web tarayıcıda.

@@ -3,6 +3,7 @@ import type { IApiResponse, IErrorData } from '@core/types/api-contract';
 import { t } from '@helpers';
 import { applyRequestIdToResponse, getRequestContext } from '@utils/requestContext';
 import { getAppLogger } from '@core/logging/logger';
+import { formatHttpResponseMessage } from '@core/logging/http-log-message';
 import { HandleServiceError } from '@core/errors/error.helper';
 import { ErrorCodes, type ErrorCodeKey } from '@core/errors/error-codes';
 import { toWire } from '@core/response/wire';
@@ -16,17 +17,20 @@ type ErrorData = Omit<IErrorData, 'code'> & { code?: ErrorCodeKey };
  * JSON API yanıtı — süre / `X-Request-Id` / yapılandırılmış log (tasks §10).
  * `data` her cevapta `toWire`'dan geçer: `_id` → `id`, `Decimal128` → string (sözleşme K1, K5).
  */
-export const AtaResponse = <T>(res: Response, response: IApiResponse<T>) => {
+export const AtaResponse = <T>(res: Response, response: IApiResponse<T>, httpStatus?: number) => {
   applyRequestIdToResponse(res);
-  const statusCode = response.isSuccess
-    ? 200
-    : response.errorData?.code
-      ? (response.errorData.code as unknown as number)
-      : 500;
+  const statusCode =
+    httpStatus ??
+    (response.isSuccess ? 200 : response.errorData?.code ? (response.errorData.code as unknown as number) : 500);
   const ctx = getRequestContext();
   const durationMs = ctx?.startedAtMs != null ? Date.now() - ctx.startedAtMs : undefined;
+  const method = ctx?.method ?? '?';
+  const url = ctx?.url ?? '?';
   getAppLogger().info({
     event: 'http.response',
+    message: formatHttpResponseMessage(method, url),
+    method,
+    url,
     requestId: ctx?.requestId,
     userId: ctx?.userId,
     statusCode,
@@ -34,7 +38,7 @@ export const AtaResponse = <T>(res: Response, response: IApiResponse<T>) => {
     errorCode: response.errorData?.code ?? null,
     durationMs
   });
-  // `traceId` = the request id of the host's request context (`x-request-id` or generated; set by its middleware).
+  // `traceId` = the request id of the request context (`x-request-id` or generated; `requestIdMiddleware`).
   const traceId = ctx?.requestId;
   res.status(statusCode).json({ ...response, ...(traceId ? { traceId } : {}), data: toWire(response.data) });
 };

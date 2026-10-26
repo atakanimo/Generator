@@ -57,5 +57,5 @@ export function patchModelApi(model: NormalizedModel, patch: ModelApiSettings): 
 /** Parser type token shown in the designer's "DB type" column (`schema` = ObjectId reference). */
 export const fieldTypeLabel = (field: Pick<NormalizedField, 'kind' | 'native'>): string => typeTokenOf(field);
 
-/** ObjectId reference field (`schema` token) — the only kind a relation can be configured on. */
-export const isReferenceField = (field: Pick<NormalizedField, 'kind' | 'native'>): boolean => typeTokenOf(field) === 'schema';
+export const isReferenceField = (field: Pick<NormalizedField, 'kind' | 'native'>): boolean =>
+  field.kind === 'reference' || typeTokenOf(field) === 'schema';

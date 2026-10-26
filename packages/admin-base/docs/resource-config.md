@@ -23,6 +23,7 @@ Her admin modülü iki dosyadan oluşur (host'ta `modules/<m>/`):
 | `path?` | Route segmenti; yoksa `name` |
 | `menu?.order` | Sol menü sırası |
 | `operations?` | `create / update / delete / export` alt kümesi; yoksa bütün yazma işlemleri (export hariç), `[]` = salt okunur. `export` opt-in: yalnız listedeyse toolbar'da "Dışa aktar" (aşağıda) |
+| `titleField?` | Kaydı adlandıran alan (ör. `ticker`, `email`); silme onayı «değer» silinsin mi? diye sorar (`ataAdmin.deleteTitleNamed`). Yoksa ya da değer boşsa genel metin. Generator: `ui.titleField`, yoksa `ticker` / `code` / `email` / `name` … ya da zorunlu unique kısa metin alanı (0.1.9) |
 
 **Export (CSV, sözleşme §2 "Export"):** `operations` `export` içeriyorsa toolbar'da "Dışa aktar" düğmesi `ExportDialog`'u açar: kolon seçimi (`id` + `writeOnly` olmayan alanlar; varsayılan işaretli `id` + `list: true` alanlar, "Tümünü seç"), başlıklar yerelleştirilmiş alan etiketleri. İstek `DataProvider.exportCsv` → `POST {endpoint}/export` (`{ filters, sortBy, sortOrder, fields, headers }`, tablonun geçerli filtre ve sırası; sayfa yok), `responseType: 'blob'`; dosya adı `Content-Disposition`'dan (yoksa `<name>.csv`). Hata host toast'unda, pencere açık kalır. Generator, model `api.adminOperations` `export` içeriyorsa config'e yazar.
 

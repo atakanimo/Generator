@@ -1,26 +1,31 @@
+using System.Globalization;
+
 namespace __App__.Application.Common.Errors;
 
-/// <summary>Kullanıcıya giden metinler. Yerelleştirme (Accept-Language) sonraki aşamada.</summary>
+/// <summary>Kullanıcıya giden metinler: istek dili (<c>Accept-Language</c>, <c>UseRequestLocalization</c>) <c>en</c> ise İngilizce, değilse Türkçe.</summary>
 public static class Messages
 {
-    public const string Success = "İşlem başarılı.";
-    public const string Created = "Kayıt oluşturuldu.";
-    public const string Updated = "Kayıt güncellendi.";
-    public const string Deleted = "Kayıt silindi.";
+    private static string T(string tr, string en) => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "en" ? en : tr;
 
-    public const string BadRequestHeader = "Geçersiz istek";
-    public const string InvalidBody = "İstek gövdesi geçersiz.";
-    public const string InvalidSort = "Bu alana göre sıralanamaz: {0}";
-    public const string UnauthorizedHeader = "Yetkisiz";
-    public const string Unauthorized = "Bu işlem için giriş yapmalısınız.";
-    public const string ForbiddenHeader = "Erişim engellendi";
-    public const string Forbidden = "Bu işlem için yetkiniz yok.";
-    public const string NotFoundHeader = "Bulunamadı";
-    public const string NotFound = "Kayıt bulunamadı.";
-    public const string ConflictHeader = "Çakışma";
-    public const string Duplicate = "Bu değer zaten kullanılıyor: {0}";
-    public const string ReferenceNotFound = "İlişkili kayıt bulunamadı: {0}";
-    public const string InUse = "Kayıt başka kayıtlar tarafından kullanılıyor.";
-    public const string InternalHeader = "Sunucu hatası";
-    public const string Internal = "Beklenmeyen bir hata oluştu.";
+    public static string Success => T("İşlem başarılı.", "Operation successful.");
+    public static string Created => T("Kayıt oluşturuldu.", "Record created.");
+    public static string Updated => T("Kayıt güncellendi.", "Record updated.");
+    public static string Deleted => T("Kayıt silindi.", "Record deleted.");
+
+    public static string BadRequestHeader => T("Geçersiz istek", "Bad request");
+    public static string InvalidBody => T("İstek gövdesi geçersiz.", "Invalid request body.");
+    public static string InvalidValue => T("Geçersiz değer: {0}", "Invalid value: {0}");
+    public static string InvalidSort => T("Bu alana göre sıralanamaz: {0}", "Cannot sort by this field: {0}");
+    public static string UnauthorizedHeader => T("Yetkisiz", "Unauthorized");
+    public static string Unauthorized => T("Bu işlem için giriş yapmalısınız.", "You must sign in for this action.");
+    public static string ForbiddenHeader => T("Erişim engellendi", "Access denied");
+    public static string Forbidden => T("Bu işlem için yetkiniz yok.", "You are not allowed to perform this action.");
+    public static string NotFoundHeader => T("Bulunamadı", "Not found");
+    public static string NotFound => T("Kayıt bulunamadı.", "Record not found.");
+    public static string ConflictHeader => T("Çakışma", "Conflict");
+    public static string Duplicate => T("Bu değer zaten kullanılıyor: {0}", "This value is already in use: {0}");
+    public static string ReferenceNotFound => T("İlişkili kayıt bulunamadı: {0}", "Related record not found: {0}");
+    public static string InUse => T("Kayıt başka kayıtlar tarafından kullanılıyor.", "Record is used by other records.");
+    public static string InternalHeader => T("Sunucu hatası", "Server error");
+    public static string Internal => T("Beklenmeyen bir hata oluştu.", "An unexpected error occurred.");
 }

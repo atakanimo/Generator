@@ -105,6 +105,7 @@ export function renderAdminConfigFile(config: AdminResourceConfig, exportName: s
   lines.push(`  name: ${literal(config.name)},`);
   lines.push(`  endpoint: ${literal(config.endpoint)},`);
   if (config.label) lines.push(`  label: ${literal(config.label)},`);
+  if (config.titleField) lines.push(`  titleField: ${literal(config.titleField)},`);
   if (config.operations) lines.push(`  operations: ${literal(config.operations)},`);
   lines.push(`  fields: [`);
   lines.push(config.fields.map(f => renderField(f, '    ')).join(',\n'));

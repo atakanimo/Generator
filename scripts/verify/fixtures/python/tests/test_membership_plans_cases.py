@@ -1,5 +1,5 @@
 """Üretilmiş `membership_plans` modülü (regen-python, golden `fixtures/dotnet/models.json`): `decimal` (JSON string,
-Mongo `Decimal128`, sayı → 400, filtre değeri string), `map`, `json`, obje / obje dizisi içinde decimal (mongomock)."""
+Mongo `Decimal128`, sayı → 400, filtre değeri string), `map`, `json`, obje / obje dizisi içinde decimal (gerçek test Mongo'su)."""
 
 from __future__ import annotations
 
@@ -82,6 +82,8 @@ async def test_decimal_filters(client, h) -> None:
         assert resp.status_code == 200, resp.text
         return [i["code"] for i in resp.json()["data"]["items"]]
 
-    # mongomock cannot compare / sort `Decimal128`: range and sort run in regen-python's HTTP smoke (real Mongo).
+    # Real test Mongo (PY2c): `Decimal128` range and sort run here too.
     assert await codes({"filters": {"price": "9.99"}}) == ["a"]
+    assert await codes({"filters": {"price": {"min": "50", "max": "200"}}}) == ["b"]
+    assert await codes({"sortBy": "price", "sortOrder": "asc"}) == ["a", "b", "c"]
     _status(await client.post(f"{BASE}/get-all", json={"filters": {"price": {"min": 50}}}, headers=h), 400)

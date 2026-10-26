@@ -2,6 +2,7 @@
  * Liste endpoint’leri: **`limit`** (üst sınır, varsayılan **50**) ve **`page`** (1 tabanlı; verilmezse **1**).
  * İç sorgu offset’i `(page - 1) * limit` ile üretilir; istek gövdesinde **`skip` yok`.
  */
+import type { SortOrder } from '@core/types/api-contract';
 
 export const DEFAULT_LIST_PAGE = 1;
 export const DEFAULT_LIST_LIMIT = 50;
@@ -42,7 +43,7 @@ export type ListPaginationBody = {
   limit?: number;
   page?: number;
   sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
+  sortOrder?: SortOrder;
 };
 
 export function normalizeSortOrder(raw: unknown): 1 | -1 | undefined {
@@ -85,7 +86,7 @@ export function extractListPagination(body: Record<string, unknown> | undefined)
   limit?: number;
   page?: number;
   sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
+  sortOrder?: SortOrder;
 } {
   if (!body) {
     return { filters: {} };

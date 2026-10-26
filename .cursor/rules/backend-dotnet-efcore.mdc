@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Backend: .NET 10 + EF Core
 
-Source: `docs/backend/dotnet-efcore.md`. Contract: `docs/api-contract.md`. Decisions: `docs/plans/backend-dotnet-efcore.md`, `docs/plans/backend-dotnet-database-providers.md`.
+Source: `docs/backend/dotnet-efcore.md`. Contract: `docs/api-contract.md`. Decisions: `docs/backend/dotnet-efcore.md` § Kararlar (K1–K15 = provider decisions).
 
 - Never reuse Express + Mongoose code, templates or assets. Shared with Express: NormalizedModel, manifest, contract, admin config only.
 - Decisions live in `dotnetContext.ts`; templates only loop over prepared lines. Paths / names only via `dotnetLayout.ts` / `dotnetModuleNames`.

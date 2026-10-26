@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -24,6 +24,8 @@ import {
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import type { NormalizedField, NormalizedModel, NormalizedObjectSubField } from '@shared/normalizedModel';
 import type { RelatedModelFieldInfo, SourceType } from '@shared/ipcTypes';
+import { useAppSelector } from '../store/hooks';
+import { modelCandidatesFromScanned } from '@shared/modelCandidates';
 import { typeTokenOf } from '@shared/fieldTypeToken';
 import {
   EDITOR_FIELD_TYPES,
@@ -255,6 +257,8 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
   const [timestamps, setTimestamps] = useState({ createdAt: false, updatedAt: false });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const modelsFound = useAppSelector(state => state.project.modelsFound);
+  const modelOptions = useMemo(() => modelCandidatesFromScanned(modelsFound), [modelsFound]);
   /** Fields as loaded: an untouched field is saved exactly as parsed. */
   const loadedFields = useRef(new Set<NormalizedField>());
 
@@ -816,14 +820,26 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
                   )}
 
                   {type === 'ObjectId' && (
-                    <TextField
-                      label='Ref'
-                      value={referenceTargetOf(field)}
-                      onChange={e => updateField(index, f => withReferenceTarget(f, e.target.value || undefined))}
-                      size='small'
-                      placeholder='e.g., User'
-                      sx={{ minWidth: 150 }}
-                      helperText={refHelperText(sourceType)}
+                    <Autocomplete
+                      freeSolo
+                      options={modelOptions}
+                      value={referenceTargetOf(field) || ''}
+                      onChange={(_, val) => updateField(index, f => withReferenceTarget(f, (val as string) || undefined))}
+                      onInputChange={(_, val, reason) => {
+                        if (reason === 'input' || reason === 'clear') {
+                          updateField(index, f => withReferenceTarget(f, val || undefined));
+                        }
+                      }}
+                      renderInput={params => (
+                        <TextField
+                          {...params}
+                          label='Ref'
+                          size='small'
+                          placeholder='e.g., User'
+                          helperText={refHelperText(sourceType)}
+                        />
+                      )}
+                      sx={{ minWidth: 180 }}
                     />
                   )}
 
@@ -913,13 +929,25 @@ const AddModelModal: React.FC<AddModelModalProps> = ({
                           label='Required'
                         />
                         {subType === 'ObjectId' && (
-                          <TextField
-                            label='Ref'
-                            value={subReferenceOf(sub)}
-                            onChange={e => updateSubField(index, subIndex, s => withSubReference(s, e.target.value || undefined))}
-                            size='small'
-                            placeholder='e.g., SymbolTypes'
-                            sx={{ minWidth: 140 }}
+                          <Autocomplete
+                            freeSolo
+                            options={modelOptions}
+                            value={subReferenceOf(sub) || ''}
+                            onChange={(_, val) => updateSubField(index, subIndex, s => withSubReference(s, (val as string) || undefined))}
+                            onInputChange={(_, val, reason) => {
+                              if (reason === 'input' || reason === 'clear') {
+                                updateSubField(index, subIndex, s => withSubReference(s, val || undefined));
+                              }
+                            }}
+                            renderInput={params => (
+                              <TextField
+                                {...params}
+                                label='Ref'
+                                size='small'
+                                placeholder='e.g., SymbolTypes'
+                              />
+                            )}
+                            sx={{ minWidth: 180 }}
                           />
                         )}
                         {subType === 'String' && (

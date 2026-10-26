@@ -1,8 +1,8 @@
 # BE: Python 3.12 + FastAPI + MongoDB
 
-Üretici `src/main/generators/python-fastapi/`, şablonlar `src/main/templates/backend-python-fastapi/module/*.py.hbs`, core asset'ler ve iskelet `src/generator-assets/python-fastapi/**`, parser `src/main/parsers/python/`, uygulama tarafı `src/main/ipc/pythonBackend.ts`. Girdi NormalizedModel v2 + manifest v3, çıktı [api-contract.md](../api-contract.md). Express ve .NET üreticileriyle kod paylaşılmaz; ortak olan NormalizedModel, manifest, sözleşme ve admin config. Kararlar ve geçmiş: [plans/backend-python-fastapi.md](../plans/backend-python-fastapi.md).
+Üretici `src/main/generators/python-fastapi/`, şablonlar `src/main/templates/backend-python-fastapi/module/*.py.hbs`, core asset'ler ve iskelet `src/generator-assets/python-fastapi/**`, parser `src/main/parsers/python/`, uygulama tarafı `src/main/ipc/pythonBackend.ts`. Girdi NormalizedModel v2 + manifest v3, çıktı [api-contract.md](../api-contract.md). Express ve .NET üreticileriyle kod paylaşılmaz; ortak olan NormalizedModel, manifest, sözleşme ve admin config. Kararlar: [§ Kararlar](#kararlar).
 
-Stack: Python ≥ 3.12, FastAPI, Pydantic v2, pydantic-settings, MongoDB (Motor; hedef PyMongo Async, plan PY2c), PyJWT (HS256), structlog, APScheduler (worker). Paket yöneticisi uv (`uv.lock`), derleme hatchling. Geliştirme: pytest + pytest-asyncio + httpx (in-process istemci) + mongomock-motor, ruff (lint + format, satır 110), import-linter (katman yönü). Kimlik her zaman Mongo `_id` (ObjectId), JSON'da `id` hex string. Yalnız admin API üretilir (normal API ayrı plan).
+Stack: Python ≥ 3.12, FastAPI, Pydantic v2, pydantic-settings, MongoDB (PyMongo Async, `pymongo.AsyncMongoClient`; sürücü yalnız `core/db.py`), PyJWT (HS256), structlog, APScheduler (worker). Paket yöneticisi uv (`uv.lock`), derleme hatchling. Geliştirme: pytest + pytest-asyncio + httpx (in-process istemci) + testcontainers (gerçek test Mongo'su), ruff (lint + format, satır 110), import-linter (katman yönü). Kimlik her zaman Mongo `_id` (ObjectId), JSON'da `id` hex string. Yalnız admin API üretilir (normal API ayrı plan).
 
 ## Yeni proje
 
@@ -57,7 +57,7 @@ Arayüz → IPC (src/main/index.ts; manifest backendStack / sourceType 'python-f
 2. `buildPythonModuleContexts(pkg, models)`: bütün modellerin bağlamı birlikte (reference hedefin tiplerini bilmeli). Kararlar `pythonContext.ts`'te, modül testi değerleri `pythonTestContext.ts`'te; şablonlar yalnız hazır satırları basar.
 3. Modül başına G ve K dosyaları, sonra iki registry (`api/routers_generated.py`, `api/indexes_generated.py`) tam listeden. İçeriği değişmeyen dosyaya yazılmaz.
 
-Model kaynağı manifest'tir (plan K1): satırın `sourceRelativePath`'i modülün `model_generated.py`'si. Python dosyası yalnız bir kez, içe aktarmada okunur.
+Model kaynağı manifest'tir (K1): satırın `sourceRelativePath`'i modülün `model_generated.py`'si. Python dosyası yalnız bir kez, içe aktarmada okunur.
 
 ## Host düzeni
 
@@ -73,13 +73,13 @@ src/<pkg>/
   api/   main.py (K: create_app)  deps.py (K: JWT, AdminDep, DbDep)
          routers_generated.py (G: ADMIN_CRUD_ROUTERS)  indexes_generated.py (G: ensure_crud_indexes)
   worker/ main.py (K: register_jobs)  __main__.py
-tests/   conftest.py (mongomock, client, make_token, mock_db)  test_health.py  api/  core/crud/  worker/
+tests/   conftest.py (test Mongo, client, make_token, mock_db, mongo_client)  test_health.py  api/  core/crud/  worker/
          modules/<collection>/test_admin_crud.py (K, modül testi)
 ```
 
 Katman yönü `api/`, `worker/` → `modules/` → `core/`; `pyproject.toml`'daki import-linter sözleşmesi denetler (`uv run lint-imports`). Üretilen admin router'ları `api.deps`'ten `AdminDep` / `DbDep` alır (sözleşmede istisna). Modüller birbirinin yalnız `service` / `model`'ini import eder.
 
-Adlar (plan K21): entity çoğul PascalCase (verildiği gibi), klasör = collection = `snake_case(entity)`, route `/admin-crud/<kebab-case>` (geçiş öneki, plan K6), enum sınıfı `<Entity><Alan>`, router fonksiyonları `list_<klasör>` / `get_<tekil>` …
+Adlar (K21): entity çoğul PascalCase (verildiği gibi), klasör = collection = `snake_case(entity)`, route `/admin-crud/<kebab-case>` (geçiş öneki, plan K6), enum sınıfı `<Entity><Alan>`, router fonksiyonları `list_<klasör>` / `get_<tekil>` …
 
 ## Üretilen modül dosyaları
 
@@ -152,13 +152,13 @@ api-contract §5: gönderilmeyen alan değişmez; opsiyonel tekil alana `null` a
 
 ## Modül testi
 
-İlk generate'te her admin modülü için `tests/modules/<klasör>/test_admin_crud.py` (K) yazılır; sonra kullanıcınındır, model değişince yeniden yazılmaz (yeni alanlar için elle güncellenir ya da dosya silinip generate edilir). İskeletin `tests/conftest.py` fixture'larıyla (`client`, `make_token`, `mock_db`; mongomock) kendi başına geçer: `uv run pytest tests/modules/<klasör>`.
+İlk generate'te her admin modülü için `tests/modules/<klasör>/test_admin_crud.py` (K) yazılır; sonra kullanıcınındır, model değişince yeniden yazılmaz (yeni alanlar için elle güncellenir ya da dosya silinip generate edilir). İskeletin `tests/conftest.py` fixture'larıyla (`client`, `make_token`, `mock_db`; gerçek test Mongo'su) kendi başına geçer: `uv run pytest tests/modules/<klasör>`.
 
 Örnek değerler modelden üretilir (kısıt, desen, e-posta, enum, sayı biçimi; reference için test hedef collection'a iki doküman ekler). Kapsam: zarf ve auth (401 / 403, `traceId`), bütün create alanlarıyla create → getOne gidiş-dönüş (gizli alan dönmez), yalnız zorunlu alanlarla create → varsayılanlar ve `trim`, update (değişen alan, gönderilmeyen alan aynı), `null` kuralı, doğrulama (eksik zorunlu alan, bilinmeyen / readonly alan, kısıt, enum, format, bozuk id, var olmayan reference hedefi, filtrelenemeyen / sıralanamayan alan), unique (create ve update'te 409), liste (sayfalama, varsayılan sıralama, bir filtre, bir sıralama anahtarı), silme → 404. Modelin `pattern`'ine uyan örnek bulunamazsa dosya `pytestmark = skip` ile ve nedeniyle yazılır; `body()` / `minimal_body()` elle doldurulur. İş kuralı (hook) ekleyince ilgili beklentiler güncellenir.
 
 ## Pydantic içe aktarma (var olan proje)
 
-Elle yazılmış Pydantic modeli bir kez manifest'e okunur (plan K1, PY7), sonra düzenleme Generator'da. Modül Python `ast`'iyle statik okunur (import edilmez), host'un `.venv` yorumlayıcısı `-I` ile. Taramada `modules/<m>/model.py` "Elle yazılmış: içe aktar" olarak listelenir; pencere alanları, reddedilen / yaklaşık yapıları ve Mongo'daki dokümanlara göre fazladan alan raporunu gösterir (yalnız yerel sunucu, salt okunur, ≤ 1000 doküman örneklemi). İçe aktarma manifest satırı yazar ve generate eder; var olan K dosyaları korunur, notlar uyarlanacakları söyler (`build_<m>_service`, `<E>Repository` taban sınıfı, `model.py` re-export). Okunan / reddedilen yapıların listesi: plan §6.7.
+Elle yazılmış Pydantic modeli bir kez manifest'e okunur (K1, PY7), sonra düzenleme Generator'da. Modül Python `ast`'iyle statik okunur (import edilmez), host'un `.venv` yorumlayıcısı `-I` ile. Taramada `modules/<m>/model.py` "Elle yazılmış: içe aktar" olarak listelenir; pencere alanları, reddedilen / yaklaşık yapıları ve Mongo'daki dokümanlara göre fazladan alan raporunu gösterir (yalnız yerel sunucu, salt okunur, ≤ 1000 doküman örneklemi). İçe aktarma manifest satırı yazar ve generate eder; var olan K dosyaları korunur, notlar uyarlanacakları söyler (`build_<m>_service`, `<E>Repository` taban sınıfı, `model.py` re-export). Okunan / reddedilen yapıların listesi: plan §6.7.
 
 Okumayı bozan veri (eksik `createdAt` / `updatedAt`, modelde olmayan alt alan, tipi uymayan değer) içe aktarmadan önce migration ile düzeltilir; üretilen satır modeli bu dokümanlarda 500 verir.
 
@@ -172,12 +172,53 @@ Manifest `workspace.backendStack: 'python-fastapi'`; yoksa kökte `pyproject.tom
 - Obje alt alanında enum değerleri, dizi, kısıt ve varsayılan yok (NormalizedModel alt alanı); alt alan reference'ı kontrolsüz.
 - Referans verilen kaydı silmek 200 (Mongo'da FK yok; .NET 409). Hedef silinmişse populate tekil alanda `null`, dizide eleman düşer.
 - Gövdeler lax (`"yes"` → `true`); .NET ve Express strict.
-- mongomock `Decimal128` karşılaştıramaz: decimal range / sıralama yalnız gerçek Mongo'da denenir (`regen-python` smoke'u).
-- Sürücü Motor (deprecated); PyMongo Async'e geçiş plan PY2c, yalnız `core/db.py` + bağımlılıklar.
+- Test Mongo'su: `TEST_MONGO_URI` varsa o, yoksa testcontainers `mongo:7` (Docker gerekir). `TestMongoClient` veritabanı adlarına `<pkg>_test_` öneki koyar (asıl DB'ye yazılamaz), kullanılan DB'ler her testten sonra silinir. Testler sıralı koşar (paralel değil).
+- PyMongo Async: `await coll.aggregate(...)`, `await client.close()`; `find()` senkron imleç döner.
 - Modül testi iskeletin `conftest.py`'sine dayanır; farklı fixture'lı host'ta (StockExchange) elle uyarlanır.
-- Electron'da uçtan uca akış (yeni proje → model editörü → generate) PY9'da denendi; içe aktarma penceresi Electron'da denenmedi (plan §7.3 madde 11).
+- Electron'da uçtan uca akış (yeni proje → model editörü → generate) PY9'da denendi; içe aktarma penceresi Electron'da denenmedi ([açık konular](#açık-konular)).
 
 Doğrulama: [verification.md](../verification.md#python--fastapi).
+
+## Kararlar
+
+Plan (`docs/plans/backend-python-fastapi.md`) tamamlandı ve silindi (2026-10-26); aşama notları (PY0–PY13), StockExchange geçişi ve ölçümler git geçmişinde. Koddaki `K<n>` atıfları aşağıdaki kararlardır (K16 yok; K19 / K20 StockExchange'e özeldi).
+
+| # | Konu | Karar |
+| --- | --- | --- |
+| K1 | Model kaynağı | Generator manifest'i. Python parser'ı yalnız **bir kez içe aktarmak** için (Pydantic sınıfı → manifest → `model_generated.py`), sonra düzenleme Generator'da. Enum `StrEnum` yazılır; içe aktarmada `Literal[...]` da okunur. Reference = ObjectId |
+| K2 | Kimlik | Her zaman `id` = Mongo `_id` (ObjectId hex). Doğal anahtarlar sıradan unique alan |
+| K3 | Zarf ve sayfalama | Sözleşme zarfı; `data` içinde `PaginatedList { items, total, hasMore, currentPage, currentLimit }`, `meta` yok |
+| K4 | `traceId` | Sözleşmede opsiyonel; üç stack'te middleware doldurur (`X-Request-Id`, yoksa `X-Trace-Id`); admin-base `ApiResponse.traceId?` |
+| K5 | Mongo sürücüsü | PyMongo Async (`AsyncMongoClient`), yalnız `core/db.py`'de; kod `Database` takma adına göre yazılır. Testler gerçek Mongo'da (`TEST_MONGO_URI` ya da testcontainers `mongo:7`, `<app>_test_` önekli DB'ler) |
+| K6 | Admin route | Üretilen uçlar `/api/v1/admin-crud/<resource>`; host'un eski elle yazılmış uçları kalkınca `/api/v1/admin/<resource>`'a taşınır |
+| K7 | Dosya sahipliği | G dosyaları `*_generated.py` (modül adında nokta olamaz), başlıklı, her generate'te yeniden yazılır; başlıksız dosya kullanıcının. K dosyaları ve asset'ler yalnız yoksa yazılır |
+| K8 | Asset'ler | `core/crud`, `core/http`, `core/errors` Generator asset'i; `api/deps.py`, `api/main.py`, `core/config.py` projeye özel (K) |
+| K9 | Hata kodu | `errorData.code` sözleşmedeki HTTP benzeri kod + projeye özel alt kodlar (api-contract §1); HTTP status aynı kalır |
+| K10 | Başarı mesajı | Yazma uçları yerelleştirilmiş `uiMessage`; list / getOne'da boş olabilir |
+| K11 | Hook seti | Üç stack'te aynı adlar (Python'da snake_case), [§ Servis ve hook'lar](#servis-ve-hooklar) |
+| K12 | Testler | Stack `contract-parity`'yi geçer; host'ta pytest, gerçek Mongo |
+| K13 | Tip bilgileri (Generator geneli) | `numberFormat: 'int' \| 'float'`, `dateFormat: 'datetime' \| 'date'`, `format: 'email'`, sayısal enum (`IntEnum`) |
+| K14 | Alan kısıtları (Generator geneli) | `minLength`, `maxLength`, `min`, `max`, `pattern`; BE şemasında aynen, FE formunda kural |
+| K15 | Parity ortamı | Yerel Docker; parity aynı Mongo'da ayrı veritabanı + ayrı port; test kendi verisini kurar ve siler |
+| K17 | Job'lar | `modules/<m>/jobs.py` (ya da `jobs/`), `worker/main.py` kaydeder; API ile aynı servis ve repository |
+| K18 | Hata modeli | Servis `AppError(code, message, status)` fırlatır, `core/http` handler'ı zarfa çevirir |
+| K21 | Adlandırma | Entity çoğul PascalCase, route `kebab-case(entity)`, collection `snake_case(entity)`; Generator'a path / ad ayarı eklenmez |
+| K22 | Veritabanı | Python yalnız MongoDB (`database: 'mongodb'`, `idType: 'objectid'`). SQL desteği `core/crud/repository.py` arkasında ikinci repository ister, ayrı iş |
+
+**Update'te `null`:** JSON Merge Patch (api-contract §5) üç stack'te tek kural, kaynak `updateNullClears` (`src/shared/normalizedModel.ts`); ayrıntı [§ Update ve `null`](#update-ve-null-json-merge-patch).
+
+## Açık konular
+
+Plandan kalan, Generator tarafında hâlâ açık maddeler:
+
+- **Electron'da denenmedi:** Python içe aktarma penceresi (tarama → içe aktar → generate → şema tasarımcısı); PY6 türleriyle (reference, decimal, map / json, access) editör → generate.
+- **Karar bekleyenler:** gövdeler lax (strict mod: `ConfigDict(strict=True)` + tarih / enum istisnaları); referans verilen kaydı silme (Python / Express 200, .NET 409; istenirse ortak `before_delete` "kullanılıyor" kuralı); .NET populate'te `display` yedeği (Express gibi).
+- **`access.computed`:** Express mongoose şeması ve .NET entity'si alanı hâlâ saklanan alan gibi tanımlıyor; ilk kullanımda şemadan çıkarma / `[NotMapped]`.
+- **PY12 export:** `contract-parity`'de export senaryosu yok.
+- **Modül testi şablonu:** desenden değer üretimi basit desenlerle sınırlı (bulunamazsa skip); `fixtures/python/tests/test_<m>_cases.py`'deki parçalar (tarih aralığı filtresi, opsiyonel unique boşken çakışmama) genel şablona taşınabilir.
+- **Format:** iskelet / asset dosyalarında `ruff format --check` bazı dosyalarda satır bölme öneriyor; iskelette format kapısı yok.
+- **İçe aktarma:** `…Id` alanları string gelir (reference'a editörde çevrilir); fazladan alan raporu host `.venv`'inde PyMongo ister, `$sample` 1000 doküman.
+- **Diğer host'lar:** Varlik360 (`src/core`) ve SharedFrame (`Common/`) asset'leri elle güncellendi; host'larda generate + smoke yapılmadı. Varlik360'ta modüller yeniden üretilince eski `crud.ts` locale blokları silinebilir.
 
 ## Admin FE config
 

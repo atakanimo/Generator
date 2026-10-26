@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canSearchRelation, relationId, relationLabel, toWriteBody } from '../src/index.js';
+import { canSearchRelation, recordTitle, relationId, relationLabel, toWriteBody } from '../src/index.js';
 import { usersSchema, userSubscriptionsSchema } from './fixtures.js';
 
 describe('toWriteBody', () => {
@@ -48,5 +48,18 @@ describe('relation helpers', () => {
     expect(canSearchRelation(userField, usersSchema)).toBe(true);
     expect(canSearchRelation({ ...userField, display: 'role' }, usersSchema)).toBe(false);
     expect(canSearchRelation(userField, undefined)).toBe(false);
+  });
+});
+
+describe('recordTitle', () => {
+  it('reads the titleField value for the delete confirmation', () => {
+    expect(recordTitle({ titleField: 'ticker' }, { id: '1', ticker: ' AAPL ' })).toBe('AAPL');
+    expect(recordTitle({ titleField: 'order' }, { id: '1', order: 3 })).toBe('3');
+  });
+
+  it('falls back when there is no usable title', () => {
+    expect(recordTitle({}, { id: '1', name: 'x' })).toBeUndefined();
+    expect(recordTitle({ titleField: 'name' }, { id: '1', name: '  ' })).toBeUndefined();
+    expect(recordTitle({ titleField: 'meta' }, { id: '1', meta: { a: 1 } })).toBeUndefined();
   });
 });
