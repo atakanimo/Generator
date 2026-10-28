@@ -18,6 +18,7 @@ Model dosyası → Parser (stack'e özel) → NormalizedModel v2 → manifest v3
 | [backend/dotnet-efcore.md](backend/dotnet-efcore.md) | .NET 10 + EF Core: host düzeni, G / K dosyalar, partial'lar, servisler, ownership, parser, migration |
 | [backend/python-fastapi.md](backend/python-fastapi.md) | Python + FastAPI + MongoDB: yeni proje kurulumu, host düzeni, G / K dosyalar, hook'lar, alan türleri, `null` kuralı, modül testi, Pydantic içe aktarma |
 | [frontend/admin-base-config.md](frontend/admin-base-config.md) | Admin FE config üretimi ve dosya kuralı |
+| [AtaProjectCommon.md](AtaProjectCommon.md) | SharedFrame, StockExchange, Varlik360: üretilmiş dosya Generator ile yazılır |
 | [frontend/client-data-layer.md](frontend/client-data-layer.md) | Mobil / web veri katmanı üretimi: tipler, servis, thunk, slice (UI yok) |
 | [admin-base-package.md](admin-base-package.md) | `@atakanimo/ata-admin-base` paketi: geliştirme, host kurulumu |
 | [generator-ui.md](generator-ui.md) | Generator arayüzü: ekranlar, IPC, model editörü |

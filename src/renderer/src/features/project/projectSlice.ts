@@ -10,6 +10,8 @@ import type {
   ScannedModel,
   SourceType
 } from '@shared/ipcTypes';
+import { adminDir } from '@shared/adminDir';
+import { writeLastProjectPath } from './lastProjectPath';
 import type { ModelDraft } from '@shared/modelDraft';
 import type { NewProjectStack } from '@shared/backendStacks';
 import type { HostDatabase } from '@shared/backendDatabase';
@@ -74,8 +76,8 @@ interface ProjectState {
 }
 
 const initialState: ProjectState = {
-  projectPath: '/Users/atakanatabey/Projects/VarlikALL/Varlik360',
-  frontendPath: '/Users/atakanatabey/Projects/VarlikALL/Varlik360/apps/admin',
+  projectPath: '',
+  frontendPath: '',
   sourceType: null,
   detectedTechnologies: [],
   discoveryInfo: null,
@@ -122,6 +124,7 @@ export const scanProjectFiles = createAsyncThunk(
             const man = await window.electronAPI.project.getWorkspaceManifest(path);
             if (man.success) workspace = man.workspace ?? null;
           }
+          writeLastProjectPath(path);
           return {
             models: result.models,
             detectedType: result.detectedType || type || null,
@@ -520,7 +523,12 @@ const projectSlice = createSlice({
   initialState,
   reducers: {
     setProjectPath: (state, action: PayloadAction<string>) => {
-      state.projectPath = action.payload;
+      const next = action.payload;
+      if (next !== state.projectPath) {
+        state.frontendPath = '';
+        state.workspaceManifestLoaded = false;
+      }
+      state.projectPath = next;
       state.error = null;
     },
     setFrontendPath: (state, action: PayloadAction<string>) => {
@@ -624,11 +632,9 @@ const projectSlice = createSlice({
         state.detectedTechnologies = action.payload.detectedTechnologies;
         state.discoveryInfo = action.payload.discoveryInfo;
         state.error = null;
+        const hydrated = hydrateWorkspaceFromManifest(action.payload.workspace);
+        state.frontendPath = adminDir(state.projectPath, hydrated.frontendPath);
         if (action.payload.workspace) {
-          const hydrated = hydrateWorkspaceFromManifest(action.payload.workspace);
-          if (hydrated.frontendPath) {
-            state.frontendPath = hydrated.frontendPath;
-          }
           state.workspaceGeneratePrefs = mergeWorkspaceGeneratePrefs({
             ...state.workspaceGeneratePrefs,
             ...hydrated.prefs

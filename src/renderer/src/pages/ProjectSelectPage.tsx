@@ -37,6 +37,7 @@ import BackendStackInfoButton from '../components/BackendStackInfo';
 import NewProjectDialog from '../components/NewProjectDialog';
 import { NEW_PROJECT_STACKS, type BackendStackInfo } from '@shared/backendStacks';
 import type { ModelDraft } from '@shared/modelDraft';
+import { readLastProjectPath, writeLastProjectPath } from '../features/project/lastProjectPath';
 import { useState, useEffect } from 'react';
 
 function toRelativePath(fullPath: string, root: string): string {
@@ -79,9 +80,17 @@ const ProjectSelectPage = () => {
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
   const [newProject, setNewProject] = useState<BackendStackInfo | null>(null);
 
+  useEffect(() => {
+    const last = readLastProjectPath();
+    if (!last) return;
+    dispatch(setProjectPath(last));
+    dispatch(scanProjectFiles({ path: last }));
+  }, [dispatch]);
+
   /** PY9: a new host was bootstrapped; it is opened like any project. */
   const handleProjectCreated = (root: string, message: string) => {
     setNewProject(null);
+    writeLastProjectPath(root);
     dispatch(setProjectPath(root));
     dispatch(scanProjectFiles({ path: root }));
     setSnackbarMessage(message);
@@ -92,6 +101,7 @@ const ProjectSelectPage = () => {
   const handleBrowseFolder = async () => {
     const selectedPath = await dispatch(pickDirectory()).unwrap();
     if (!selectedPath) return;
+    writeLastProjectPath(selectedPath);
     dispatch(setProjectPath(selectedPath));
     dispatch(scanProjectFiles({ path: selectedPath }));
   };

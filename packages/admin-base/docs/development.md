@@ -16,6 +16,7 @@ Bir değişiklik bitince üçü de temiz olmalı: typecheck, test, build. Host `
 
 - `playground/mockBackend.ts`: sözleşmedeki uçları bellekte uygulayan axios adapter'ı; host interceptor'ını (resolve / reject, toast, loading) taklit eder.
 - `playground/resources.tsx`: örnek config + `extendResource` örnekleri. Yeni alan türü ya da davranış önce buraya eklenir.
+- Dashboard örneği: sol menüde Dashboard, ya da `http://localhost:5191/?dashboard`.
 - Hata önce playground'da yeniden üretilir, düzeltilir, sonra host'ta doğrulanır.
 
 ## Testler
@@ -25,6 +26,7 @@ Bir değişiklik bitince üçü de temiz olmalı: typecheck, test, build. Host `
 | `test/schema.test.ts` | `toWriteBody`, ilişki yardımcıları |
 | `test/restProvider.test.ts` | Uç yolları, body'ler, istek bayrakları |
 | `test/ui.test.ts` | Filtre body'si, form değerleri, doğrulama, `createAdminRoutes`, `humanize`, json, dinamik varsayılanlar |
+| `test/dashboard.test.ts` | Grafik satır grupları (`fullWidth`) |
 | `test/format.test.ts` | `valueSummary` |
 | `test/types.test.ts` | Tip çıkarımı (`tsc` ile doğrulanır) |
 | `test/fixtures.ts` | Ortak örnek resource'lar |

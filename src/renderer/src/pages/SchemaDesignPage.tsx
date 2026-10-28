@@ -35,7 +35,7 @@ import { Save as SaveIcon, Code as CodeIcon, FolderOpen } from '@mui/icons-mater
 import { useAppSelector, useAppDispatch } from '../store/hooks';
 import {
   updateFieldConfig, updateModelApi,
-  updateModelLabel, markModelApiSaved, saveSchemaConfig, generateFrontend, generateBackend, setFrontendPath, patchWorkspaceGeneratePrefs, persistWorkspaceManifest, buildManifestWorkspacePayload
+  updateModelLabel, markModelApiSaved, saveSchemaConfig, generateFrontend, generateBackend, setFrontendPath, pickDirectory, patchWorkspaceGeneratePrefs, persistWorkspaceManifest, buildManifestWorkspacePayload
 } from '../features/project/projectSlice';
 import type { NormalizedField, NormalizedModel, RelationType } from '@shared/normalizedModel';
 import type { RelationPropertyObjectSubField } from '@shared/relationDisplayMeta';
@@ -798,8 +798,8 @@ const SchemaDesignPage = () => {
                 InputProps={{
                   readOnly: true
                 }}
-                placeholder={frontendPath || 'No folder selected'}
-                helperText='Select a folder containing your frontend project'
+                placeholder='No folder selected'
+                helperText='Inside the selected backend, or apps/admin'
                 sx={{
                   '& .MuiInputBase-root': {
                     height: '56px'
@@ -810,16 +810,8 @@ const SchemaDesignPage = () => {
                 variant='outlined'
                 startIcon={<FolderOpen />}
                 onClick={async () => {
-                  try {
-                    if (window.electronAPI?.dialog?.openDirectory) {
-                      const result = await window.electronAPI.dialog.openDirectory();
-                      if (result && !result.canceled && result.filePaths && result.filePaths.length > 0) {
-                        dispatch(setFrontendPath(result.filePaths[0]));
-                      }
-                    }
-                  } catch (err) {
-                    console.error('Error opening folder dialog:', err);
-                  }
+                  const path = await dispatch(pickDirectory()).unwrap();
+                  if (path) dispatch(setFrontendPath(path));
                 }}
                 sx={{ minWidth: 140, height: 56 }}
               >

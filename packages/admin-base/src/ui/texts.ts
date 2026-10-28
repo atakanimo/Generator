@@ -71,7 +71,8 @@ export const adminBaseTexts = {
     exportHint: 'Geçerli filtreler ve sıralama uygulanır.',
     exportColumns: 'Kolonlar',
     exportSelectAll: 'Tümünü seç',
-    exportDownload: 'İndir'
+    exportDownload: 'İndir',
+    dashboardRange: 'Aralık'
   }
 } as const;
 
@@ -147,7 +148,8 @@ export const adminBaseTextsEn: { ataAdmin: Record<AdminTextKey, string> } = {
     exportHint: 'The current filters and sort order apply.',
     exportColumns: 'Columns',
     exportSelectAll: 'Select all',
-    exportDownload: 'Download'
+    exportDownload: 'Download',
+    dashboardRange: 'Range'
   }
 };
 

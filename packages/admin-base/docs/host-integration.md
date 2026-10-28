@@ -5,7 +5,7 @@
 ## 1. Bağımlılık
 
 - Geliştirmede `file:` ile: `"@atakanimo/ata-admin-base": "file:<göreli yol>/Generator/packages/admin-base"`. Paket önce derlenmiş olmalı (`npm run build` → `dist/`).
-- Peer'lar host'ta kurulu olmalı: `react`, `react-dom`, `@mui/material`, `@mui/icons-material`, `@mui/x-data-grid`, `@mui/x-date-pickers`, `@emotion/react`, `@emotion/styled`, `@tanstack/react-query`, `axios`, `dayjs` (tam liste `package.json` `peerDependencies`).
+- Peer'lar host'ta kurulu olmalı: `react`, `react-dom`, `react-router-dom`, `@mui/material`, `@mui/icons-material`, `@mui/x-data-grid`, `@mui/x-date-pickers`, `@emotion/react`, `@emotion/styled`, `@tanstack/react-query`, `axios`, `dayjs`, `chart.js`, `react-chartjs-2` (tam liste `package.json` `peerDependencies`). `AdminDashboard` grafik çizmek için son ikisini import eder.
 - Vite `resolve.dedupe`: `react`, `react-dom`, `@mui/material`, `@emotion/react`, `@emotion/styled`, `@tanstack/react-query`, `axios`. Paketin kendi `node_modules`'undaki axios tipleri çakışırsa tsconfig `paths` ile host'unkine yönlendirilir.
 
 ## 2. Provider

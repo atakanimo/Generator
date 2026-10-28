@@ -1,6 +1,6 @@
 {
   "name": "@atakanimo/ata-admin-base",
-  "version": "0.1.9",
+  "version": "0.1.11",
   "description": "Config-driven admin UI runtime for Generator output (resource schemas, data provider, TanStack Query hooks, MUI pages).",
   "license": "MIT",
   "repository": {
@@ -44,9 +44,12 @@
     "@mui/x-date-pickers": "^8.0.0",
     "@tanstack/react-query": "^5.0.0",
     "axios": "^1.0.0",
+    "chart.js": "^4.4.0",
     "dayjs": "^1.11.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-chartjs-2": "^5.3.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.0.0"
   },
   "devDependencies": {
     "@emotion/react": "^11.14.0",
@@ -60,9 +63,12 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.2.0",
     "axios": "^1.20.0",
+    "chart.js": "^4.5.1",
     "dayjs": "^1.11.23",
     "react": "^19.3.1",
+    "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.3.1",
+    "react-router-dom": "^7.8.1",
     "typescript": "~5.9.3",
     "vite": "^7.3.7",
     "vitest": "^3.2.7"

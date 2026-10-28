@@ -10,7 +10,7 @@
 | `src/data` | `createAtaRestProvider`, resource API, axios bayrakları (`skipLoading`, `skipSuccessToast`), QueryClient |
 | `src/schema` | `defineResourceSchema`, `extendResource`, alan tipleri, ilişki ve yazma body'si (`toWriteBody`) |
 | `src/react` | `AtaAdminProvider`, TanStack Query hook'ları |
-| `src/ui` | `ResourcePage`, form drawer, filtre çubuğu, tablo hücreleri, `createAdminRoutes`, metinler |
+| `src/ui` | `ResourcePage`, form drawer, filtre çubuğu, tablo hücreleri, `createAdminRoutes`, `AdminDashboard`, metinler |
 | `playground/` | Sahte BE ile geliştirme ortamı |
 
 ## Davranış
@@ -30,7 +30,7 @@
 ## Host kurulumu
 
 1. Bağımlılık: geliştirmede `file:` ile (`"@atakanimo/ata-admin-base": "file:<göreli yol>/Generator/packages/admin-base"`). Peer: React, MUI, emotion, `@tanstack/react-query`, axios.
-2. Vite `resolve.dedupe`: `react`, `react-dom`, `@mui/material`, `@emotion/react`, `@emotion/styled`, `@tanstack/react-query`, `axios`. Gerekirse tsconfig `paths` ile axios host'unkine yönlendirilir.
+2. Vite `resolve.dedupe`: `react`, `react-dom`, `@mui/material`, `@emotion/react`, `@emotion/styled`, `@tanstack/react-query`, `axios`. Dashboard grafiği için host'ta `chart.js` ve `react-chartjs-2` de bulunur. Gerekirse tsconfig `paths` ile axios host'unkine yönlendirilir.
 3. `AtaAdminProvider` + `createAtaRestProvider({ http: API })`, `t`, `dateLocale='tr'` (`dayjs/locale/tr` import edilir).
 4. Interceptor sözleşme §7'ye uyar.
 5. Route + menü: `[...elleYazilanRoutes, ...createAdminRoutes(resources)]`.

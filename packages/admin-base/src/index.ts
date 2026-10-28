@@ -21,6 +21,7 @@ export { ResourcePage, type ResourcePageProps } from './ui/ResourcePage.js';
 export { ResourceFormDrawer, type ResourceFormDrawerProps } from './ui/form/ResourceFormDrawer.js';
 export { ResourceDetailDrawer, type ResourceDetailDrawerProps } from './ui/detail/ResourceDetailDrawer.js';
 export { isColumnSortable } from './ui/table/columns.js';
+export { RecordTable, type RecordTableProps, type RecordTableSearch } from './ui/table/RecordTable.js';
 export { enumChoices, enumLabelOf, enumValueFromInput, type EnumChoice } from './ui/enumChoices.js';
 export { FormFields, type FormFieldsProps } from './ui/form/FormFields.js';
 export { formValuesToBody, initialFormValues, isFieldVisible, type FormMode } from './ui/form/values.js';
@@ -31,3 +32,5 @@ export { RelationAutocomplete, type RelationAutocompleteProps } from './ui/input
 export { AtaLoginPage, ATA_LOGIN_REMEMBER_KEY, type AtaLoginPageProps, type AtaLoginValues } from './ui/login/AtaLoginPage.js';
 export { validateLogin, type LoginErrors } from './ui/login/loginForm.js';
 export { createAdminRoutes, resourceTitleKey, type AdminRouteEntry, type CreateAdminRoutesOptions } from './ui/routes.js';
+export { AdminDashboard, type AdminDashboardProps, type DashboardCard, type DashboardGraph, type DashboardGraphRange, type DashboardGraphSeries, type DashboardLink, type DashboardTable, type DashboardTableColumn } from './ui/dashboard/AdminDashboard.js';
+export { groupDashboardGraphs } from './ui/dashboard/layout.js';

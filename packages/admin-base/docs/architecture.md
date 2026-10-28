@@ -35,6 +35,7 @@ createAdminRoutes(resources) → host route + menü dizisi
 | `src/ui/inputs/RelationAutocomplete.tsx` | Hedefin `get-all`'u ile ilişki seçici | Autocomplete |
 | `src/ui/actions/actions.tsx` | Satır / toplu / toolbar aksiyon düğmeleri ve girdi diyaloğu | Aksiyonlar |
 | `src/ui/routes.tsx` | `createAdminRoutes` | Route / menü kaydı |
+| `src/ui/dashboard/` | `AdminDashboard`, `groupDashboardGraphs` | Ana sayfa: host’un verdiği kart, grafik, tablo, kısayol. Ayrıntı [dashboard.md](dashboard.md) |
 | `src/ui/texts.ts`, `useAdminTexts.ts`, `format.ts` | Türkçe varsayılan metinler (`ataAdmin.*`), metin hook'u, değer biçimleme (`valueSummary`) | Metin / biçim |
 | `playground/` | Sahte BE (`mockBackend.ts`) + örnek resource'lar | Elle deneme |
 | `test/` | vitest testleri; `types.test.ts` tip çıkarımını `tsc` ile doğrular | Her davranış değişikliği |

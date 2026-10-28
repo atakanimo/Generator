@@ -6,7 +6,7 @@ Electron uygulaması: main (`src/main`), preload, renderer (`src/renderer/src`, 
 
 | Ekran | Dosya | Görevi |
 | --- | --- | --- |
-| Proje seçimi | `pages/ProjectSelectPage.tsx` | BE / FE proje klasörleri, tarama (`project:scan`) |
+| Proje seçimi | `pages/ProjectSelectPage.tsx` | BE proje klasörü, tarama (`project:scan`). Yol sabit değildir: son açılan proje geri gelir, kayıt yoksa alan boştur. |
 | Schema Designer | `pages/SchemaDesignPage.tsx` | Model seçimi, alan tablosu, BE / FE generate |
 | Model editörü | `components/AddModelModal.tsx` | Model oluşturma / düzenleme (model dosyasını yazar) |
 | API ayarları | `components/ModelApiSettingsPanel.tsx` | Model başına normal işlemler, auth, admin |
@@ -17,7 +17,7 @@ Electron uygulaması: main (`src/main`), preload, renderer (`src/renderer/src`, 
 - Alan tablosu: Label, In Table, Searchable, Filter Type, Readonly, Hidden, Admin only, Relation, UI Component, Default Value. Ayarlar `project:saveSchemaConfig` ile manifest v3'e yazılır.
 - UI Component seçenekleri `uiComponentOptionsFor(field)`'dan (`shared/modelMerge.ts`): yalnızca kind'a uyan bileşenler; object / map / json / unknown için seçim kapalı.
 - İlişki diyaloğu: hedef model, `display`, `populate`. Ana alan bağlı değilken `nestedSchemas` bağlantısı sessizce düşürülmez.
-- FE bölümünde yalnızca config'in okuduğu ayarlar var: FE proje yolu, generate modu, Enable Update / Delete. FE dosya seçimi ya da "mevcut dosyaları güncelle" yok. `generateFrontend(model, frontendPath, backendPath, features, baseUrl)` bütün IPC imzasıdır.
+- FE bölümünde yalnızca config'in okuduğu ayarlar var: FE proje yolu, generate modu, Enable Update / Delete. FE dosya seçimi ya da "mevcut dosyaları güncelle" yok. Admin dizini `adminDir` ile seçilir (`scripts/host.mjs`): `workspace.frontendPath` seçilen backend'in içindeyse odur, değilse `<backend>/apps/admin`. `generateFrontend(model, frontendPath, backendPath, features, baseUrl)` bütün IPC imzasıdır.
 - Generate: `project:generateBackend` / `generateFrontend` (Backend Only / Frontend Only / ikisi). Model dosyası açıldıktan sonra diskte değiştiyse generate yazmaz, uyarı gösterir.
 - Eski manifest `workspace` anahtarları (`selectedFrontendFiles`, `updateExistingFrontendFiles`, `isAdminUser`) okunmaz, sonraki yazımda düşer.
 

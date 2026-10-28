@@ -17,6 +17,7 @@ import { AtaAdminProvider, createAdminRoutes, createAtaRestProvider, interpolate
 import { createHostApi, currentUserId } from './mockBackend.js';
 import { resources, translations } from './resources.js';
 import { LoginDemo } from './login.js';
+import { DashboardDemo } from './dashboard.js';
 
 type Toast = { message: string; severity: 'success' | 'error' } | null;
 
@@ -28,7 +29,7 @@ function App() {
     []
   );
   const routes = useMemo(() => createAdminRoutes(resources), []);
-  const [path, setPath] = useState(routes[routes.length - 1].path);
+  const [path, setPath] = useState(new URLSearchParams(location.search).has('dashboard') ? '__dashboard' : routes[routes.length - 1].path);
   const t = useMemo(
     () => (key: string, options?: { defaultValue?: string; [k: string]: unknown }) =>
       interpolateForPlayground(translations[key] ?? options?.defaultValue ?? key, options),
@@ -43,6 +44,9 @@ function App() {
       <Box sx={{ display: 'flex', height: '100vh' }}>
         <Box component='nav' sx={{ width: 240, flexShrink: 0, borderRight: 1, borderColor: 'divider', pt: 2 }}>
           <List>
+            <ListItemButton selected={path === '__dashboard'} onClick={() => setPath('__dashboard')} sx={{ mx: 1, borderRadius: 1 }}>
+              <ListItemText primary='Dashboard' />
+            </ListItemButton>
             {routes.map(route => {
               const Icon = route.icon;
               return (
@@ -57,7 +61,7 @@ function App() {
           </List>
         </Box>
         <Box component='main' sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', p: 3 }}>
-          <Page key={active.path} />
+          {path === '__dashboard' ? <DashboardDemo /> : <Page key={active.path} />}
         </Box>
       </Box>
       <Snackbar open={toast !== null} autoHideDuration={3000} onClose={() => setToast(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>

@@ -244,7 +244,7 @@ interface DetectStackResult {
   error?: string;
 }
 
-async function detectProjectStack(projectPath: string): Promise<DetectStackResult> {
+export async function detectProjectStack(projectPath: string): Promise<DetectStackResult> {
   const detectedTechnologies: string[] = [];
 
   // Node.js checks
