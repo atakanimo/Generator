@@ -5,11 +5,11 @@ alwaysApply: true
 
 # AtaProjectCommon
 
-Full text: `docs/AtaProjectCommon.md`.
+Full text: `/Users/atakanatabey/Projects/Generator/docs/AtaProjectCommon.md`.
 
-Applies to SharedFrame, StockExchange and Varlik360. Generator's own source is not produced by this rule.
+Applies to SharedFrame, StockExchange and Varlik360. Generator's own source is not produced by this rule. The host is the open project root that contains `.generator/manifest.json`.
 
 - Do not hand-write generated admin config, stamped backend files, or a new entity admin screen (page, table, service, route) in those hosts. Change the model, then generate.
-- From the Generator repo: `node scripts/host.mjs admin-config <host> [Entity]` or `generate`. Same functions as the Electron Generate action. `--dry-run` prints paths and writes nothing.
+- Run `node /Users/atakanatabey/Projects/Generator/scripts/host.mjs admin-config <host> [Entity]` or the same command with `generate`. Same functions as the Electron Generate action. `--dry-run` prints paths and writes nothing.
 - Admin UI the config cannot express goes in `packages/admin-base` and is checked with `npm run playground` before a host uses it.
 - Still hand-written: `*.generated.ts` (`extendResource`), hooks / custom blocks / `*.Custom.cs`, and non-CRUD pages (login, dashboard, logs, metrics, jobs, screen).

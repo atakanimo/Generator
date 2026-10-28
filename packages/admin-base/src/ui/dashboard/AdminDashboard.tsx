@@ -243,20 +243,21 @@ export function AdminDashboard({ cards = [], graphs = [], tables = [], links = [
                 width: '100%',
                 borderCollapse: 'collapse',
                 '& th, & td': {
-                  textAlign: 'left',
                   py: 1.25,
                   px: 2,
                   borderTop: '1px solid',
                   borderColor: 'divider',
-                  whiteSpace: 'nowrap'
+                  whiteSpace: 'nowrap',
+                  textAlign: 'left'
                 },
+                '& th[data-align="right"], & td[data-align="right"]': { textAlign: 'right' },
                 '& th': { color: 'text.secondary', fontWeight: 600, fontSize: '0.75rem', letterSpacing: '0.02em' }
               }}
             >
               <thead>
                 <tr>
                   {table.columns.map(column => (
-                    <Box component='th' key={column.key} sx={{ textAlign: column.align === 'right' ? 'right' : 'left' }}>
+                    <Box component='th' key={column.key} data-align={column.align === 'right' ? 'right' : 'left'}>
                       {column.label}
                     </Box>
                   ))}
@@ -273,11 +274,7 @@ export function AdminDashboard({ cards = [], graphs = [], tables = [], links = [
                   table.rows.map((row, rowIndex) => (
                     <tr key={rowIndex}>
                       {table.columns.map(column => (
-                        <Box
-                          component='td'
-                          key={column.key}
-                          sx={{ textAlign: column.align === 'right' ? 'right' : 'left', fontVariantNumeric: 'tabular-nums' }}
-                        >
+                        <Box component='td' key={column.key} data-align={column.align === 'right' ? 'right' : 'left'} sx={{ fontVariantNumeric: 'tabular-nums' }}>
                           {cellValue(column, row[column.key])}
                         </Box>
                       ))}

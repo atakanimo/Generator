@@ -13,6 +13,8 @@
 | `src/ui` | `ResourcePage`, form drawer, filtre çubuğu, tablo hücreleri, `createAdminRoutes`, `AdminDashboard`, metinler |
 | `playground/` | Sahte BE ile geliştirme ortamı |
 
+Ana sayfa bileşeni `AdminDashboard`: host kart, grafik, tablo ve rota kısayolu dizilerini verir. Hangi durumda ne basıldığı [packages/admin-base/docs/dashboard.md](../packages/admin-base/docs/dashboard.md) içindedir.
+
 ## Davranış
 
 - Liste: sunucu sayfalama ve sıralama (resource ya da alan `sortable: false` ile kapatılır), filtre çubuğu (taslak / uygulanan), satır ve toplu aksiyonlar, silme onayı. Toolbar / toplu aksiyonlar `visible` / `disabled` ile liste isteğine (`listBody`) ve seçime göre gösterilir.

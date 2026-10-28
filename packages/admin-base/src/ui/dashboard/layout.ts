@@ -1,5 +1,9 @@
+function isFullWidth(item: unknown): boolean {
+  return typeof item === 'object' && item !== null && 'fullWidth' in item && Boolean((item as { fullWidth?: boolean }).fullWidth);
+}
+
 /** `fullWidth` satırı böler. Diğerleri geliş sırasıyla aynı satırda kalır. */
-export function groupDashboardGraphs<T extends { fullWidth?: boolean }>(items: readonly T[]): T[][] {
+export function groupDashboardGraphs<T>(items: readonly T[]): T[][] {
   const rows: T[][] = [];
   let open: T[] = [];
   const flush = () => {
@@ -8,7 +12,7 @@ export function groupDashboardGraphs<T extends { fullWidth?: boolean }>(items: r
     open = [];
   };
   for (const item of items) {
-    if (item.fullWidth) {
+    if (isFullWidth(item)) {
       flush();
       rows.push([item]);
     } else {

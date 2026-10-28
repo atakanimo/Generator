@@ -28,6 +28,10 @@ Yığın `workspace.backendStack` alanındadır; yoksa proje kökünden tespit e
 
 Python'a özel kurulum, içe aktarma ve önizleme `scripts/python-host.mjs` içindedir. Admin config ve backend üretimi üç host için `scripts/host.mjs` olur.
 
+## Kuralın durduğu yer
+
+Metin tek yerdedir: bu dosya ve `.cursor/rules/AtaProjectCommon.mdc`. SharedFrame, StockExchange ve Varlik360 kendi `.cursor/rules/AtaProjectCommon.mdc` dosyasında buna symlink tutar. Host tek başına açıldığında Cursor o kuralı okur; üretim komutu Generator'ın mutlak yolunu kullanır. Metin değişince yalnız Generator'daki dosya düzenlenir.
+
 ## Paket davranışı
 
 Config'in anlatamadığı admin arayüzü `packages/admin-base` içine yazılır. Önce `npm run playground` (http://localhost:5191) ile doğrulanır, sonra host paketi kullanır. Bileşen üç admin projesine kopyalanmaz.
