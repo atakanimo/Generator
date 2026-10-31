@@ -5,6 +5,7 @@
 import type { FieldConstraints, NormalizedField, NormalizedModel, NormalizedObjectSubField } from '../../shared/normalizedModel.js';
 import { adminExportEnabled, resolveAdminOperations } from '../../shared/normalizedModel.js';
 import { constraintsForField, isNumericEnum } from '../../shared/fieldConstraints.js';
+import { effectiveFilterType } from '../../shared/fieldFilter.js';
 import { moduleNameFromEntity } from '../utils/namingUtils.js';
 
 /** Mirrors `@atakanimo/ata-admin-base` `FieldConfig` (package `src/schema/fields.ts`). */
@@ -113,34 +114,13 @@ const DYNAMIC_DEFAULT: Record<string, AdminDynamicDefault | undefined> = {
   currentUserId: { dynamic: 'currentUserId' }
 };
 
-/** Filter when the model says searchable but no type: same defaults as the BE filter builder. */
-function defaultFilter(kind: AdminFieldKind): AdminFilterType {
-  switch (kind) {
-    case 'relation':
-      return 'relation';
-    case 'enum':
-      return 'enum';
-    case 'boolean':
-      return 'boolean';
-    case 'datetime':
-      return 'date-range';
-    case 'number':
-    case 'decimal':
-      return 'eq';
-    default:
-      return 'regex';
-  }
-}
-
-function resolveFilter(field: NormalizedField, kind: AdminFieldKind): AdminFilterType | undefined {
+/** Filter when the model says searchable: `effectiveFilterType`, the rule every BE emitter uses (contract §3). */
+function resolveFilter(field: NormalizedField): AdminFilterType | undefined {
   if (field.filter?.searchable !== true || field.access?.hidden === true) return undefined;
-  const explicit = field.filter.type ? FILTER_TYPE[field.filter.type] : undefined;
-  // Enum fields filter by equality / `$in` unless another filter was chosen (contract §3, BE resolveTemplateFilterType).
-  if (kind === 'enum' && !field.isArray && (explicit === undefined || explicit === 'regex' || explicit === 'eq')) return 'enum';
-  // A reference filters by id on every BE (Python `FilterField(…, 'reference')`, Express / .NET the same), whatever the
-  // model's filter type says; a text filter would send a search term the BE rejects.
-  if (kind === 'relation' && field.reference?.target) return 'relation';
-  return explicit ?? defaultFilter(kind);
+  const resolved = effectiveFilterType(field);
+  if (resolved) return FILTER_TYPE[resolved];
+  // Kinds without a BE list filter (object / map / json): kept as before; object and json drop it below.
+  return field.filter.type ? FILTER_TYPE[field.filter.type] : 'regex';
 }
 
 function subFieldConfig(sub: NormalizedObjectSubField): AdminFieldConfig | null {
@@ -179,7 +159,7 @@ function fieldConfig(field: NormalizedField, skipped: SkippedField[]): AdminFiel
   if (field.access?.hiddenFromUpdate) out.hideOnUpdate = true;
   // `detailOnly` is `null` on list rows: no table column (the detail view shows it).
   if (field.ui?.list !== false && field.access?.detailOnly !== true) out.list = true;
-  const filter = resolveFilter(field, kind);
+  const filter = resolveFilter(field);
   if (filter) out.filter = filter;
   const dynamicDefault = DYNAMIC_DEFAULT[field.ui?.defaultValue ?? ''];
   if (dynamicDefault) out.default = dynamicDefault;

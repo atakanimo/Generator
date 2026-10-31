@@ -25,8 +25,8 @@
       },
       { "name": "nickname", "kind": "string", "isArray": false, "required": false, "unique": true, "constraints": { "maxLength": 20 } },
       { "name": "fullName", "kind": "string", "isArray": false, "required": true, "trim": true, "constraints": { "minLength": 2, "maxLength": 80 } },
-      { "name": "age", "kind": "number", "isArray": false, "required": false, "numberFormat": "int", "constraints": { "min": 0, "max": 150 } },
-      { "name": "score", "kind": "number", "isArray": false, "required": true, "default": 0 },
+      { "name": "age", "kind": "number", "isArray": false, "required": false, "numberFormat": "int", "constraints": { "min": 0, "max": 150 }, "filter": { "searchable": true, "type": "range" } },
+      { "name": "score", "kind": "number", "isArray": false, "required": true, "default": 0, "filter": { "searchable": true, "type": "range" } },
       {
         "name": "level",
         "kind": "enum",

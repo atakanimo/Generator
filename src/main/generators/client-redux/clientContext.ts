@@ -4,6 +4,7 @@
  */
 import type { NormalOperation, NormalizedField, NormalizedModel, NormalizedObjectSubField } from '../../../shared/normalizedModel.js';
 import { resolveNormalApi, type NormalApiSurface } from '../../../shared/normalApi.js';
+import { effectiveFilterType } from '../../../shared/fieldFilter.js';
 import type { ClientPreset } from './clientPreset.js';
 
 export interface ClientContextOptions {
@@ -149,23 +150,8 @@ function valueProp(field: NormalizedField, mode: Mode, models: NormalizedModel[]
 type ContractFilter = 'eq' | 'regex' | 'range' | 'date-range' | 'boolean' | 'enum' | 'reference';
 
 function filterTypeOf(field: NormalizedField): ContractFilter {
-  const explicit = field.filter?.type;
-  // Enum fields filter by equality / `$in` unless another filter was chosen (BE resolveTemplateFilterType).
-  if (field.kind === 'enum' && !field.isArray && (explicit === undefined || explicit === 'regex' || explicit === 'eq')) return 'enum';
-  if (explicit) return explicit;
-  switch (field.kind) {
-    case 'reference':
-      return 'reference';
-    case 'boolean':
-      return 'boolean';
-    case 'date':
-      return 'date-range';
-    case 'number':
-    case 'decimal':
-      return 'eq';
-    default:
-      return 'regex';
-  }
+  // Same rule as the BE (`effectiveFilterType`); kinds without a BE filter fall back to a text value.
+  return effectiveFilterType(field) ?? field.filter?.type ?? 'regex';
 }
 
 function filterProp(field: NormalizedField): ClientTypeProp {

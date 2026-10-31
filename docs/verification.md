@@ -17,6 +17,7 @@ Varlik360 BE: `/Users/atakanatabey/Projects/VarlikALL/Varlik360/src/modules/**/*
 | `node scripts/verify/test-core-assets.mjs` | Core asset birim testleri (`toWire`, `extractListPagination`, id / sort eşlemesi, gizli alan strip, auth scope, `dateOnlyRangeFilter`, ortak hook yardımcıları `service-hooks`, update `null` → `$unset` `merge-patch`) | saniyeler |
 | `node scripts/verify/smoke-varlik360.mjs` | Golden set: parse → field kind → model editörü taslağı → `model.hbs` | saniyeler |
 | `node scripts/verify/admin-config-check.mjs [--keep]` | Bütün modeller → admin config, `apps/admin` içinde `tsc` + eşleme kontrolleri | ~1 dk |
+| `node scripts/verify/filter-determinism.mjs` | Liste filtresi tek kural (`src/shared/fieldFilter.ts`): .NET host'a model editöründen kaydet, sonra `host.mjs` gibi ham manifest satırlarıyla generate → hiçbir dosya yazılmaz (tek entity de); her alan için .NET / Python / admin config / client / designer varsayılanı aynı filtre (`filter.type` yoksa sayı → eq, range yalnız manifest öyle diyorsa) | ~5 sn |
 | `node scripts/verify/regen-varlik360.mjs --manifest` | Manifest v3 round trip; eski manifest yok sayılır, tercihler korunur, bir kez yedeklenir | saniyeler |
 | `node scripts/verify/regen-varlik360.mjs --p5` | Model başına `api` + hidden / adminOnly round trip, dosyadan API tespiti, yeni model route kuralları, enum / default | saniyeler |
 | `node scripts/verify/regen-varlik360.mjs --resave-models [etiket]` | Model editörü yolu (`loadModelDraft` → `updateModel`) | dakikalar |
@@ -37,6 +38,7 @@ Varlik360 BE: `/Users/atakanatabey/Projects/VarlikALL/Varlik360/src/modules/**/*
 | BE şablonları / `BackendGenerator` | `express-py1-e2e` (tip bilgileri, kısıtlar, `traceId`); regen `--planned --core-overlay` → tabana göre `--compare` yalnızca beklenen fark, kopyada `tsc` artmaz, custom blok içerikleri birebir |
 | Core asset'ler | `test-core-assets` + `--core-assets` |
 | Admin config | `admin-config-check` |
+| Liste filtresi (`fieldFilter.ts`, emitter filtreleri, `modelMerge` varsayılanları) | `filter-determinism`, sonra `regen-dotnet` / `regen-python` (Python `test_contacts_cases` range'i açık filtreyle bekler) |
 | `packages/admin-base` | `npm run typecheck`, `npm test`, `npm run build` |
 | .NET üreticisi (`dotnet-efcore/`, şablonlar, asset'ler, parser, `dotnetBackend.ts`) | `regen-dotnet.mjs`, sonra `dotnet-e2e.mjs` (arka planda) |
 | Python CRUD katmanı (StockExchange `core/crud`, `core/http/contract.py`, `modules/*/…_generated.py`) | StockExchange `pytest tests/core/crud tests/modules/<m>`, sonra `dotnet-e2e.mjs --python-only` |

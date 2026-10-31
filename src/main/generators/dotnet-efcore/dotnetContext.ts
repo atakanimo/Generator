@@ -14,6 +14,7 @@ import type {
 } from '../../../shared/normalizedModel.js';
 import { NORMAL_OPERATIONS, adminExportEnabled, resolveAdminOperations, updateNullClears } from '../../../shared/normalizedModel.js';
 import { constraintsForField, EMAIL_PATTERN, isNumericEnum } from '../../../shared/fieldConstraints.js';
+import { effectiveFilterType } from '../../../shared/fieldFilter.js';
 import { kebabCase, moduleNameFromEntity, pascalCase, pluralize, singularize } from '../../utils/namingUtils.js';
 import type { DotnetRegistryModule } from './DotnetHostBootstrap.js';
 import type { DotnetDbProvider } from './providers/DotnetDbProvider.js';
@@ -240,28 +241,12 @@ function defaultLiteral(field: NormalizedField, enumDef?: DotnetEnum): string | 
   }
 }
 
-/** Filter type actually applied: the model's choice when it fits the kind, otherwise the kind's default. */
+/** Filter type actually applied (`effectiveFilterType`): the model's choice when it fits the kind, otherwise the kind's default. */
 function effectiveFilter(f: DotnetFieldInfo): FilterType | null {
-  const byCategory: Partial<Record<DotnetFieldCategory, FilterType[]>> = {
-    ref: ['reference'],
-    refArray: ['reference']
-  };
-  const byKind: Record<string, FilterType[]> = {
-    string: ['regex', 'eq'],
-    number: ['range', 'eq'],
-    decimal: ['range', 'eq'],
-    boolean: ['boolean'],
-    date: ['date-range'],
-    enum: ['enum']
-  };
-  const allowed = f.category === 'scalar' ? byKind[f.source.kind] : byCategory[f.category];
-  if (!allowed) return null;
-  // Enum: always `IN` (one value or an array, contract §3). `eq` would accept a single value only, and the merged model
-  // (`mergeModel`) may carry `eq` for an enum the manifest stores as `enum`: same output either way (admin config does the same).
-  if (f.category === 'scalar' && f.source.kind === 'enum') return 'enum';
-  if (f.category === 'refArray' && !f.target) return null;
-  const wanted = f.source.filter?.type;
-  return wanted && allowed.includes(wanted) ? wanted : allowed[0];
+  if (f.category === 'ref') return 'reference';
+  if (f.category === 'refArray') return f.target ? 'reference' : null;
+  if (f.category !== 'scalar') return null;
+  return effectiveFilterType(f.source) ?? null;
 }
 
 function filterLine(f: DotnetFieldInfo, filter: FilterType): { prop: string; call: string } {

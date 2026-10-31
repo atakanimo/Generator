@@ -14,6 +14,7 @@
 import type { FilterType, NormalizedField, NormalizedModel, NormalizedObjectSubField } from '../../../shared/normalizedModel.js';
 import { adminExportEnabled, resolveAdminOperations, updateNullClears, type NormalOperation } from '../../../shared/normalizedModel.js';
 import { constraintsForField, EMAIL_PATTERN, isNumericEnum } from '../../../shared/fieldConstraints.js';
+import { effectiveFilterType } from '../../../shared/fieldFilter.js';
 import { kebabCase, pascalCase, singularize } from '../../utils/namingUtils.js';
 import { PYTHON_KEYWORDS } from './pythonLayout.js';
 import { PY_LINE_LENGTH, PyImports, pyCall, pyClass, pyDef, pyNumber, pyStr, pySubscript } from './pythonFormat.js';
@@ -484,26 +485,18 @@ function listOf(f: PyField, type: string): string {
   return isArray(f) ? `list[${type}]` : type;
 }
 
-/** Filter type actually applied (same rule as .NET `effectiveFilter`): the model's choice when it fits the kind. */
+/** Filter type actually applied (`effectiveFilterType`, same as .NET): the model's choice when it fits the kind. */
 function effectiveFilter(f: PyField): FilterType | null {
   // Reference: `reference` (one id or a list); a reference list without a generated target has none (.NET).
   if (f.category === 'ref' || (f.category === 'refArray' && f.target)) return 'reference';
   if (f.category !== 'scalar') return null;
   if (f.enumDef) return 'enum';
-  const byType: Record<string, FilterType[]> = {
-    str: ['regex', 'eq'],
-    int: ['range', 'eq'],
-    float: ['range', 'eq'],
-    DecimalStr: ['range', 'eq'],
-    bool: ['boolean'],
-    datetime: ['date-range'],
-    date: ['date-range']
-  };
-  const allowed = byType[f.type];
-  if (!allowed) return null;
-  const wanted = f.source.filter?.type;
-  return wanted && allowed.includes(wanted) ? wanted : allowed[0];
+  // Python types with a list filter (e.g. `EmailStr` has none).
+  if (!FILTERABLE_TYPES.has(f.type)) return null;
+  return effectiveFilterType(f.source) ?? null;
 }
+
+const FILTERABLE_TYPES = new Set(['str', 'int', 'float', 'DecimalStr', 'bool', 'datetime', 'date']);
 
 /** Value conversion of a body expression for storage. */
 function convert(f: PyField, expr: string): string {

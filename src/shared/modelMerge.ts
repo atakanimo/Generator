@@ -14,6 +14,7 @@ import {
 import { constraintsForField, isNumericEnum } from './fieldConstraints.js';
 import { filterFromToken, filterTokenOf, typeTokenOf, type FilterToken } from './fieldTypeToken.js';
 import { isMongooseSourceType } from './schemaFieldTypes.js';
+import { defaultFilterType } from './fieldFilter.js';
 
 export type SourceType = 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | 'python-fastapi' | null;
 
@@ -152,15 +153,12 @@ export function getComponentForType(field: { name: string; type: string; isArray
   return 'TextField';
 }
 
+/** Filter the designer shows for a field with no settings: the emitters' default (`defaultFilterType`). */
 function defaultFilterToken(field: NormalizedField): FilterToken {
   const name = field.name.toLowerCase();
-  const t = token(field);
-  if (name === '_id' || name === 'id') return 'objectId';
-  if (t === 'schema' || isReference(field)) return 'objectId';
-  if (t === 'boolean') return 'boolean';
-  if (t === 'number') return 'exact';
-  if (t === 'date') return 'date-range';
-  return 'regex';
+  if (name === '_id' || name === 'id' || isReference(field)) return 'objectId';
+  const type = defaultFilterType(field.kind);
+  return type ? (filterTokenOf({ type }) as FilterToken) : 'regex';
 }
 
 function isSystemReadonly(field: NormalizedField): boolean {
