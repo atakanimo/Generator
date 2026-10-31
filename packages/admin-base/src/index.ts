@@ -33,4 +33,6 @@ export { AtaLoginPage, ATA_LOGIN_REMEMBER_KEY, type AtaLoginPageProps, type AtaL
 export { validateLogin, type LoginErrors } from './ui/login/loginForm.js';
 export { createAdminRoutes, resourceTitleKey, type AdminRouteEntry, type CreateAdminRoutesOptions } from './ui/routes.js';
 export { AdminDashboard, type AdminDashboardProps, type DashboardCard, type DashboardGraph, type DashboardGraphRange, type DashboardGraphSeries, type DashboardLink, type DashboardTable, type DashboardTableColumn } from './ui/dashboard/AdminDashboard.js';
+export { AtaAdminLayout, ATA_DRAWER_WIDTH, ATA_TOOLBAR_HEIGHT, type AtaAdminLayoutProps, type AtaAdminNavItem } from './ui/layout/AtaAdminLayout.js';
+export { AtaAdminPage, AtaAdminFill, ataAdminPageSx, ataAdminScrollPageSx, ataAdminFillSx, type AtaAdminPageProps, type AtaAdminFillProps } from './ui/layout/AtaAdminPage.js';
 export { groupDashboardGraphs } from './ui/dashboard/layout.js';

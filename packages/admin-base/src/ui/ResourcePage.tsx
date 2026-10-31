@@ -31,6 +31,7 @@ import type { FormMode } from './form/values.js';
 import { buildColumns } from './table/columns.js';
 import { JsonDialog, type JsonDialogState } from './table/JsonDialog.js';
 import { useAdminTexts } from './useAdminTexts.js';
+import { AtaAdminFill, AtaAdminPage } from './layout/AtaAdminPage.js';
 
 type Row = { id: string } & Record<string, unknown>;
 
@@ -154,7 +155,7 @@ export function ResourcePage({ resource }: ResourcePageProps) {
   const BelowTable = slots.belowTable;
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0, width: '100%', overflow: 'hidden', gap: 2 }}>
+    <AtaAdminPage>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ flexShrink: 0, alignItems: { sm: 'center' } }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography component='h1' sx={{ fontSize: '1.25rem', fontWeight: 600 }}>
@@ -192,7 +193,7 @@ export function ResourcePage({ resource }: ResourcePageProps) {
 
       {AboveTable ? <AboveTable /> : null}
 
-      <Box sx={{ flex: 1, minHeight: 0, width: '100%', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <AtaAdminFill>
         <DataGrid<Row>
           rows={rows}
           columns={columns}
@@ -232,7 +233,7 @@ export function ResourcePage({ resource }: ResourcePageProps) {
             '& .MuiDataGrid-cell': { display: 'flex', alignItems: 'center', fontSize: '0.875rem' }
           }}
         />
-      </Box>
+      </AtaAdminFill>
 
       {BelowTable ? <BelowTable /> : null}
 
@@ -303,6 +304,6 @@ export function ResourcePage({ resource }: ResourcePageProps) {
       {exporting ? <ExportDialog resource={resource} listBody={body} onClose={() => setExporting(false)} /> : null}
 
       <JsonDialog state={json} onClose={() => setJson(null)} />
-    </Box>
+    </AtaAdminPage>
   );
 }

@@ -1,4 +1,4 @@
-import { Box, Button, MenuItem, Stack, TextField } from '@mui/material';
+import { Box, Button, MenuItem, Stack, TextField, type SxProps, type Theme } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
 import { useState, type KeyboardEvent } from 'react';
@@ -23,7 +23,7 @@ interface EnumFilterProps {
   resource: AnyResource;
   field: FieldConfig;
   label: string;
-  sx: { minWidth: number };
+  sx: SxProps<Theme>;
   value: unknown;
   onChange: (value: unknown) => void;
 }
@@ -66,10 +66,15 @@ export function FilterBar({ resource, onApply }: FilterBarProps) {
 
   if (fields.length === 0) return null;
 
+  const pairRowSx = { width: { xs: '100%', md: 'auto' } };
+
   const renderField = (field: FieldConfig) => {
     const label = texts.fieldLabel(fieldLabelKey(resource, [field.name]), field);
     const raw = draft[field.name];
-    const sx = { minWidth: minWidthFor[field.filter ?? ''] ?? (field.kind === 'number' ? 120 : 180) };
+    const minWidth = minWidthFor[field.filter ?? ''] ?? (field.kind === 'number' ? 120 : 180);
+    // md altı tek sütun: alanlar tam genişlik, min/max ve from/to çifti satırı paylaşır (yatay taşma yok)
+    const sx = { width: { xs: '100%', md: 'auto' }, minWidth: { xs: 0, md: minWidth } };
+    const pairSx = { flex: { xs: 1, md: 'none' }, minWidth: { xs: 0, md: minWidth } };
 
     switch (field.filter) {
       case 'boolean':
@@ -89,10 +94,10 @@ export function FilterBar({ resource, onApply }: FilterBarProps) {
       case 'range': {
         const range = isRecord(raw) ? raw : {};
         return (
-          <Stack direction='row' spacing={1}>
-            <TextField size='small' type='number' label={`${label} · ${text('min')}`} sx={sx} value={range.min ?? ''}
+          <Stack direction='row' spacing={1} sx={pairRowSx}>
+            <TextField size='small' type='number' label={`${label} · ${text('min')}`} sx={pairSx} value={range.min ?? ''}
               onChange={e => set(field.name, { ...range, min: e.target.value })} onKeyDown={onEnter} />
-            <TextField size='small' type='number' label={`${label} · ${text('max')}`} sx={sx} value={range.max ?? ''}
+            <TextField size='small' type='number' label={`${label} · ${text('max')}`} sx={pairSx} value={range.max ?? ''}
               onChange={e => set(field.name, { ...range, max: e.target.value })} onKeyDown={onEnter} />
           </Stack>
         );
@@ -104,11 +109,11 @@ export function FilterBar({ resource, onApply }: FilterBarProps) {
             label={`${label} · ${text(key)}`}
             value={range[key] ? dayjs(range[key] as string) : null}
             onChange={v => set(field.name, { ...range, [key]: v && v.isValid() ? v.format('YYYY-MM-DD') : undefined })}
-            slotProps={{ textField: { size: 'small', sx } }}
+            slotProps={{ textField: { size: 'small', sx: pairSx } }}
           />
         );
         return (
-          <Stack direction='row' spacing={1}>
+          <Stack direction='row' spacing={1} sx={pairRowSx}>
             {picker('from')}
             {picker('to')}
           </Stack>
@@ -123,10 +128,12 @@ export function FilterBar({ resource, onApply }: FilterBarProps) {
   };
 
   return (
-    <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} useFlexGap sx={{ flexWrap: 'wrap', flexShrink: 0, alignItems: { md: 'center' } }}>
-      <TextField size='small' label='ID' sx={{ minWidth: 220 }} value={draft.id ?? ''} onChange={e => set('id', e.target.value)} onKeyDown={onEnter} />
+    <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} useFlexGap sx={{ flexWrap: { xs: 'nowrap', md: 'wrap' }, flexShrink: 0, minWidth: 0, alignItems: { md: 'center' } }}>
+      <TextField size='small' label='ID' sx={{ width: { xs: '100%', md: 'auto' }, minWidth: { xs: 0, md: 220 } }} value={draft.id ?? ''} onChange={e => set('id', e.target.value)} onKeyDown={onEnter} />
       {fields.map(field => (
-        <Box key={field.name}>{renderField(field)}</Box>
+        <Box key={field.name} sx={{ minWidth: 0 }}>
+          {renderField(field)}
+        </Box>
       ))}
       <Stack direction='row' spacing={1}>
         <Button variant='outlined' onClick={apply}>

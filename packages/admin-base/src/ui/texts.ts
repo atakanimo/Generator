@@ -72,7 +72,13 @@ export const adminBaseTexts = {
     exportColumns: 'Kolonlar',
     exportSelectAll: 'Tümünü seç',
     exportDownload: 'İndir',
-    dashboardRange: 'Aralık'
+    dashboardRange: 'Aralık',
+    layoutNavigation: 'Menü',
+    layoutToggleLanguage: 'Dili değiştir',
+    layoutToggleTheme: 'Temayı değiştir',
+    layoutUserMenu: 'Kullanıcı menüsü',
+    layoutAdminUser: 'Yönetici',
+    layoutLogout: 'Çıkış yap'
   }
 } as const;
 
@@ -149,7 +155,13 @@ export const adminBaseTextsEn: { ataAdmin: Record<AdminTextKey, string> } = {
     exportColumns: 'Columns',
     exportSelectAll: 'Select all',
     exportDownload: 'Download',
-    dashboardRange: 'Range'
+    dashboardRange: 'Range',
+    layoutNavigation: 'Menu',
+    layoutToggleLanguage: 'Change language',
+    layoutToggleTheme: 'Change theme',
+    layoutUserMenu: 'User menu',
+    layoutAdminUser: 'Administrator',
+    layoutLogout: 'Sign out'
   }
 };
 

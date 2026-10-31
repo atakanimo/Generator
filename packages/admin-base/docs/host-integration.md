@@ -55,7 +55,33 @@ export const ProtectedRoutes = [
 
 Her kayıt `{ id, text, path, element, icon, isProtected }`. Seçenekler: `basePath`, `textKey`, `defaultIcon`. Yeni modül host'ta değişiklik istemez; Generator `resources.generated.ts`'i günceller.
 
-## 5. Metinler
+## 5. Layout + scroll sözleşmesi
+
+Kabuk pakette: `AtaAdminLayout` (app bar, drawer — lg altı temporary —, kullanıcı menüsü, tam yükseklik `main`). Host yalnız state'i bağlar:
+
+```tsx
+<AtaAdminLayout
+  title={t('common.name')}
+  navItems={ProtectedRoutes.map(r => ({ id: String(r.id), path: r.path, label: routeTitle(r, t), icon: r.icon }))}
+  sidebarTitle={<EnvLabel />}            // opsiyonel; varsayılan Sync + title
+  version={`v${__APP_VERSION__}`}        // opsiyonel
+  user={user} onLogout={...}
+  onToggleLanguage={...} onToggleTheme={...} themeMode={mode}
+  drawerOpen={drawerOpen} onDrawerOpenChange={open => dispatch(setDrawerOpen(open))}  // opsiyonel; yoksa iç state
+  t={t}                                   // `ataAdmin.layout*` anahtarları
+>
+  <Outlet />
+</AtaAdminLayout>
+```
+
+Scroll sözleşmesi:
+- `main` her zaman dikey kayar, yatay taşma gizli.
+- `AtaAdminPage` (varsayılan `fill`): md+ `main`'i doldurur, tablo/log paneli içeride kayar; md altında sayfa doğal yüksekliğinde uzar ve `main` kayar. `ResourcePage` bunu kullanır.
+- `AtaAdminPage fill={false}`: uzun içerikli sayfa (dashboard, form) — her ekranda uzar.
+- `AtaAdminFill` / `ataAdminFillSx`: md+ kalan alanı dolduran, md altında `75vh` olan blok (DataGrid kutusu).
+- Elle yazılan sayfalarda `height: calc(100dvh - …)` / sayfa kökünde `overflow: hidden` kullanılmaz; içeride kayan yaprak kutulara (DataGrid, log listesi) md altı için bir `minHeight` verilir.
+
+## 6. Metinler
 
 - Paket metinleri `adminBaseTexts` (Türkçe). Host isterse i18next'e `addResourceBundle` ile ekleyip çevirir.
 - DataGrid metinleri MUI `trTR`'den.

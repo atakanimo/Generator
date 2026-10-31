@@ -1,6 +1,6 @@
 {
   "name": "@atakanimo/ata-admin-base",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Config-driven admin UI runtime for Generator output (resource schemas, data provider, TanStack Query hooks, MUI pages).",
   "license": "MIT",
   "repository": {
