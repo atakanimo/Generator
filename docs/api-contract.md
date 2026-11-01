@@ -121,7 +121,8 @@ type PaginatedList<T> = { items: T[]; total: number; hasMore: boolean; currentPa
 - Ownership alanı (`userId` benzeri): normal API auth'tan alır, body ve filtreden atar; admin API body ve filtrede kabul eder.
 - `adminOnly` alanlar normal create / update şemasında yoktur; admin şemasında vardır.
 - `detailOnly` alanlar (ör. rapor analizi) liste sayfasında okunmaz: liste satırında `null`, getOne'da değer. Admin config: tabloda kolon yok (detay gösterir).
-- `computed` alanlar (ör. canlı fiyat) saklanmaz: hiçbir gövdede yok, filtre ve `sortBy` reddeder (400), satırda opsiyonel ve hook doldurur. Admin config: `readonly`, `sortable: false`, filtre yok.
+- `computed` alanlar (ör. canlı fiyat, başka koleksiyondan gelen sektör) saklanmaz: hiçbir stack'in saklama katmanında yok, hiçbir gövdede yok, filtre ve `sortBy` reddeder (400; Express'te `sortBy` allow-list'i henüz yok), satırda opsiyonel ve hook doldurur (`map_rows` / `mapRows` / `MapRows`; list, getOne, export). Admin config: `readonly`, `sortable: false`, filtre yok.
+  - Ayrım: dokümanda tutulmayıp sadece satırda dönen alan `computed`'dir. `readonly` (+ `hiddenFrom*`) saklanan ama API'den yazılamayan alandır; generator onu modele, filtreye ve sıralamaya koyar.
 - **Update'te `null` kuralı (JSON Merge Patch, RFC 7386; karar 2026-10-23, üç stack + admin-base 0.1.8):**
   - Gövdede olmayan alan değişmez.
   - Opsiyonel (`required` değil) ya da `nullable` tekil alana `null` alanı temizler: Mongo'da `$unset` (satırda alan yok, istemci `null` okur), SQL'de `NULL`. Tekil `reference` ve tekil obje de bu kurala uyar (obje bütün olarak yazılır, alt alanlar birleştirilmez).

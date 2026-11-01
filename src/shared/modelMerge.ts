@@ -260,7 +260,10 @@ function mergeField(code: NormalizedField, saved: NormalizedField): NormalizedFi
       hiddenFromCreate: saved.access?.hiddenFromCreate,
       hiddenFromUpdate: saved.access?.hiddenFromUpdate,
       hidden: code.access?.hidden ?? saved.access?.hidden,
-      adminOnly: saved.access?.adminOnly
+      adminOnly: saved.access?.adminOnly,
+      // The model file says `computed` (Express: interface-only with a `computed` JSDoc; .NET: `[NotMapped]` / marker).
+      computed: code.access?.computed ?? saved.access?.computed,
+      detailOnly: saved.access?.detailOnly
     },
     ui: {
       ...saved.ui,

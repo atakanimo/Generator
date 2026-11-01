@@ -43,6 +43,8 @@ hidden?: boolean;
 /** Not writable through the normal API (G5). */
 /** `access.detailOnly`: left out of list reads. */
 detailOnly?: boolean;
+/** `access.computed`: not in the Schema (never stored); optional in the interface, `hooks.mapRows` fills it. */
+isComputed?: boolean;
 adminOnly?: boolean;
 relation?: {
   target: string;
@@ -84,6 +86,8 @@ ui: {
 export type MongooseFieldShape = {
 /** Interface `?` (P3, R3). */
 optional?: boolean;
+/** `access.computed`: interface only, left out of the Schema. */
+computed?: boolean;
 doc?: string;
 tsTypeOverride?: string;
 /** Rendered `'a', 'b'` (P3, R2). */
@@ -210,6 +214,7 @@ export function normalizeField(field: V2Field): BeField {
     hiddenFromUpdate: Boolean(field.access?.hiddenFromUpdate),
     hidden: field.access?.hidden === true ? true : undefined,
     detailOnly: field.access?.detailOnly === true ? true : undefined,
+    isComputed: field.access?.computed === true ? true : undefined,
     adminOnly: field.access?.adminOnly === true ? true : undefined,
     relation:
       relationTarget && relationType
@@ -458,6 +463,9 @@ export function collectNamedNestedSchemas(
   return out;
 }
 
+/** Interface JSDoc of a `computed` field without its own. */
+export const COMPUTED_DOC = '/** computed: not stored; hooks.mapRows fills it. */';
+
 function quote(value: string): string {
   return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 }
@@ -498,6 +506,13 @@ export function toMongooseModelFields(fields: BeField[], sourceType: SourceTypeL
     else if (limits?.pattern) out.matchLiteral = jsRegExpSource(limits.pattern);
     if (field.schemaDefault !== undefined) out.defaultLiteral = renderLiteral(field.schemaDefault);
     if (field.nativeOptions?.length) out.nativeOptions = field.nativeOptions;
+    if (field.isComputed) {
+      // Interface-only: the parser reads "in the interface, not in the Schema" back as `computed`.
+      out.computed = true;
+      out.optional = true;
+      // The parser keys on a `computed` JSDoc; an unrelated one is replaced.
+      if (!out.doc || !/\bcomputed\b/.test(out.doc)) out.doc = COMPUTED_DOC;
+    }
     return out;
   });
 }
@@ -542,6 +557,8 @@ export function buildMongooseModelContext(model: V2Model, opts: MongooseModelCon
     initializeFunctionName: opts.initialize?.functionName,
     initializeData: opts.initialize?.data ?? [],
     modelFields,
+    /** Schema keys: `computed` fields are never stored. */
+    schemaFields: modelFields.filter(f => !f.computed),
     namedNestedSchemas: opts.existingContent ? filterNamedNestedNotOwnedByCustomTypes(named, opts.existingContent) : named
   };
 }

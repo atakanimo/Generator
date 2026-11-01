@@ -193,6 +193,8 @@ function closingParen(text: string, open: number): number {
 }
 
 /** Class field line (4-space indent) too long for one line: the default goes in parentheses, as `ruff format` does. */
+const isComputed = (f: PyField): boolean => f.source.access?.computed === true;
+
 function classFieldLine(line: string): string {
   if (4 + line.length <= PY_LINE_LENGTH || line.includes('\n')) return line;
   const m = /^(\w+: .+?) = (.+)$/.exec(line);
@@ -536,17 +538,19 @@ function buildModuleContext(pkg: string, info: ModelInfo, infos: Map<string, Mod
   const crud = `${pkg}.core.crud`;
 
   // --- model_generated.py --------------------------------------------------------------------------------------
+  // `computed`: never stored; `map_rows` fills the row.
+  const docFields = fields.filter((f) => f.source.access?.computed !== true);
   const modelImports = new PyImports().add('datetime', 'datetime').add('pydantic', 'BaseModel', 'ConfigDict');
-  if (fields.some((f) => f.type === 'date')) modelImports.add('datetime', 'date');
+  if (docFields.some((f) => f.type === 'date')) modelImports.add('datetime', 'date');
   if (enums.some((e) => !e.numeric)) modelImports.add('enum', 'StrEnum');
   if (enums.some((e) => e.numeric)) modelImports.add('enum', 'IntEnum');
   if (objects.some((o) => o.uses.utc)) modelImports.add(crud, 'UtcDateTime');
-  if (objects.some((o) => o.uses.decimal) || fields.some((f) => f.type === 'DecimalStr')) modelImports.add(crud, 'DecimalStr');
-  if (objects.some((o) => o.uses.ref) || fields.some((f) => f.type === 'RefId')) modelImports.add(crud, 'RefId');
-  if (objects.some((o) => o.uses.json) || fields.some((f) => /JsonValue/.test(f.type))) modelImports.add('pydantic', 'JsonValue');
-  if (fields.some((f) => f.defaultLiteral?.startsWith('Decimal('))) modelImports.add('decimal', 'Decimal');
+  if (objects.some((o) => o.uses.decimal) || docFields.some((f) => f.type === 'DecimalStr')) modelImports.add(crud, 'DecimalStr');
+  if (objects.some((o) => o.uses.ref) || docFields.some((f) => f.type === 'RefId')) modelImports.add(crud, 'RefId');
+  if (objects.some((o) => o.uses.json) || docFields.some((f) => /JsonValue/.test(f.type))) modelImports.add('pydantic', 'JsonValue');
+  if (docFields.some((f) => f.defaultLiteral?.startsWith('Decimal('))) modelImports.add('decimal', 'Decimal');
 
-  const docLines = fields.map((f) => {
+  const docLines = docFields.map((f) => {
     const limits = limitArgs(f.source);
     const args = [...limits.text, ...(limits.pattern ? [`pattern=${pyStr(limits.pattern)}`] : []), ...limits.number];
     const type = listOf(f, f.type);
@@ -928,7 +932,12 @@ function buildModuleContext(pkg: string, info: ModelInfo, infos: Map<string, Mod
       imports: schemaImports.render(),
       preamble: schemaPreamble.join('\n'),
       refClasses,
-      rowLines: rowLines.map(classFieldLine),
+      // One comment above each run of `computed` fields.
+      rowLines: rowLines.map((line, i) =>
+        isComputed(visible[i]) && !(i > 0 && isComputed(visible[i - 1]))
+          ? `# Okurken doldurulur (\`hooks.map_rows\`); dokümana yazılmaz.\n    ${classFieldLine(line)}`
+          : classFieldLine(line)
+      ),
       createLines: createLines.map(classFieldLine),
       updateLines: updateLines.map(classFieldLine),
       filterLines: filterLines.map(classFieldLine)

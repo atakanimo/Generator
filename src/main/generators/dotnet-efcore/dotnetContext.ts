@@ -284,6 +284,8 @@ interface ModelInfo {
 }
 
 /** First pass: C# shapes of every field; references are resolved against `targets`. */
+const isComputed = (f: DotnetFieldInfo): boolean => f.source.access?.computed === true;
+
 function describeModel(model: NormalizedModel, targets: Map<string, DotnetTargetInfo>, provider: DotnetDbProvider): ModelInfo {
   const relational = provider.referenceStrategy === 'relational';
   const names = dotnetModuleNames(model.entityName);
@@ -295,22 +297,24 @@ function describeModel(model: NormalizedModel, targets: Map<string, DotnetTarget
   for (const field of model.fields) {
     if (BASE_FIELDS.has(field.name)) continue;
     const prop = pascalCase(field.name);
-    const required = field.required === true && field.nullable !== true;
+    // `computed`: `[NotMapped]`, never stored, so always nullable, with no navigation and no populate.
+    const computed = field.access?.computed === true;
+    const required = field.required === true && field.nullable !== true && !computed;
     const base = { source: field, json: field.name, prop, required };
     const where = `${model.entityName}.${field.name}`;
 
     if (field.kind === 'reference') {
       const target = field.reference?.target ? targets.get(field.reference.target) : undefined;
       const include = field.reference?.include === true && (field.reference?.populate?.length ?? 0) > 0;
-      const populate = target && include ? field.reference!.populate : undefined;
+      const populate = target && include && !computed ? field.reference!.populate : undefined;
       if (field.isArray) {
         const refStem = /Ids$/.test(prop) ? pluralize(prop.slice(0, -3)) : prop;
-        const nav = target && relational ? refStem : undefined;
+        const nav = target && relational && !computed ? refStem : undefined;
         fields.push({ ...base, category: 'refArray', type: 'EntityId', isValueType: true, nav, refStem, target, populate });
       } else {
         const refStem = /Id$/.test(prop) && prop.length > 2 ? prop.slice(0, -2) : prop;
         const fk = /Id$/.test(prop) ? prop : `${prop}Id`;
-        fields.push({ ...base, category: 'ref', type: 'EntityId', isValueType: true, fk, nav: target && relational ? refStem : undefined, refStem, target, populate });
+        fields.push({ ...base, category: 'ref', type: 'EntityId', isValueType: true, fk, nav: target && relational && !computed ? refStem : undefined, refStem, target, populate });
       }
       continue;
     }
@@ -547,8 +551,12 @@ function buildModuleContext(app: string, info: ModelInfo, infos: Map<string, Mod
   const entityProps: string[] = [];
   // Reference without a navigation (document strategy): the target travels in the marker (`ref=<Folder>`).
   const marker = (f: DotnetFieldInfo) =>
-    ` // ${[f.json, f.source.unique ? 'unique' : '', f.source.trim ? 'trim' : '', f.required && isCollection(f) ? 'required' : '', f.target && !f.nav ? `ref=${f.target.folder}` : ''].filter(Boolean).join(' ')}`;
-  const push = (f: DotnetFieldInfo, line: string) => entityProps.push(line + marker(f));
+    ` // ${[f.json, f.source.unique ? 'unique' : '', f.source.trim ? 'trim' : '', f.required && isCollection(f) ? 'required' : '', f.target && !f.nav ? `ref=${f.target.folder}` : '', isComputed(f) ? 'computed' : ''].filter(Boolean).join(' ')}`;
+  // `computed`: `[NotMapped]` keeps it out of the table / document; `MapRows` fills the row.
+  const push = (f: DotnetFieldInfo, line: string) => {
+    if (isComputed(f)) entityProps.push('[NotMapped]');
+    entityProps.push(line + marker(f));
+  };
   for (const f of fields) {
     if (f.nav) domainFolders.add(f.target!.folder);
     switch (f.category) {
@@ -601,6 +609,13 @@ function buildModuleContext(app: string, info: ModelInfo, infos: Map<string, Mod
     populateAssigns.push(lines.assign);
   };
   for (const f of visible) {
+    if (isComputed(f)) {
+      // Not stored: `null` in every projection; `MapRows` fills it (`row with { … }`).
+      const type = f.category === 'ref' ? 'EntityId' : f.category === 'refArray' ? 'List<EntityId>' : valueType(f);
+      rowParams.push(`${type}? ${f.prop}`);
+      same('null');
+      continue;
+    }
     if (f.category === 'ref') {
       if (f.populate) {
         const id = f.required ? `x.${f.fk}` : `x.${f.fk}.Value`;
@@ -688,7 +703,7 @@ function buildModuleContext(app: string, info: ModelInfo, infos: Map<string, Mod
     '.Add("updatedAt", x => x.UpdatedAt)'
   ];
 
-  const config = provider.configure({ app, names, fields });
+  const config = provider.configure({ app, names, fields: fields.filter((f) => !isComputed(f)) });
 
   // Service: unique, relation checks, m-n loaders
   const uniqueChecks = fields
@@ -761,6 +776,7 @@ function buildModuleContext(app: string, info: ModelInfo, infos: Map<string, Mod
   if (ownership?.kind === 'field') normalCreate.mapCreate.push(`${ownership.fk} = currentUser.Id${ownerField!.required ? ' ?? default' : ''},`);
 
   const domainUsings = [...domainFolders].sort().map((folder) => `${app}.Domain.${folder}`);
+  if (fields.some(isComputed)) domainUsings.unshift('System.ComponentModel.DataAnnotations.Schema');
   if (usesJson) domainUsings.unshift('System.Text.Json');
   if (enums.length) domainUsings.unshift('System.Text.Json.Serialization');
   const needsOwnDomain = enums.length > 0 || complexTypes.length > 0;

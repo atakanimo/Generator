@@ -131,6 +131,12 @@ Sözleşme §5: gönderilmeyen alan değişmez, opsiyonel alana `null` alanı te
 
 `access.hidden` alanlar `crud.hbs` `HIDDEN_FIELDS`'e gider (`BaseCrudService`'in 4. argümanı, admin dahil). list / getById / find'da projection, create ve lean sonuçlarında strip (`core/services/crud-projection.ts`). Şemaya `select: false` yazılmaz; gizli alan filtrelenemez. Bu modelleri dönen custom kod `stripHiddenFields`'i kendisi uygular.
 
+## Okurken hesaplanan alanlar (`access.computed`)
+
+Alan `Schema`'ya yazılmaz (saklanmaz). Interface'te opsiyonel kalır, üstünde `computed` geçen bir JSDoc durur (yoksa `/** computed: not stored; hooks.mapRows fills it. */`). Parser (`schemaParser.ts` `attachInterfaceTypes`) "interface'te `computed` JSDoc'lu, `Schema`'da yok" alanı `computed` okur, interface sırasıyla yerleştirir. Böylece reconcile alanı korur. JSDoc'suz interface-only alanlar (elle yazılmış virtual'lar) modele girmez. Gövde ve filtrede yok (`isReadonly`, `filterable: false`), export'ta var. Değeri `hooks.mapRows` doldurur.
+
+`custom-tojson-transform`'u olan modelin normal servisi `lean: false` okur. Strict Mongoose dokümanında şema dışı anahtar sessizce düşer, bu yüzden `mapRows` düz obje döndürmeli; generator bu durumda uyarı loglar. `sortBy` allow-list'i olmadığı için computed alana sıralama 400 yerine yok sayılır (açık konu, `contract-parity.mjs`).
+
 ## Şablon beklentileri
 
 - Şablonda iş mantığı yok (tip / bayrak / stack dalı). Kararlar helper'larda: `templateHelpers.ts`, `handlebars-be-*.ts`, `handlebars-schema-predicates.ts`. Şablonlar `noEscape: true` ile derlenir.

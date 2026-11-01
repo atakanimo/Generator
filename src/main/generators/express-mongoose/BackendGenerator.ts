@@ -364,10 +364,15 @@ export class BackendGenerator extends BaseGenerator {
         outputDir: moduleDir,
         outputFileName: `${fileBase}.service.ts`,
         enabled: this.selectedFiles.service ?? true,
-        buildTemplateData: baseTemplateData => ({
-          ...baseTemplateData,
-          needsMongooseDocumentLean: this.resolveNeedsMongooseDocumentLean(moduleDir, fileBase)
-        })
+        buildTemplateData: baseTemplateData => {
+          const needsMongooseDocumentLean = this.resolveNeedsMongooseDocumentLean(moduleDir, fileBase);
+          const computed = (baseTemplateData.normalizedModel as BeModelContext | undefined)?.fields.filter(f => f.isComputed).map(f => f.name);
+          if (needsMongooseDocumentLean && computed?.length) {
+            // Strict Mongoose documents drop keys outside the Schema: `mapRows` must return plain objects.
+            this.logWarn('Computed fields on a lean:false service: hooks.mapRows must return plain objects', { fileBase, computed });
+          }
+          return { ...baseTemplateData, needsMongooseDocumentLean };
+        }
       },
       {
         // Business-rule hooks of both services: created once without a generator header, so the file is

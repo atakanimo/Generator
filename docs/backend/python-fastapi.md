@@ -106,7 +106,7 @@ Adlar (K21): entity çoğul PascalCase (verildiği gibi), klasör = collection =
 
 | İhtiyaç | Yer |
 | --- | --- |
-| Okurken hesaplanan alan (canlı fiyat …) | modelde `access.computed`; değer `hooks.py` `map_rows` (tek toplu okuma, sıra korunur) |
+| Okurken hesaplanan alan (canlı fiyat, başka koleksiyondan gelen alan …) | modelde `access.computed` (`readonly` değil); `model_generated.py`'da yok, satırda `\| None = None`, filtre / sıralamada yok, export'ta var; değer `hooks.py` `map_rows` (tek toplu okuma, sıra korunur) |
 | Listede okunmaması gereken ağır alan (analiz blob'u …) | modelde `access.detailOnly` (`detail_only_fields`; liste `None`, getOne dolu) |
 | İş kuralı (doğrulama, varsayılan, yasak silme, cascade) | `hooks.py` (`before_*` / `after_*`, `map_rows`); isteği yapan admin `current_actor()` (`core/crud`, ör. `createdBy`) |
 | Ek servis metodu, servis kurulumu | `service.py` |
@@ -213,7 +213,6 @@ Plandan kalan, Generator tarafında hâlâ açık maddeler:
 
 - **Electron'da denenmedi:** Python içe aktarma penceresi (tarama → içe aktar → generate → şema tasarımcısı); PY6 türleriyle (reference, decimal, map / json, access) editör → generate.
 - **Karar bekleyenler:** gövdeler lax (strict mod: `ConfigDict(strict=True)` + tarih / enum istisnaları); referans verilen kaydı silme (Python / Express 200, .NET 409; istenirse ortak `before_delete` "kullanılıyor" kuralı); .NET populate'te `display` yedeği (Express gibi).
-- **`access.computed`:** Express mongoose şeması ve .NET entity'si alanı hâlâ saklanan alan gibi tanımlıyor; ilk kullanımda şemadan çıkarma / `[NotMapped]`.
 - **PY12 export:** `contract-parity`'de export senaryosu yok.
 - **Modül testi şablonu:** desenden değer üretimi basit desenlerle sınırlı (bulunamazsa skip); `fixtures/python/tests/test_<m>_cases.py`'deki parçalar (tarih aralığı filtresi, opsiyonel unique boşken çakışmama) genel şablona taşınabilir.
 - **Format:** iskelet / asset dosyalarında `ruff format --check` bazı dosyalarda satır bölme öneriyor; iskelette format kapısı yok.

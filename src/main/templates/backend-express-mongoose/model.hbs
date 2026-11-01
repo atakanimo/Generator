@@ -55,7 +55,7 @@ export type I{{modelExportName}}Model = {{interfaceName}};
 
 const {{schemaName}} = new Schema<{{interfaceName}}>(
   {
-{{#each modelFields~}}
+{{#each schemaFields~}}
 {{#if nestedSchemaName}}
     {{name}}: {
       type: {{#if isArray}}[{{nestedSchemaName}}]{{else}}{{nestedSchemaName}}{{/if}}{{#if required}}, required: true{{/if}}{{#if defaultLiteral}}, default: {{defaultLiteral}}{{/if}}{{#each nativeOptions}}, {{this}}{{/each}}

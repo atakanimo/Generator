@@ -451,13 +451,40 @@ function attachInterfaceTypes(content: string, mainSchemaName: string | null, fi
   const generic = new RegExp(`const\\s+${mainSchemaName}\\s*=\\s*new\\s+Schema\\s*<\\s*(\\w+)\\s*>`).exec(content);
   if (!generic) return fields;
   const props = parseInterfaceProperties(content, generic[1]);
-  return fields.map(field => {
+  const typed = fields.map(field => {
     const prop = props.get(field.name);
     if (!prop || field.name === '_id' || field.name === 'createdAt' || field.name === 'updatedAt') return field;
     const native: NativeType = { tsType: prop.tsType, tsOptional: prop.optional };
     if (prop.doc) native.doc = prop.doc;
     return withNative(field, native);
   });
+  // `access.computed`: in the interface with a `computed` JSDoc, not in the Schema (never stored). Other
+  // interface-only properties (hand-written virtuals …) stay out of the model as before.
+  // Placed after the interface property before it, so the field order survives a round trip.
+  const inSchema = new Set(fields.map(f => f.name));
+  let after: string | undefined;
+  for (const [name, prop] of props) {
+    if (inSchema.has(name) || !prop.doc || !/\bcomputed\b/.test(prop.doc)) {
+      if (typed.some(f => f.name === name)) after = name;
+      continue;
+    }
+    const at = after === undefined ? typed.findIndex(f => f.name !== '_id') : typed.findIndex(f => f.name === after) + 1;
+    typed.splice(at < 0 ? typed.length : at, 0, computedInterfaceField(name, prop));
+    after = name;
+  }
+  return typed;
+}
+
+/** Field of an interface-only `computed` property: scalar / scalar array, else JSON; the TS type is kept verbatim. */
+function computedInterfaceField(name: string, prop: { tsType: string; optional: boolean; doc?: string }): NormalizedField {
+  const bare = prop.tsType.replace(/\s*\|\s*(null|undefined)\b/g, '').trim();
+  const isArray = /\[\]$/.test(bare);
+  const element = bare.replace(/\[\]$/, '');
+  const token = ['string', 'number', 'boolean', 'date'].includes(element.toLowerCase()) ? element.toLowerCase() : 'mixed';
+  const field = scalarField(name, token, false, isArray);
+  const native: NativeType = { tsType: prop.tsType, tsOptional: prop.optional };
+  if (prop.doc) native.doc = prop.doc;
+  return { ...withNative(field, native), access: { computed: true } };
 }
 
 /**

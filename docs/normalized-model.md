@@ -31,7 +31,7 @@ Generator'daki **tek** model tipi: `NormalizedModel` (`src/shared/normalizedMode
 | `reference?` | `target`, `display`, `populate[]`, `include`, `relationType` |
 | `object?` | `fields?` (yoksa opak obje), `typeName?`, `schemaName?` |
 | `filter?` | `searchable`, `type` (`eq \| regex \| range \| date-range \| boolean \| enum \| reference`) |
-| `access?` | `readonly`, `hiddenFromCreate`, `hiddenFromUpdate`, `hidden` (hiçbir cevapta dönmez), `adminOnly`, `computed` (okurken hesaplanır: saklanmaz, gövdede / filtrede / sıralamada yok, satırda opsiyonel; modülün `map_rows` / `mapRows` hook'u doldurur), `detailOnly` (ağır gövde: liste okumasında projeksiyonla dışarıda, liste satırında `null`; getOne döner) |
+| `access?` | `readonly`, `hiddenFromCreate`, `hiddenFromUpdate`, `hidden` (hiçbir cevapta dönmez), `adminOnly`, `computed` (okurken hesaplanır: saklanmaz, gövdede / filtrede / sıralamada yok, satırda opsiyonel; modülün `map_rows` / `mapRows` / `MapRows` hook'u doldurur. Saklama katmanında yok: Python doküman modeli, Express `Schema`, .NET `[NotMapped]`. Express / .NET'te kod dosyasında işaretli kalır ve parser geri okur: interface'te `computed` JSDoc'lu ama `Schema`'da yok / `[NotMapped]` + işaret yorumunda `computed`. `readonly` / `hiddenFromCreate` / `hiddenFromUpdate` ile birlikte yazılmaz, kanonik model onları atar), `detailOnly` (ağır gövde: liste okumasında projeksiyonla dışarıda, liste satırında `null`; getOne döner) |
 | `ui?` | `label`, `list`, `component`, `defaultValue` |
 | `native?` | Ham parser tipi, bilinmeyen seçenekler, TS tipi, JSDoc. Yalnızca aynı stack'in emitter'ı okur |
 

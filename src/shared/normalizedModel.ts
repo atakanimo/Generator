@@ -281,6 +281,13 @@ function canonicalSubField(f: NormalizedObjectSubField): NormalizedObjectSubFiel
   );
 }
 
+/** `computed` is never written: `readonly` / `hiddenFromCreate` / `hiddenFromUpdate` add nothing and are dropped. */
+function canonicalAccess(access: NormalizedField['access']): NormalizedField['access'] {
+  if (access?.computed !== true) return access;
+  const { readonly: _r, hiddenFromCreate: _c, hiddenFromUpdate: _u, ...rest } = access;
+  return rest;
+}
+
 export function canonicalField(f: NormalizedField): NormalizedField {
   return ordered(
     {
@@ -291,7 +298,7 @@ export function canonicalField(f: NormalizedField): NormalizedField {
       enum: sub(f.enum, ['values', 'numbers']),
       constraints: sub(f.constraints, ['minLength', 'maxLength', 'min', 'max', 'pattern']),
       filter: sub(f.filter, ['searchable', 'type', 'nativeType']),
-      access: sub(f.access, ['readonly', 'hiddenFromCreate', 'hiddenFromUpdate', 'hidden', 'adminOnly', 'computed', 'detailOnly']),
+      access: sub(canonicalAccess(f.access), ['readonly', 'hiddenFromCreate', 'hiddenFromUpdate', 'hidden', 'adminOnly', 'computed', 'detailOnly']),
       ui: sub(f.ui, ['label', 'list', 'component', 'defaultValue'])
     },
     [

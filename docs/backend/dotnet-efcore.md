@@ -147,7 +147,11 @@ Diğer kurallar: strict body (`UnmappedMemberHandling.Disallow`; `id` / `_id` �
 
 Bir modülün modeli = entity dosyası + manifest satırı (`mergeModel`): tip, `required`, `isArray`, `unique`, `trim`, enum, default, alt alanlar ve reference hedefi dosyadan; filtre, erişim, UI ve API manifest'ten. Model editörü (`writeDotnetModel`) taslağı önce manifest satırı olarak yazar, sonra generate eder.
 
-Entity G şablonu her model property'sinin sonuna işaret yorumu yazar: `// <json adı> [unique] [trim] [required] [ref=<Klasör>]`, navigation'larda `// nav`. `ref=` navigation'sız reference'ın (document stratejisi) hedefidir; ilişkisel host'ta hedef navigation'dan okunur. Parser (`entityParser.ts`) JSON adını ve bu bayrakları yorumdan, gerisini C# bildiriminden okur. Elle yazılmış entity'ler de okunur (JSON adı camelCase), ama generate listesine girmez.
+Entity G şablonu her model property'sinin sonuna işaret yorumu yazar: `// <json adı> [unique] [trim] [required] [ref=<Klasör>] [computed]`, navigation'larda `// nav`. `computed` (ya da üst satırda `[NotMapped]`) dosyanın sahip olduğu tek erişim ayarıdır; parser onu `access.computed` okur. `ref=` navigation'sız reference'ın (document stratejisi) hedefidir; ilişkisel host'ta hedef navigation'dan okunur. Parser (`entityParser.ts`) JSON adını ve bu bayrakları yorumdan, gerisini C# bildiriminden okur. Elle yazılmış entity'ler de okunur (JSON adı camelCase), ama generate listesine girmez.
+
+## Okurken hesaplanan alanlar (`access.computed`)
+
+Property entity'de kalır, üstüne `[NotMapped]` gelir (`System.ComponentModel.DataAnnotations.Schema`). Böylece tabloda ya da dokümanda yer almaz ve migration'a kolon girmez. Her zaman nullable'dır, navigation ve populate almaz, sağlayıcı config'ine (`relational.ts` / `mongodb.ts`) girmez. Row projeksiyonlarında (`Row`, `ListRow`, `WriteRow`) değeri `null`'dır. `MapRows` (list, getOne, export) `row with { Prop = … }` ile doldurur. Body'de, filtrede ve `SortMap`'te yer almaz; `sortBy` 400 döner.
 
 ## Migration
 

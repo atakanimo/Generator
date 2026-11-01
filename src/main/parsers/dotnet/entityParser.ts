@@ -4,8 +4,9 @@
  * required, isArray, unique, trim, enum values, default, object sub-fields, reference target); filters, access, UI
  * and API settings come from the manifest row (`mergeModel`).
  *
- * Each model property line ends with a marker comment `// <json name> [unique] [trim] [required]`; navigation
- * properties end with `// nav`. Hand-written entities without markers still parse (JSON name = camelCase).
+ * Each model property line ends with a marker comment `// <json name> [unique] [trim] [required] [computed]`;
+ * navigation properties end with `// nav`. `computed` (or a `[NotMapped]` line above the property) is the one access
+ * setting the file owns: the property is not stored. Hand-written entities without markers still parse (JSON name = camelCase).
  */
 import { readFileSync } from 'fs';
 import { basename, dirname } from 'path';
@@ -34,14 +35,18 @@ interface Property {
   name: string;
   init?: string;
   marker?: string;
+  /** `[NotMapped]` on the line above. */
+  notMapped?: boolean;
 }
 
 function properties(body: string): Property[] {
-  return body
-    .split('\n')
-    .map((line) => PROPERTY.exec(line)?.groups)
-    .filter((g): g is Record<string, string> => !!g)
-    .map((g) => ({ type: g.type.replace(/\s+/g, ''), name: g.name, init: g.init?.trim(), marker: g.marker?.trim() }));
+  const lines = body.split('\n');
+  return lines.flatMap((line, i) => {
+    const g = PROPERTY.exec(line)?.groups;
+    if (!g) return [];
+    const notMapped = i > 0 && /^\s*\[NotMapped\]\s*$/.test(lines[i - 1]);
+    return [{ type: g.type.replace(/\s+/g, ''), name: g.name, init: g.init?.trim(), marker: g.marker?.trim(), ...(notMapped ? { notMapped } : {}) }];
+  });
 }
 
 /** Body of `class <name> ... { ... }` (brace matched). */
@@ -174,6 +179,7 @@ export function parseDotnetEntity(filePath: string, entityFolders: Map<string, s
     const field: NormalizedField = { name: json, kind: 'unknown', isArray: !!list, required: list ? flags.has('required') : !nullable };
     if (flags.has('unique')) field.unique = true;
     if (flags.has('trim')) field.trim = true;
+    if (flags.has('computed') || p.notMapped) field.access = { computed: true };
 
     const inner = list ?? base;
     const map = /^Dictionary<string,(\w+)>$/.exec(inner);
