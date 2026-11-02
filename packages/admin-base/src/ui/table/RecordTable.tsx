@@ -8,7 +8,9 @@ import {
   type GridRowId,
   type GridValidRowModel
 } from '@mui/x-data-grid';
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { rowActionsWidth } from '../actions/actions.js';
+import { useAdminTexts } from '../useAdminTexts.js';
 import { ataGridSx, useAtaGridLocaleText } from './gridStyles.js';
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
@@ -52,6 +54,10 @@ export interface RecordTableProps<T extends GridValidRowModel = GridValidRowMode
   title?: ReactNode;
   toolbar?: ReactNode;
   hints?: ReactNode[];
+  /** Satır işlemleri: resource sayfası gibi ilk kolonda çizilir (`GridRowButtons`). */
+  renderActions?: (row: T) => ReactNode;
+  /** Varsayılan `rowActionsWidth(2)`. */
+  actionsWidth?: number;
 }
 
 const defaultRowId = (row: GridValidRowModel): GridRowId => row.id as GridRowId;
@@ -83,8 +89,31 @@ export function RecordTable<T extends GridValidRowModel = GridValidRowModel>({
   toolbar,
   hints,
   initialState,
+  renderActions,
+  actionsWidth = rowActionsWidth(2),
   ...gridProps
 }: RecordTableProps<T>) {
+  const { text } = useAdminTexts();
+  // İlk kolon: çok kolonlu tabloda sondaki işlem kolonu kaydırılıp görünmez olur (ResourcePage ile aynı kural).
+  const gridColumns = useMemo<GridColDef<T>[]>(
+    () =>
+      renderActions
+        ? [
+            {
+              field: '__actions',
+              headerName: text('actions'),
+              width: actionsWidth,
+              minWidth: actionsWidth,
+              sortable: false,
+              filterable: false,
+              disableColumnMenu: true,
+              renderCell: params => renderActions(params.row)
+            },
+            ...columns
+          ]
+        : columns,
+    [columns, renderActions, actionsWidth, text]
+  );
   const localeText = useAtaGridLocaleText(loading);
   const server = paginationModel != null && onPaginationModelChange != null;
   const [client, setClient] = useState(() => ({ key: gridKey, model: clientModel(pageSize, initialState) }));
@@ -153,7 +182,7 @@ export function RecordTable<T extends GridValidRowModel = GridValidRowModel>({
           key={gridKey}
           {...gridProps}
           rows={rows}
-          columns={columns}
+          columns={gridColumns}
           getRowId={getRowId}
           loading={loading}
           autoHeight={auto}

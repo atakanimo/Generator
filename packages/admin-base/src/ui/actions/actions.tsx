@@ -162,20 +162,34 @@ export interface RowActionsProps {
   onAction: (action: RowAction<Row>) => void;
 }
 
-/** Satır işlemleri: `IconButton size="small"` (admin-ui kuralı). */
-export function RowActions({ row, actions, onView, onEdit, onDelete, onAction }: RowActionsProps) {
-  const texts = useAdminTexts();
-  const icon = (title: string, node: ReactNode, onClick: () => void, disabled?: boolean) => (
-    <Tooltip title={title} key={title}>
+export interface RowActionIconProps {
+  title: string;
+  icon: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}
+
+/** Tek satır işlemi: tooltip'li `IconButton size="small"`; tıklama satıra yayılmaz. */
+export function RowActionIcon({ title, icon, onClick, disabled }: RowActionIconProps) {
+  return (
+    <Tooltip title={title}>
       <span>
         <IconButton size='small' aria-label={title} disabled={disabled} onClick={event => {
           event.stopPropagation();
           onClick();
         }}>
-          {node}
+          {icon}
         </IconButton>
       </span>
     </Tooltip>
+  );
+}
+
+/** Satır işlemleri: `IconButton size="small"` (admin-ui kuralı). */
+export function RowActions({ row, actions, onView, onEdit, onDelete, onAction }: RowActionsProps) {
+  const texts = useAdminTexts();
+  const icon = (title: string, node: ReactNode, onClick: () => void, disabled?: boolean) => (
+    <RowActionIcon key={title} title={title} icon={node} onClick={onClick} disabled={disabled} />
   );
 
   return (

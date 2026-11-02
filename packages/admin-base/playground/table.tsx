@@ -1,17 +1,12 @@
 import { Button, Stack, TextField } from '@mui/material';
 import type { GridColDef, GridPaginationModel } from '@mui/x-data-grid';
 import { useEffect, useMemo, useState } from 'react';
-import { GridRowButtons, RecordTable, StatusChip, dateTimeColumn, numberColumn, type StatusChipMap } from '../src/index.js';
+import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined';
+import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
+import { GridRowButtons, RecordTable } from '../src/index.js';
 import { pageUserSubscriptions, patchUserSubscription } from './mockBackend.js';
 
 type Row = { id: string; status: string; provider: string; deepDiveDailyUsed: number; currentPeriodEnd: string; updatedAt: string };
-
-const STATUS: StatusChipMap = {
-  active: { label: 'Aktif', color: 'success' },
-  grace_period: { label: 'Ek süre', color: 'warning' },
-  billing_retry: { label: 'Ödeme yeniden', color: 'warning' },
-  canceled: { label: 'İptal', color: 'default' }
-};
 
 /** Örnek: üstte düzenlenebilir istemci tablo (autoHeight), altta sunucu sayfalı + aksiyonlu tablo (fill). */
 export function TableDemo() {
@@ -38,39 +33,40 @@ export function TableDemo() {
 
   const editColumns: GridColDef<Row>[] = [
     { field: 'provider', headerName: 'Sağlayıcı', width: 140 },
-    numberColumn<Row>('deepDiveDailyUsed', { headerName: 'Günlük kullanım', width: 150, editable: true }),
-    dateTimeColumn<Row>('updatedAt', { headerName: 'Güncellendi' })
+    { field: 'deepDiveDailyUsed', headerName: 'Günlük kullanım', width: 150, editable: true },
+    { field: 'updatedAt', headerName: 'Güncellendi', width: 200 }
   ];
 
   const columns: GridColDef<Row>[] = [
     { field: 'id', headerName: 'Id', width: 220 },
-    { field: 'status', headerName: 'Durum', width: 140, renderCell: ({ value }) => <StatusChip value={value} map={STATUS} fallback={{ label: 'Bitti' }} /> },
-    numberColumn<Row>('deepDiveDailyUsed', { headerName: 'Kullanım', digits: 0 }),
-    dateTimeColumn<Row>('currentPeriodEnd', { headerName: 'Dönem sonu' }),
-    {
-      field: 'actions',
-      headerName: 'İşlemler',
-      width: 200,
-      sortable: false,
-      renderCell: ({ row }) => (
-        <GridRowButtons
-          buttons={[
-            {
-              label: 'Sıfırla',
-              variant: 'outlined',
-              disabled: row.deepDiveDailyUsed === 0,
-              tooltip: row.deepDiveDailyUsed === 0 ? 'Zaten sıfır' : 'Kullanımı sıfırla',
-              onClick: () => {
-                patchUserSubscription(row.id, { deepDiveDailyUsed: 0 });
-                setVersion(v => v + 1);
-              }
-            },
-            { label: 'İptal', color: 'error', onClick: () => { patchUserSubscription(row.id, { status: 'canceled' }); setVersion(v => v + 1); } }
-          ]}
-        />
-      )
-    }
+    { field: 'status', headerName: 'Durum', width: 140 },
+    { field: 'deepDiveDailyUsed', headerName: 'Kullanım', width: 110 },
+    { field: 'currentPeriodEnd', headerName: 'Dönem sonu', width: 200 }
   ];
+
+  const renderActions = (row: Row) => (
+    <GridRowButtons
+      buttons={[
+        {
+          title: 'Kullanımı sıfırla',
+          icon: <RestartAltOutlinedIcon fontSize='small' />,
+          disabled: row.deepDiveDailyUsed === 0,
+          onClick: () => {
+            patchUserSubscription(row.id, { deepDiveDailyUsed: 0 });
+            setVersion(v => v + 1);
+          }
+        },
+        {
+          title: 'İptal et',
+          icon: <BlockOutlinedIcon fontSize='small' />,
+          onClick: () => {
+            patchUserSubscription(row.id, { status: 'canceled' });
+            setVersion(v => v + 1);
+          }
+        }
+      ]}
+    />
+  );
 
   return (
     <Stack spacing={3} sx={{ p: 3, height: '100%', minHeight: 0 }}>
@@ -105,6 +101,7 @@ export function TableDemo() {
           hints={[`Toplam ${page.total}`]}
           rows={page.items as unknown as Row[]}
           columns={columns}
+          renderActions={renderActions}
           height='fill'
           loading={loading}
           rowCount={page.total}

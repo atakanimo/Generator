@@ -23,26 +23,8 @@ export { ResourceDetailDrawer, type ResourceDetailDrawerProps } from './ui/detai
 export { isColumnSortable } from './ui/table/columns.js';
 export { RecordTable, type RecordTableHeight, type RecordTableProps, type RecordTableSearch } from './ui/table/RecordTable.js';
 export { ataGridSx, useAtaGridLocaleText, ATA_GRID_CELL_FILL } from './ui/table/gridStyles.js';
-export {
-  GridRowButtons,
-  StatusChip,
-  resolveStatusChip,
-  numberColumn,
-  percentColumn,
-  dateTimeColumn,
-  formatNumberCell,
-  formatPercentCell,
-  formatDateTimeCell,
-  ATA_EMPTY_CELL,
-  type GridRowButton,
-  type GridRowButtonsProps,
-  type StatusChipOption,
-  type StatusChipMap,
-  type StatusChipProps,
-  type NumberCellOptions,
-  type PercentCellOptions,
-  type ColumnOverrides
-} from './ui/table/gridCells.js';
+export { GridRowButtons, rowActionsWidth, type GridRowButton, type GridRowButtonsProps } from './ui/table/gridCells.js';
+export { RowActionIcon, type RowActionIconProps } from './ui/actions/actions.js';
 export { enumChoices, enumLabelOf, enumValueFromInput, type EnumChoice } from './ui/enumChoices.js';
 export { FormFields, type FormFieldsProps } from './ui/form/FormFields.js';
 export { formValuesToBody, initialFormValues, isFieldVisible, type FormMode } from './ui/form/values.js';
