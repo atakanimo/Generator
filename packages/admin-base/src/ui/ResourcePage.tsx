@@ -7,7 +7,6 @@ import {
   type GridRowSelectionModel,
   type GridSortModel
 } from '@mui/x-data-grid';
-import { trTR } from '@mui/x-data-grid/locales';
 import { useMemo, useState } from 'react';
 import type { Id, ListBody } from '../contract/api.js';
 import { useResourceList, useResourceMutations } from '../react/hooks.js';
@@ -29,6 +28,7 @@ import { FilterBar } from './filters/FilterBar.js';
 import { ResourceFormDrawer } from './form/ResourceFormDrawer.js';
 import type { FormMode } from './form/values.js';
 import { buildColumns } from './table/columns.js';
+import { ataGridSx, useAtaGridLocaleText } from './table/gridStyles.js';
 import { JsonDialog, type JsonDialogState } from './table/JsonDialog.js';
 import { useAdminTexts } from './useAdminTexts.js';
 import { AtaAdminFill, AtaAdminPage } from './layout/AtaAdminPage.js';
@@ -83,6 +83,7 @@ export function ResourcePage({ resource }: ResourcePageProps) {
   }, [filters, pagination, sortModel]);
 
   const list = useResourceList(resource, body);
+  const localeText = useAtaGridLocaleText(list.isFetching);
   const rows = (list.data?.items ?? []) as Row[];
   const { create, update, remove } = useResourceMutations(resource);
   const executeAction = useExecuteAction(resource);
@@ -214,24 +215,8 @@ export function ResourcePage({ resource }: ResourcePageProps) {
           onRowSelectionModelChange={setSelection}
           disableRowSelectionOnClick
           disableColumnFilter
-          localeText={{
-            ...trTR.components.MuiDataGrid.defaultProps.localeText,
-            noRowsLabel: list.isFetching ? '' : text('noRows'),
-            paginationRowsPerPage: text('rowsPerPage'),
-            paginationDisplayedRows: ({ from, to, count }) => text('displayedRows', { from, to, count: count === -1 ? '?' : count })
-          }}
-          sx={{
-            flex: 1,
-            minHeight: 320,
-            border: 1,
-            borderColor: 'divider',
-            borderRadius: 1,
-            bgcolor: 'background.paper',
-            // Header like the reference admin (DataGrid v7 look): page background behind headers, semi-bold 13px titles
-            '& .MuiDataGrid-columnHeader, & .MuiDataGrid-filler, & .MuiDataGrid-scrollbarFiller--header': { bgcolor: 'background.default' },
-            '& .MuiDataGrid-columnHeaderTitle': { fontWeight: 600, fontSize: '0.8125rem' },
-            '& .MuiDataGrid-cell': { display: 'flex', alignItems: 'center', fontSize: '0.875rem' }
-          }}
+          localeText={localeText}
+          sx={{ ...ataGridSx, flex: 1, minHeight: 320 }}
         />
       </AtaAdminFill>
 

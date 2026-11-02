@@ -1,4 +1,5 @@
 import DashboardOutlined from '@mui/icons-material/DashboardOutlined';
+import TableChartOutlined from '@mui/icons-material/TableChartOutlined';
 import { Alert, CssBaseline, LinearProgress, Snackbar, ThemeProvider, createTheme } from '@mui/material';
 import { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -8,6 +9,7 @@ import { createHostApi, currentUserId } from './mockBackend.js';
 import { resources, translations } from './resources.js';
 import { LoginDemo } from './login.js';
 import { DashboardDemo } from './dashboard.js';
+import { TableDemo } from './table.js';
 
 type Toast = { message: string; severity: 'success' | 'error' } | null;
 
@@ -27,6 +29,7 @@ function App() {
   const navItems = useMemo(
     () => [
       { path: '/dashboard', label: 'Dashboard', icon: DashboardOutlined },
+      { path: '/table', label: 'Tablo', icon: TableChartOutlined },
       ...routes.map(route => ({ id: route.id, path: route.path, label: t(route.text, { defaultValue: route.path }), icon: route.icon }))
     ],
     [routes, t]
@@ -38,11 +41,12 @@ function App() {
       <AtaAdminLayout title='Playground' navItems={navItems} user={{ email: 'admin@example.com' }} onLogout={() => setToast({ message: 'Logout', severity: 'success' })} version='v0'>
         <Routes>
           <Route path='/dashboard' element={<DashboardDemo />} />
+          <Route path='/table' element={<TableDemo />} />
           {routes.map(route => {
             const Page = route.element;
             return <Route key={route.path} path={route.path} element={<Page />} />;
           })}
-          <Route path='*' element={<Navigate to={new URLSearchParams(location.search).has('dashboard') ? '/dashboard' : routes[routes.length - 1].path} replace />} />
+          <Route path='*' element={<Navigate to={new URLSearchParams(location.search).has('dashboard') ? '/dashboard' : new URLSearchParams(location.search).has('table') ? '/table' : routes[routes.length - 1].path} replace />} />
         </Routes>
       </AtaAdminLayout>
       <Snackbar open={toast !== null} autoHideDuration={3000} onClose={() => setToast(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>

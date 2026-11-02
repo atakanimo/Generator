@@ -184,3 +184,17 @@ export function createHostApi({ onLoading, onToast }: HostHooks) {
   );
   return api;
 }
+
+/** Tablo örneği (`table.tsx`): userSubscriptions üzerinde sunucu sayfalama taklidi; populate yok. */
+export function pageUserSubscriptions(page: number, pageSize: number): { items: Doc[]; total: number } {
+  const start = page * pageSize;
+  return { items: userSubscriptions.slice(start, start + pageSize).map(doc => ({ ...doc })), total: userSubscriptions.length };
+}
+
+/** Tablo örneği: tek alanı yerinde günceller (processRowUpdate). */
+export function patchUserSubscription(id: string, patch: Record<string, unknown>): Doc {
+  const doc = userSubscriptions.find(d => d.id === id);
+  if (!doc) throw new Error(`userSubscription ${id} yok`);
+  Object.assign(doc, patch, { updatedAt: dayjs().toISOString() });
+  return { ...doc };
+}
