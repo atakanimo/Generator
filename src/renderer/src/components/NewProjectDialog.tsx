@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, TextField, Typography } from '@mui/material';
 import { useAppDispatch } from '../store/hooks';
-import { bootstrapBackendProject, pickDirectory } from '../features/project/projectSlice';
+import { bootstrapAdminPanel, bootstrapBackendProject, pickDirectory } from '../features/project/projectSlice';
+import { ADMIN_PANEL_DIR } from '@shared/adminPanel';
 import type { BackendStackInfo } from '@shared/backendStacks';
 import { DATABASE_LABELS, STACK_DATABASES, type BackendDatabase, type BackendIdType, type HostDatabase } from '@shared/backendDatabase';
 
@@ -18,12 +19,14 @@ const ID_TYPE_LABELS: Record<BackendIdType, string> = { 'uuid-v7': 'uuid v7', ob
 /**
  * "Yeni … projesi" (PY9): empty folder + app name (+ database / id type when the stack offers a choice) →
  * `project:bootstrap<Stack>`. Existing projects are refused by main. The pair is written to the manifest and never changes.
+ * "Admin paneli de kur": right after the host, an ata-admin-base panel in `<root>/apps/admin` (`project:bootstrapAdmin`).
  */
 const NewProjectDialog = ({ info, onClose, onCreated }: NewProjectDialogProps) => {
   const dispatch = useAppDispatch();
   const [root, setRoot] = useState('');
   const [app, setApp] = useState('');
   const [picked, setPicked] = useState<Partial<HostDatabase>>({});
+  const [withAdmin, setWithAdmin] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -49,12 +52,20 @@ const NewProjectDialog = ({ info, onClose, onCreated }: NewProjectDialogProps) =
     setBusy(true);
     setError(null);
     const { success, files, error: bootstrapError } = await dispatch(bootstrapBackendProject({ stack: info.stack, root, app, db })).unwrap();
-    setBusy(false);
     if (!success) {
+      setBusy(false);
       setError(bootstrapError || 'Proje oluşturulamadı');
       return;
     }
-    onCreated(root, `${app}: ${files?.length ?? 0} dosya oluşturuldu.`);
+    let message = `${app}: ${files?.length ?? 0} dosya oluşturuldu.`;
+    if (withAdmin) {
+      const admin = await dispatch(bootstrapAdminPanel({ root: `${root}/${ADMIN_PANEL_DIR}`, app, stack: info.stack })).unwrap();
+      message = admin.success
+        ? `${message} Admin paneli (${ADMIN_PANEL_DIR}): ${admin.files?.length ?? 0} dosya.`
+        : `${message} Admin paneli kurulamadı: ${admin.error ?? 'bilinmeyen hata'}`;
+    }
+    setBusy(false);
+    onCreated(root, message);
   };
 
   return (
@@ -111,6 +122,11 @@ const NewProjectDialog = ({ info, onClose, onCreated }: NewProjectDialogProps) =
             </TextField>
           </Box>
         )}
+        <FormControlLabel
+          sx={{ mt: 1 }}
+          control={<Checkbox checked={withAdmin} onChange={(e) => setWithAdmin(e.target.checked)} />}
+          label={`Admin paneli de kur (${ADMIN_PANEL_DIR}: @atakanimo/ata-admin-base, tema, menü, login, i18n)`}
+        />
         {error && (
           <Alert severity='error' sx={{ mt: 2 }}>
             {error}

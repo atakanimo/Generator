@@ -1,5 +1,5 @@
 ---
-description: SharedFrame, StockExchange, Varlik360 — generated files are written by the Generator
+description: SharedFrame, StockExchange, Varlik360, CeyizDefterim — generated files are written by the Generator
 alwaysApply: true
 ---
 
@@ -7,7 +7,7 @@ alwaysApply: true
 
 Full text: `/Users/atakanatabey/Projects/Generator/docs/AtaProjectCommon.md`.
 
-Applies to SharedFrame, StockExchange and Varlik360. Generator's own source is not produced by this rule. The host is the open project root that contains `.generator/manifest.json`.
+Applies to SharedFrame, StockExchange, Varlik360 and CeyizDefterim. Generator's own source is not produced by this rule. The host is the open project root that contains `.generator/manifest.json`.
 
 - Do not hand-write generated admin config, stamped backend files, or a new entity admin screen (page, table, service, route) in those hosts. Change the model, then generate.
 - Run `node /Users/atakanatabey/Projects/Generator/scripts/host.mjs admin-config <host> [Entity]` or the same command with `generate`. Same functions as the Electron Generate action. `--dry-run` prints paths and writes nothing.

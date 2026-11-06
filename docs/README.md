@@ -17,7 +17,9 @@ Model dosyası → Parser (stack'e özel) → NormalizedModel v2 → manifest v3
 | [backend/express-mongoose.md](backend/express-mongoose.md) | Express + Mongoose: üretilen dosyalar, custom bloklar, hook'lar, core asset'ler, ownership |
 | [backend/dotnet-efcore.md](backend/dotnet-efcore.md) | .NET 10 + EF Core: host düzeni, G / K dosyalar, partial'lar, servisler, ownership, parser, migration |
 | [backend/python-fastapi.md](backend/python-fastapi.md) | Python + FastAPI + MongoDB: yeni proje kurulumu, host düzeni, G / K dosyalar, hook'lar, alan türleri, `null` kuralı, modül testi, Pydantic içe aktarma |
+| [backend/auth.md](backend/auth.md) | Ortak auth katmanı planı (üç stack + admin-base): sözleşme, user modeli, token, hostlarda düzeltilecekler. Uygulanmadı |
 | [frontend/admin-base-config.md](frontend/admin-base-config.md) | Admin FE config üretimi ve dosya kuralı |
+| [frontend/admin-host.md](frontend/admin-host.md) | Yeni admin paneli: tema, menü, login, store, i18n iskeleti |
 | [AtaProjectCommon.md](AtaProjectCommon.md) | SharedFrame, StockExchange, Varlik360: üretilmiş dosya Generator ile yazılır |
 | [frontend/client-data-layer.md](frontend/client-data-layer.md) | Mobil / web veri katmanı üretimi: tipler, servis, thunk, slice (UI yok) |
 | [admin-base-package.md](admin-base-package.md) | `@atakanimo/ata-admin-base` paketi: geliştirme, host kurulumu |

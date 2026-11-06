@@ -472,6 +472,16 @@ export const bootstrapBackendProject = createAsyncThunk(
   }
 );
 
+/** New admin panel (`project:bootstrapAdmin`); same contract as `bootstrapBackendProject`. */
+export const bootstrapAdminPanel = createAsyncThunk(
+  'project/bootstrapAdminPanel',
+  async ({ root, app, stack }: { root: string; app: string; stack: NewProjectStack }): Promise<BootstrapProjectResult> => {
+    const call = window.electronAPI?.project?.bootstrapAdmin;
+    if (!call) return { success: false, error: 'Admin bootstrap API not available' };
+    return call(root, app, stack);
+  }
+);
+
 // Async thunk for generating frontend code
 export const generateFrontend = createAsyncThunk(
   'project/generateFrontend',

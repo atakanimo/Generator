@@ -5,7 +5,7 @@ import { scanProject } from './ipc/projectScanner.js';
 import type { SourceType } from './ipc/projectScanner.js';
 import type { NormalizedModel } from '../shared/normalizedModel.js';
 import type { ManifestWorkspacePrefs } from '../shared/ipcTypes.js';
-import type { HostDatabase } from '../shared/backendDatabase.js';
+import type { BackendStack, HostDatabase } from '../shared/backendDatabase.js';
 import { loadModelForEditor } from './ipc/modelEditor.js';
 import { saveSchemaConfig } from './ipc/configManager.js';
 import { recordWorkspaceManifestUpsert, getWorkspacePreferences, stashModelInManifest, updateWorkspacePreferencesInManifest, reconcileModelFromDisk } from './utils/manifestSnapshot.js';
@@ -19,6 +19,7 @@ import { getRelatedModelFieldNames } from './ipc/relatedModelFields.js';
 import { log } from './utils/logger.js';
 import { bootstrapDotnetProject, generateDotnetBackend, loadDotnetModelDraft, writeDotnetModel } from './ipc/dotnetBackend.js';
 import { bootstrapExpressProject } from './ipc/expressBackend.js';
+import { bootstrapAdminProject } from './ipc/adminPanel.js';
 import {
   bootstrapPythonProject,
   generatePythonBackend,
@@ -372,6 +373,13 @@ app.whenReady().then(() => {
     const target = root?.trim();
     if (!target || !appName?.trim()) return { success: false, error: 'Klasör ve uygulama adı gerekli.' };
     return bootstrapExpressProject(target, appName.trim());
+  });
+
+  ipcMain.handle('project:bootstrapAdmin', async (_, { root, app: appName, stack }: { root?: string; app?: string; stack?: BackendStack }) => {
+    const target = root?.trim();
+    if (!target || !appName?.trim()) return { success: false, error: 'Klasör ve panel adı gerekli.' };
+    if (!stack) return { success: false, error: 'Backend stack gerekli.' };
+    return bootstrapAdminProject(target, appName.trim(), stack);
   });
 
   ipcMain.handle(

@@ -25,6 +25,7 @@ Varlik360 BE: `/Users/atakanatabey/Projects/VarlikALL/Varlik360/src/modules/**/*
 | `node scripts/verify/regen-varlik360.mjs --compare <sol> <sağ>` | İki regen etiketi arasında dosya farkı (`<sol>..<sağ>.patch`); 0 = aynı | saniyeler |
 | `node scripts/verify/regen-varlik360.mjs --core-assets <etiket> [assetDir]` | Host kopyasında core asset'ler değiştirilip `tsc` | dakikalar |
 | `node scripts/verify/express-py1-e2e.mjs [--keep]` | PY1 biçimleri Express'te: `Reminders` fixture modeli (`fixtures/dotnet/models.json`) Varlik360 kopyasına üretilir, `src/app.ts`'e bağlanır, kopyada `tsc` (yalnız yeni modülün çeviri anahtarları hariç), Docker'da Mongo + HTTP uygulaması → `dotnet-py1-formats-smoke.mjs` (.NET ile aynı 17 senaryo). Docker gerekir | ~1 dk |
+| `node scripts/verify/admin-bootstrap.mjs [--install] [--keep]` | Yeni admin paneli ([frontend/admin-host.md](frontend/admin-host.md)): her backend için kurulum, token kalmadı, auth öneki / dev proxy, bilgi ağacı, ikinci kurulum reddi; `--install`: `npm install`, iki Varlik360 modülünün config'i, panelde `typecheck` + `build` | saniyeler; `--install` ~1 dk |
 | `node scripts/verify/migrate-module.mjs <m> --ops list,getOne,… [--no-admin] [--no-auth] [--be-only\|--fe-only]` | Bir modülü arayüzle aynı çağrılarla taşır (manifest kaydı + BE + FE config). **Varlik360'a yazar** | saniyeler |
 
 `--planned`: plandaki işlem setleri, gizli alanlar ve `users` için `self` + adminOnly birleşik modele uygulanır. `--core-overlay`: güncel şablonların istediği core asset'ler kopyaya önce kopyalanır. `out/regen/` altında karşılaştırma tabanı olarak son geçerli etiket saklanır (bugün `gate7`).
@@ -38,6 +39,7 @@ Varlik360 BE: `/Users/atakanatabey/Projects/VarlikALL/Varlik360/src/modules/**/*
 | BE şablonları / `BackendGenerator` | `express-py1-e2e` (tip bilgileri, kısıtlar, `traceId`); regen `--planned --core-overlay` → tabana göre `--compare` yalnızca beklenen fark, kopyada `tsc` artmaz, custom blok içerikleri birebir |
 | Core asset'ler | `test-core-assets` + `--core-assets` |
 | Admin config | `admin-config-check` |
+| Admin paneli iskeleti (`generator-assets/admin-base/`, `AdminHostBootstrap`, `adminPanel.ts`) | `admin-bootstrap --install` |
 | Liste filtresi (`fieldFilter.ts`, emitter filtreleri, `modelMerge` varsayılanları) | `filter-determinism`, sonra `regen-dotnet` / `regen-python` (Python `test_contacts_cases` range'i açık filtreyle bekler) |
 | `packages/admin-base` | `npm run typecheck`, `npm test`, `npm run build` |
 | .NET üreticisi (`dotnet-efcore/`, şablonlar, asset'ler, parser, `dotnetBackend.ts`) | `regen-dotnet.mjs`, sonra `dotnet-e2e.mjs` (arka planda) |

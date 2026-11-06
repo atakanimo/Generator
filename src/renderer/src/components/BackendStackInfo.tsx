@@ -1,13 +1,13 @@
 import { useState, type MouseEvent } from 'react';
 import { Box, Chip, IconButton, Popover, Tooltip, Typography } from '@mui/material';
 import { InfoOutlined } from '@mui/icons-material';
-import type { BackendStackInfo, StackFileOwner } from '@shared/backendStacks';
+import type { ProjectInfo, StackFileOwner } from '@shared/backendStacks';
 
 const OWNER_COLOR: Record<StackFileOwner, 'primary' | 'success' | 'default'> = { G: 'primary', K: 'success', asset: 'default' };
 const OWNER_HELP = 'G: Generator her generate\'te yeniden yazar · K: bir kez oluşturulur, sonra sizin · asset: Generator core dosyası, yoksa yazılır';
 
-/** Info icon next to a "Yeni … projesi" button: folder tree (G / K / asset), technologies, run commands, doc (PY9). */
-const BackendStackInfoButton = ({ info }: { info: BackendStackInfo }) => {
+/** Info icon next to a "Yeni …" button (backend stacks, admin panel): folder tree (G / K / asset), technologies, run commands, doc (PY9). */
+const BackendStackInfoButton = ({ info }: { info: ProjectInfo }) => {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const { label, summary, technologies, tree, placeholders, runCommands, doc } = info;
 

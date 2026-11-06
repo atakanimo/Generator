@@ -9,7 +9,7 @@ import type {
 } from '../shared/ipcTypes.js';
 import type { NormalizedModel } from '../shared/normalizedModel.js';
 import type { ModelDraft } from '../shared/modelDraft.js';
-import type { HostDatabase } from '../shared/backendDatabase.js';
+import type { BackendStack, HostDatabase } from '../shared/backendDatabase.js';
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
@@ -88,6 +88,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     bootstrapDotnet: (root: string, app: string, db: HostDatabase) => ipcRenderer.invoke('project:bootstrapDotnet', { root, app, db }),
     bootstrapPython: (root: string, app: string) => ipcRenderer.invoke('project:bootstrapPython', { root, app }),
     bootstrapExpress: (root: string, app: string) => ipcRenderer.invoke('project:bootstrapExpress', { root, app }),
+    bootstrapAdmin: (root: string, app: string, stack: BackendStack) => ipcRenderer.invoke('project:bootstrapAdmin', { root, app, stack }),
     previewPythonImport: (projectPath: string, filePath: string, options?: { className?: string; report?: boolean; allowRemote?: boolean }) =>
       ipcRenderer.invoke('project:previewPythonImport', { projectPath, filePath, options }),
     importPythonModel: (projectPath: string, filePath: string, options?: { className?: string }) =>

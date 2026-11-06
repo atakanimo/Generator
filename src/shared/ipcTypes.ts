@@ -236,7 +236,7 @@ export interface PythonImportResult {
   error?: string;
 }
 
-/** New-host bootstrap (`project:bootstrapDotnet` / `bootstrapExpress` / `bootstrapPython`): created files, project-relative. */
+/** New-host bootstrap (`project:bootstrapDotnet` / `bootstrapExpress` / `bootstrapPython` / `bootstrapAdmin`): created files, project-relative. */
 export interface BootstrapProjectResult {
   success: boolean;
   /** Python: snake_case package (`src/<package>`); Express: npm package name. */
@@ -302,6 +302,8 @@ export interface ElectronAPI {
     bootstrapPython: (root: string, app: string) => Promise<BootstrapProjectResult>;
     /** New Express + Mongoose + TypeScript host (skeleton + core assets) in `root`; `app` becomes a kebab-case npm name (PY9). */
     bootstrapExpress: (root: string, app: string) => Promise<BootstrapProjectResult>;
+    /** New `@atakanimo/ata-admin-base` admin panel in `root`, wired to `stack`'s API prefix / dev port (`shared/adminPanel.ts`). */
+    bootstrapAdmin: (root: string, app: string, stack: BackendStack) => Promise<BootstrapProjectResult>;
     /** PY7: parse a hand-written Pydantic module (`modules/<m>/model.py`) + extra-field report of its collection. */
     previewPythonImport: (
       projectPath: string,

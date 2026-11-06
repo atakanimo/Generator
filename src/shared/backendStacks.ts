@@ -33,14 +33,12 @@ export interface StackRunCommand {
   comment?: string;
 }
 
-export interface BackendStackInfo {
-  stack: NewProjectStack;
+/** What the info popover shows for a "Yeni …" button (backend stacks and the admin panel, `adminPanel.ts`). */
+export interface ProjectInfo {
   /** Button and dialog title. */
   label: string;
   /** One line under the dialog title. */
   summary: string;
-  /** Databases this stack generates for (labels of `STACK_DATABASES`). */
-  databases: string[];
   technologies: StackTechnology[];
   tree: StackTreeEntry[];
   /** Placeholders in tree and commands: `<App>` / `<pkg>` (from the app name), `<m>` module, `<Folder>` / `<E>` entity. */
@@ -49,6 +47,12 @@ export interface BackendStackInfo {
   /** Generator repo relative path of the stack doc. */
   doc: string;
   appName: { placeholder: string; helper: string };
+}
+
+export interface BackendStackInfo extends ProjectInfo {
+  stack: NewProjectStack;
+  /** Databases this stack generates for (labels of `STACK_DATABASES`). */
+  databases: string[];
 }
 
 const DATABASE_LABEL = 'Veritabanı';
@@ -239,7 +243,7 @@ export function backendStackInfo(stack: NewProjectStack): BackendStackInfo {
  * Host-relative paths of the tree entries (parent folders joined), with `<App>` / `<pkg>` replaced; entries holding
  * other placeholders or several names (`·`) are left out when `bootstrapOnly`.
  */
-export function stackTreePaths(info: BackendStackInfo, names: { app: string; pkg: string }, bootstrapOnly = true): string[] {
+export function stackTreePaths(info: ProjectInfo, names: { app: string; pkg: string }, bootstrapOnly = true): string[] {
   const parents: string[] = [];
   const out: string[] = [];
   for (const entry of info.tree) {

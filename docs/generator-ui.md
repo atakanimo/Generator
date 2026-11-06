@@ -10,6 +10,7 @@ Electron uygulaması: main (`src/main`), preload, renderer (`src/renderer/src`, 
 | Schema Designer | `pages/SchemaDesignPage.tsx` | Model seçimi, alan tablosu, BE / FE generate |
 | Model editörü | `components/AddModelModal.tsx` | Model oluşturma / düzenleme (model dosyasını yazar) |
 | API ayarları | `components/ModelApiSettingsPanel.tsx` | Model başına normal işlemler, auth, admin |
+| Yeni admin paneli | `components/NewAdminPanelDialog.tsx` | Boş klasöre ata-admin-base paneli; backend diyaloğunda "Admin paneli de kur" ([frontend/admin-host.md](frontend/admin-host.md)) |
 
 ## Schema Designer
 

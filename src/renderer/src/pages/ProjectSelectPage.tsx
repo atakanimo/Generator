@@ -35,6 +35,10 @@ import SchemaDesignPage from './SchemaDesignPage';
 import AddModelModal from '../components/AddModelModal';
 import BackendStackInfoButton from '../components/BackendStackInfo';
 import NewProjectDialog from '../components/NewProjectDialog';
+import NewAdminPanelDialog from '../components/NewAdminPanelDialog';
+import { ADMIN_BACKEND_DEFAULTS, ADMIN_PANEL_INFO } from '@shared/adminPanel';
+import type { BackendStack } from '@shared/backendDatabase';
+import { AdminPanelSettings } from '@mui/icons-material';
 import { NEW_PROJECT_STACKS, type BackendStackInfo } from '@shared/backendStacks';
 import type { ModelDraft } from '@shared/modelDraft';
 import { readLastProjectPath, writeLastProjectPath } from '../features/project/lastProjectPath';
@@ -79,6 +83,7 @@ const ProjectSelectPage = () => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
   const [newProject, setNewProject] = useState<BackendStackInfo | null>(null);
+  const [newAdminOpen, setNewAdminOpen] = useState(false);
 
   useEffect(() => {
     const last = readLastProjectPath();
@@ -93,6 +98,14 @@ const ProjectSelectPage = () => {
     writeLastProjectPath(root);
     dispatch(setProjectPath(root));
     dispatch(scanProjectFiles({ path: root }));
+    setSnackbarMessage(message);
+    setSnackbarSeverity('success');
+    setSnackbarOpen(true);
+  };
+
+  /** Admin panel only: the open backend project stays open (the panel is a frontend folder). */
+  const handleAdminPanelCreated = (_root: string, message: string) => {
+    setNewAdminOpen(false);
     setSnackbarMessage(message);
     setSnackbarSeverity('success');
     setSnackbarOpen(true);
@@ -253,6 +266,12 @@ const ProjectSelectPage = () => {
                 <BackendStackInfoButton info={info} />
               </Box>
             ))}
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Button size='small' startIcon={<AdminPanelSettings />} onClick={() => setNewAdminOpen(true)}>
+                {ADMIN_PANEL_INFO.label}
+              </Button>
+              <BackendStackInfoButton info={ADMIN_PANEL_INFO} />
+            </Box>
           </Box>
         </Paper>
 
@@ -445,6 +464,12 @@ const ProjectSelectPage = () => {
       {projectPath && <PythonImportDialog projectPath={projectPath} onClosed={handlePythonImportClosed} />}
 
       <NewProjectDialog info={newProject} onClose={() => setNewProject(null)} onCreated={handleProjectCreated} />
+      <NewAdminPanelDialog
+        open={newAdminOpen}
+        defaultStack={sourceType && sourceType in ADMIN_BACKEND_DEFAULTS ? (sourceType as BackendStack) : undefined}
+        onClose={() => setNewAdminOpen(false)}
+        onCreated={handleAdminPanelCreated}
+      />
 
       {/* Snackbar for notifications */}
       <Snackbar open={snackbarOpen} autoHideDuration={4000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
