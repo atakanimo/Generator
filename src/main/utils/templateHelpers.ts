@@ -59,7 +59,7 @@ export function getTemplatesDir(templateType: TemplateSet = 'backend-express-mon
 }
 
 /** Stacks whose core files ship as plain assets (`src/generator-assets/<stack>`). */
-export type GeneratorAssetStack = 'express-mongoose' | 'dotnet-efcore' | 'python-fastapi' | 'admin-base';
+export type GeneratorAssetStack = 'express-mongoose' | 'dotnet-efcore' | 'python-fastapi' | 'admin-base' | 'client-http';
 
 /**
  * Asset directory of a stack. Development: `src/generator-assets/<stack>`; packaged app:

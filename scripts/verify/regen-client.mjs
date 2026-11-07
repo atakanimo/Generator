@@ -68,7 +68,8 @@ const tsconfig = JSON.parse(readFileSync(join(mobile, 'tsconfig.json'), 'utf8'))
 writeFileSync(join(copy, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2));
 const servicesDir = join(copy, b.REDUX_RN_PRESET.dirs.services);
 const layerDirs = Object.values(b.REDUX_RN_PRESET.dirs).map(d => join(copy, d));
-const snapshot = () => Object.fromEntries(layerDirs.flatMap(d => readdirSync(d).map(f => [join(d, f), readFileSync(join(d, f), 'utf8')])));
+// Yalnız katman klasörlerindeki dosyalar (`services/api/` gibi alt klasörler üretilmez).
+const snapshot = () => Object.fromEntries(layerDirs.flatMap(d => readdirSync(d, { withFileTypes: true }).filter(e => e.isFile()).map(e => [join(d, e.name), readFileSync(join(d, e.name), 'utf8')])));
 const before = snapshot();
 
 const now = new Date(2026, 9, 21, 12, 0, 0);
@@ -219,15 +220,15 @@ await build({
   const st = () => store.getState().transactions;
   await store.dispatch(thunks.fetchTransactionsList());
   check(st().items.map(i => i.id).join() === 't1,t2' && st().hasMore === true, 'list: first page');
-  check(seen[0].data.limit === 2 && !seen[0].headers, 'list: listDefaults applied, loading shown');
+  check(seen[0].data.limit === 2 && !seen[0].skipLoading && !seen[0].headers, 'list: listDefaults applied, loading shown');
   check(st().items.every(i => i.notes === 'mapped'), 'list: mapRow applied to every row');
   await store.dispatch(thunks.fetchTransactionsList({ page: 2, append: true }));
   check(st().items.map(i => i.id).join() === 't1,t2,t3', 'list: append adds the next page');
-  check(seen[1].headers?.skipLoading === true, 'list: append skips the global loading');
+  check(seen[1].skipLoading === true && !seen[1].headers, 'list: append skips the global loading (config flag)');
   await store.dispatch(thunks.updateTransactions({ id: 't2', data: { quantity: 5 } }));
   const t2 = st().items.find(i => i.id === 't2');
   check(t2.quantity === 5 && t2.symbolId.displayText?.tr === 's1' && t2.userId.email === 'a@b.c', 'update: fields merged, populated relations kept');
-  check(seen[2].headers?.premiumUx === 'paywall' && seen[2].headers?.skipLoading === undefined, 'update: requestOptions headers reach the request');
+  check(seen[2].headers?.premiumUx === 'paywall' && seen[2].skipLoading === undefined, 'update: requestOptions headers reach the request');
   await store.dispatch(thunks.updateTransactions({ id: 't2', data: { symbolId: 's9' } }));
   check(JSON.stringify(st().items.find(i => i.id === 't2').symbolId) === '{"id":"s9"}', 'update: changed relation becomes { id }');
   await store.dispatch(thunks.fetchTransactionsById('t1'));

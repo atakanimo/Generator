@@ -12,6 +12,7 @@ Dosya adı ve yeri için Generator'ın bir çıktısı varsa (admin iskeleti `sr
 - **Kullanıcı uygulamaları (`apps/web`, `apps/mobile`): zorunlu değil.** Veri katmanı (servis, thunk, slice) Generator ile üretilebilir ya da elle yazılabilir; ekranlar her zaman elle yazılır. Üretilmiş bir dosya (`*.generated.ts`, ilk satır damgalı) yine elle düzenlenmez; özel kod başlıksız dosyaya gider.
 - **Backend:** damgalı dosyalar Generator'ındır (aşağıda).
 - **Auth her yerde istisnadır.** Generator auth üretemez; admin, web ve mobilde auth servisi / thunk'ı / slice'ı elle yazılır ve mevcut haliyle kalır. TanStack'e ya da Generator çıktısına taşınmaz.
+- **İstek dili yalnız `Accept-Language` header'ıdır** (api-contract §1.1, K6): `lang` / `x-lang` / `?lang=` ve gövdede dil alanı yok. Varsayılan dil projenindir (Generator asset'leri `en`; Varlik360 `tr`).
 
 ## Generator'ın yazdığı
 

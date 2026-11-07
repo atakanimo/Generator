@@ -3,15 +3,8 @@ import { DEFAULT_LANGUAGE } from '@config/i18n';
 import { normalizeLanguage } from '@helpers/i18n.helper';
 import { patchRequestContext } from '@utils/requestContext';
 
-/** İstek dili: `lang` / `x-lang` başlığı, `?lang=`, `Accept-Language`; yoksa varsayılan (`tr`). */
+/** İstek dili yalnız `Accept-Language` (api-contract K6); yoksa / desteklenmiyorsa varsayılan. */
 export function i18nMiddleware(req: Request, _res: Response, next: NextFunction): void {
-  const query = typeof req.query.lang === 'string' ? req.query.lang : undefined;
-  const language =
-    normalizeLanguage(req.get('lang')) ??
-    normalizeLanguage(req.get('x-lang')) ??
-    normalizeLanguage(query) ??
-    normalizeLanguage(req.get('accept-language')) ??
-    DEFAULT_LANGUAGE;
-  patchRequestContext({ language });
+  patchRequestContext({ language: normalizeLanguage(req.get('accept-language')) ?? DEFAULT_LANGUAGE });
   next();
 }

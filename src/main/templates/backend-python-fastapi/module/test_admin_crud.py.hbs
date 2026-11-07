@@ -136,7 +136,7 @@ async def test_auth_and_envelope(client, make_token, h) -> None:
 
 {{#if adminOps.create}}
 async def test_create_round_trip(client, h, refs) -> None:
-    resp = await client.post(f"{BASE}/create", json=body(0, refs), headers={**h, "lang": "tr"})
+    resp = await client.post(f"{BASE}/create", json=body(0, refs), headers={**h, "Accept-Language": "tr"})
     assert resp.status_code == 200, resp.text
     assert resp.json()["uiMessage"] == "Kayıt oluşturuldu."
     row = resp.json()["data"]

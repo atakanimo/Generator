@@ -222,7 +222,8 @@ function mergeWorkspacePrefs(
     selectedBackendFiles: next.selectedBackendFiles
       ? { ...prev.selectedBackendFiles, ...next.selectedBackendFiles }
       : prev.selectedBackendFiles,
-    features: next.features ? { ...prev.features, ...next.features } : prev.features
+    features: next.features ? { ...prev.features, ...next.features } : prev.features,
+    clientPlatforms: next.clientPlatforms ? { ...prev.clientPlatforms, ...next.clientPlatforms } : prev.clientPlatforms
   };
 }
 

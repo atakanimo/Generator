@@ -20,26 +20,17 @@ export type PaginatedList<T> = {
 export type RequestOptions = {
   /** Background request: no global loading. */
   skipLoading?: boolean;
-{{#unless headers}}
   /** No success toast (`uiMessage`); reads skip it by default. */
   skipSuccessToast?: boolean;
-{{/unless}}
   headers?: Record<string, string>;
 };
 
-/** Axios config part carrying the options{{#if headers}} (this host's interceptor reads the flags from the headers){{/if}}. `read`: list / getOne. */
-{{#if headers}}
-export const requestFlags = (options?: RequestOptions, _read = false) => {
-  const headers = { ...options?.headers, ...(options?.skipLoading ? { skipLoading: true } : {}) };
-  return Object.keys(headers).length ? { headers } : {};
-};
-{{else}}
+/** Axios config part carrying the options (flags on the config, never as headers). `read`: list / getOne. */
 export const requestFlags = (options?: RequestOptions, read = false) => ({
   ...(options?.skipLoading ? { skipLoading: true } : {}),
   ...((options?.skipSuccessToast ?? read) ? { skipSuccessToast: true } : {}),
   ...(options?.headers ? { headers: options.headers } : {})
 });
-{{/if}}
 
 /**
  * A relation after create / update (the answer carries its id): the populated object while the id is unchanged,

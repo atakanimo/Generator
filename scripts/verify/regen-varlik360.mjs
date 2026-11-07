@@ -2,7 +2,7 @@
  * Varlik360 BE regenerate harness (plan 5 §1.3 / §4).
  *
  * Copies the Varlik360 backend into `scripts/verify/out/regen/<label>/` (gitignored), regenerates the
- * 15 golden-set modules in update mode with the same calls the app makes, reports drift against the
+ * 14 golden-set modules in update mode with the same calls the app makes, reports drift against the
  * real Varlik360 files and runs `tsc --noEmit` inside the copy.
  *
  * Model settings come from `scripts/verify/fixtures/varlik360.manifest.v3.json` (Varlik360's own manifest is still v2,
@@ -31,7 +31,6 @@ const manifestFixture = join(root, 'scripts/verify/fixtures/varlik360.manifest.v
 const MODULES = [
   'app-version-configs',
   'audit-log',
-  'daily-fx-rates',
   'daily-portfolio',
   'fund-daily-metrics',
   'ip-blacklist',
@@ -55,7 +54,6 @@ const ALL_OPS = ['list', 'getOne', 'create', 'update', 'delete'];
 const PLANNED = {
   'app-version-configs': { normalOperations: ['list'] },
   'audit-log': { normalOperations: [] },
-  'daily-fx-rates': { normalOperations: [] },
   'daily-portfolio': { normalOperations: [] },
   'fund-daily-metrics': { normalOperations: [] },
   'ip-blacklist': { normalOperations: [] },
@@ -453,7 +451,6 @@ async function p5Checks() {
   const expectDetected = {
     Symbols: { normalOperations: ['list', 'getOne'], requiresAuth: true, admin: true },
     AppVersionConfigs: { normalOperations: ['list', 'getOne'], requiresAuth: false, admin: true },
-    DailyFxRates: { normalOperations: [], requiresAuth: true, admin: false },
     AuditLog: { normalOperations: [], requiresAuth: true, admin: false }
   };
   for (const [entity, expected] of Object.entries(expectDetected)) {

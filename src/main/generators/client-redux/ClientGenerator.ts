@@ -158,7 +158,7 @@ export function generateClientModules(options: ClientGenerateOptions): ClientGen
   const files: ClientWrittenFile[] = [];
   const modules: ClientModuleContext[] = [];
 
-  files.push(writeGenerated(join(servicesDir, 'common.generated.ts'), render('common.generated.ts', { header, headers: preset.requestFlags === 'headers' })));
+  files.push(writeGenerated(join(servicesDir, 'common.generated.ts'), render('common.generated.ts', { header })));
 
   for (const model of models) {
     const moduleName = moduleNameFromEntity(model.entityName);

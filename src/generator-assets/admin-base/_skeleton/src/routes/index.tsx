@@ -1,6 +1,6 @@
 import React from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import ProtectedRoute from './ProtectedRoute';
+import ProtectedRoute from './guards/ProtectedRoute';
 import { ProtectedRoutes } from './routes';
 import Login from '@/pages/Login';
 import MainLayout from '@/layout/MainLayout';

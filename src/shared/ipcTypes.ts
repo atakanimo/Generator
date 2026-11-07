@@ -5,6 +5,7 @@
 import type { NormalizedApi, NormalizedModel } from './normalizedModel.js';
 import type { ModelDraft } from './modelDraft.js';
 import type { BackendDatabase, BackendIdType, BackendStack, HostDatabase } from './backendDatabase.js';
+import type { ClientPlatform } from './clientPlatform.js';
 
 export type SourceType = 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | 'python-fastapi' | null;
 
@@ -88,6 +89,11 @@ export interface ManifestWorkspacePrefs {
   updateExistingBackendFiles?: boolean;
   selectedBackendFiles?: BackendSelectedFiles;
   features?: { deletable?: boolean; updatable?: boolean };
+  /**
+   * İstemci uygulamalarının platformu, workspace köküne göre klasör (`apps/admin` → `admin`). Tespit (`package.json`)
+   * ilk çözümde yazılır; elle değiştirilen değer tespitin önüne geçer (`clientPlatform.ts`).
+   */
+  clientPlatforms?: Record<string, ClientPlatform>;
 }
 
 export interface WorkspaceManifestReadResult {

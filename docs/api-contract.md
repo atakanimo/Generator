@@ -24,6 +24,16 @@ interface IApiResponse<T> {
 - Hata kodları her stack'te aynı sayılardır. Tek kaynak `core/errors/error-codes.ts`: 400, 401, 403, 404, 408, 409, 422, 429, `PLAN_REQUIRED` 460, `EMAIL_NOT_VERIFIED` 463, 500, `UPSTREAM_ERROR` 502, 503.
 - Projeye özel alt kodlar (K9): 461–462, 464–479 (4xx) ve 560–579 (5xx); 460 ve 463 ortak (karar 2026-10-26: `PLAN_REQUIRED` Varlik360 `PREMIUM_REQUIRED` ve StockExchange `PLAN_REQUIRED` ile aynı anlam). Generic asset'te başka projeye özel kod yok.
 
+### 1.1 İstek dili (K6)
+
+- İstemci her istekte yalnız `Accept-Language: <kısa kod>` gönderir (`en`, `tr`, `de`): i18next'in kullandığı dil, `(i18n.resolvedLanguage || i18n.language).split('-')[0]`. Ortak `api.ts` koyar; çağrı kendi `Accept-Language`'ını verdiyse ona dokunmaz.
+- Sunucu dili yalnız `Accept-Language`'dan okur: ilk virgülden önceki etiket, `;q=…` atılır, `-` / `_` öncesindeki ana kod küçük harf (`tr-TR,tr;q=0.9` → `tr`, `en_US` → `en`). Desteklenmeyen dil ya da header yoksa projenin varsayılan dili.
+- `lang`, `x-lang`, `?lang=`, `?culture=` ve çerezle dil seçimi yoktur. Gövde ya da query'de "isteğin dili" taşıyan alan yoktur: hesabın dili, kaydedilen raporun dili, üretilecek içeriğin (LLM özeti, davetiye) dili de isteğin dilidir. İçerik arayüzden farklı dildeyse istemci o çağrıda `Accept-Language`'ı içeriğin diliyle verir.
+- Saklanan kaydın alanı olarak `language` (admin CRUD'unda düzenlenen sütun, liste filtresi) ve birden çok dil seçen girdiler (ör. "şu dillerin varsayılanını sıfırla") veri alanıdır, bu kuralın dışındadır.
+- Desteklenen diller ve varsayılan dil her stack'te tek sabittedir: .NET `ApiSetup` (`SupportedCultures`, `DefaultCulture`), Python `core/http/contract.py` (`SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`), Express `config/i18n.ts` (`SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`).
+- Varsayılan dil proje kararıdır. Generator asset'leri `en` ile gelir; host kendi sabitini değiştirir. Projeler: CeyizDefterim `en`, SharedFrame `en` (kullanıcının `Language` kolonu da `en`), StockExchange `en`, Varlik360 `tr` (Türk kullanıcı kitlesi; arka plan işlerinin `deviceLanguageTag || 'tr'` varsayılanı da buna uyar).
+- `Accept-Language` CORS'ta safelisted'dır; `allowedHeaders`'a dil header'ı eklenmez.
+
 ## 2. Uçlar (resource başına)
 
 `{endpoint}` her model için açıkça yazılır; paket yol türetmez.
@@ -140,7 +150,8 @@ type PaginatedList<T> = { items: T[]; total: number; hasMore: boolean; currentPa
 
 ## 7. FE HTTP katmanı: host interceptor görevleri
 
-Axios interceptor **host** projededir, pakette değil. Paketin beklediği:
+Axios interceptor **host** projededir, pakette değil. Admin, web ve mobil için ortak `api.ts`'ler ve tek `LocalResponse`
+tipi: `docs/frontend/http-layer.md`. Paketin beklediği:
 
 1. Başarı → `LocalResponse` ile resolve (`data` = zarfın `data`'sı).
 2. Hata → `LocalResponse` ile reject (`errorData` dolu).
@@ -175,3 +186,4 @@ Paket kendi hata ya da toast'unu göstermez.
 | K3 | Autocomplete | Hedefin `get-all`'u + `regex`, `limit: 20` |
 | K4 | Postgres id | uuid v7 |
 | K5 | `decimal` | JSON'da string |
+| K6 | İstek dili | Yalnız `Accept-Language`, kısa kod; varsayılan proje bazlı (asset `en`, Varlik360 `tr`); `lang` / `x-lang` / `?lang=` ve gövdede dil alanı yok (2026-11-07) |

@@ -12,7 +12,7 @@ export const corsMiddleware = cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'lang', 'x-lang', 'x-request-id', 'Accept', 'Accept-Language'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id', 'Accept', 'Accept-Language'],
   exposedHeaders: ['X-Request-Id'],
   optionsSuccessStatus: 204
 });

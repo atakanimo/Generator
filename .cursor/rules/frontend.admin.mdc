@@ -29,22 +29,27 @@ Vite, TypeScript, React 19, MUI 7 (`@mui/material`, `@mui/x-data-grid`) + Emotio
 
 ## Dosya düzeni
 
+Ortak ağaç ve isimler: `docs/klasorRefactor.md`. Admin iskeleti `src/generator-assets/admin-base/_skeleton` bu ağacı izler.
+
 ```
 src/
   modules/<modül>/      # Generator: *.generated.config.ts; elle: *.generated.ts + özel bileşenler
   modules/resources.generated.ts
   pages/<Sayfa>/        # CRUD olmayan sayfalar: Login, Dashboard, Logs, Metrics, Jobs, Screen
-  components/           # Core/ (Button, TextInput, Toast, LoadingOverlay); barrel components/index.ts
-  services/             # api.ts + <feature>.service.ts (CRUD dışı uçlar)
+  components/Core/      # Button, Text, TextInput, Toast, LoadingOverlay; barrel components/index.ts
+  services/api/         # ortak http katmanı (index, hooks, auth, platform)
+  services/<kaynak>.service.ts
   store/index.ts        # root reducer + store
-  store/slices/         # auth.slice.ts (login / me thunk'ları içinde), common.slice.ts, theme.slice.ts
-  hooks/                # useAppDispatch, useAppSelector, useCustomTranslation, useTheme (barrel hooks/index.ts)
+  store/slices/         # yalnız auth.slice.ts, common.slice.ts, theme.slice.ts
+  hooks/                # useAppDispatch, useAppSelector, useCustomTranslation, useTheme
   i18n/                 # index.ts + locales/tr.ts, en.ts
-  types/                # index.ts (barrel `@/types`), API/index.ts (`LocalResponse`, auth tipleri), API/<feature>.ts
-  routes/ layout/ theme/ helper/ utils/ config/
+  types/                # index.ts (barrel `@/types`), API/
+  routes/routes.ts      # menü sırası
+  routes/guards/        # ProtectedRoute
+  layout/ theme/ helper/ config/   # ortam okuma config/env.ts; utils/, lib/, store/thunks/ yok
 ```
 
-Doğru yer Generator'ın admin iskeletidir (`Generator/src/generator-assets/admin-base/_skeleton`); bu şema ondan alınır. CRUD dışı sayfa `pages/<Sayfa>/index.tsx`'tir (sayfaya özel bileşen aynı klasörde), `modules/` yalnız entity'lere aittir. React'sız yardımcı `helper/`, ortam okuma `utils/`, uygulama sabiti `config/` altındadır; `lib/` ve `store/thunks/` klasörü yoktur. Paylaşılan UI `components/Core/`.
+CRUD dışı sayfa `pages/<Sayfa>/index.tsx`'tir. `modules/` yalnız entity'lere aittir. React'sız yardımcı `helper/`, ortam `config/env.ts`, uygulama sabiti `config/app.ts`. Paylaşılan UI `components/Core/<Ad>/index.tsx`.
 
 ## API (`services/api.ts`)
 

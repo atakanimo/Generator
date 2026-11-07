@@ -38,11 +38,15 @@ export function filenameFromDisposition(header: unknown): string | undefined {
   return /filename="?([^";]+)"?/i.exec(header)?.[1];
 }
 
-/** Blob yanıtı: host interceptor axios yanıtını (`data` Blob) ya da çıplak Blob'u döner (sözleşme §7 madde 8). */
+/**
+ * Blob yanıtı (sözleşme §7 madde 8): ortak host interceptor'ın `LocalResponse<Blob>`'u (`fileName` ile), axios yanıtı
+ * (`data` Blob) ya da çıplak Blob.
+ */
 function readExportResponse(res: unknown, fallbackName: string): ExportFile {
   if (res instanceof Blob) return { blob: res, filename: fallbackName };
-  const response = res as { data?: unknown; headers?: Record<string, unknown> } | null | undefined;
+  const response = res as { data?: unknown; headers?: Record<string, unknown>; fileName?: string } | null | undefined;
   if (!(response?.data instanceof Blob)) throw res;
+  if (response.fileName) return { blob: response.data, filename: response.fileName };
   const headers = response.headers ?? {};
   const disposition = headers['content-disposition'] ?? headers['Content-Disposition'];
   return { blob: response.data, filename: filenameFromDisposition(disposition) ?? fallbackName };
