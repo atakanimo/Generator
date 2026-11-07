@@ -87,7 +87,8 @@ export function listDotnetEntityFiles(host: DotnetHost): DotnetEntityFile[] {
   const out: DotnetEntityFile[] = [];
   for (const folder of readdirSync(domain).sort()) {
     const dir = join(domain, folder);
-    if (folder === 'Common' || folder === 'bin' || folder === 'obj' || !statSync(dir).isDirectory()) continue;
+    // `Auth/`: the auth layer's own tables (refresh tokens, codes; docs/backend/auth.md), not models.
+    if (folder === 'Common' || folder === 'Auth' || folder === 'bin' || folder === 'obj' || !statSync(dir).isDirectory()) continue;
     for (const fileName of readdirSync(dir).sort()) {
       if (!fileName.endsWith('.cs') || fileName.endsWith('.Custom.cs')) continue;
       const path = join(dir, fileName);

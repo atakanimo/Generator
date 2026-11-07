@@ -1,0 +1,23 @@
+---
+description: Shared auth layer (login / refresh / roles / Users model / first admin) for the three BE stacks and the clients
+globs: src/shared/authModules.ts,src/generator-assets/*/auth/**,src/main/generators/*/*AuthBootstrap.ts,src/main/utils/authBlocks.ts,src/main/utils/authSeed.ts,src/main/templates/client-redux/auth*.hbs,src/generator-assets/admin-base/_skeleton/src/store/slices/authSlice.ts,src/generator-assets/admin-base/_skeleton/src/services/api.ts,scripts/verify/auth-scenarios.mjs
+alwaysApply: false
+---
+
+# Auth
+
+Doc: `docs/backend/auth.md`; contract summary `docs/api-contract.md` §8. One definition: `src/shared/authModules.ts`.
+
+- **Same on every stack.** Endpoints, bodies, `AuthSession` / `AuthUser`, status codes and messages are identical in Express, .NET and Python. A change in one stack's auth asset goes into the other two and `scripts/verify/auth-scenarios.mjs` in the same change.
+- **Core always, modules picked.** Core: login, refresh, logout, me, change-password, admin set-password, `Users`, first admin. Optional: `register`, `password-reset`, `google`, `apple`, `account-delete` (`workspace.auth.modules`, all on by default). Module code is cut with `@auth-file` / `@if` / `@else` / `@endif` markers (`applyAuthBlocks`); no marker may remain in a host.
+- **Admin: e-mail + password only.** Every optional module (register, reset, social, set-password, account delete) is for `user` accounts: admins get no OTP (same answer), social login on an admin → 403, admin self-delete → 403, unverified admins still log in. Text: `AUTH_ADMIN_RULE`.
+- **`set-password`** (on with google or apple): a password-less account creates its first password; `AuthUser.hasPassword` tells the client.
+- **Roles: only `admin` and `user`,** from `users.role` in the DB on every request (with `status`). Never from env; the token's `role` claim is informational.
+- **Tokens:** access HS256 15 min, Bearer only (no cookie); refresh opaque 30 days, SHA-256 hash in the DB, rotated on every `/refresh` in one atomic step (one winner per token; a used token gets 401, nothing else is revoked), revoked on logout / password change / reset. Rate limit (IP + path, `X-Forwarded-For` last entry) on login / register / OTP / forgot / reset, never on refresh.
+- **Passwords:** bcrypt cost 12; min 8 chars, max 72 bytes, letter + digit; dummy compare when the user is missing; one 401 message for "no user" and "wrong password".
+- **First admin:** dialog values (prefilled from userData `auth-defaults.json`, never from the repo). The host gets the bcrypt hash only; the plain password never enters a project, a log or chat.
+- **`Users` is a normal manifest model;** auth fields are locked by `lockAuthUsersModel` on every write path (manifest, model editor, generate) when `workspace.auth` exists. Project fields are added in the editor; auth code never reads them (use `onRegister` / `onSession`).
+- **Ownership:** all auth asset files are K (create-only); `Users` model files are G. `refresh_tokens` / `otp_codes` are internal tables, not models (the .NET scanner skips `Domain/Auth/`).
+- **Social / register:** an unverified provider e-mail never claims an existing account (400 `emailInUse`); linking to an unverified password account drops its password; register on an unverified account replaces its password.
+- **Clients:** admin, web and mobile follow the same rules: single-flight refresh on a 401 (not from login / refresh / logout), retry once; refresh token read from storage (another tab may have renewed); sign out only when the server refuses the refresh token, never on a network error. Web / mobile auth files are G from `ClientGenerator` (`workspace.auth`); token storage comes from the preset (`async-storage` / `browser`). No UI is generated. The admin panel rejects `role !== 'admin'`.
+- **Gates:** `express-bootstrap`, `python-bootstrap`, `dotnet-e2e --auth-only`, `admin-bootstrap --install`, `regen-client`.

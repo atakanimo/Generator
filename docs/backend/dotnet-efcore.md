@@ -106,7 +106,7 @@ Hook'lar: `I<E>Hooks` (normal) ve `I<E>AdminHooks` (admin), `ServiceHooks<…>`'
 - `field`: normal serviste `Scope()` → `x.UserId == currentUser.Id`; create `UserId`'yi auth'tan yazar; `userId` normal body'de yok (400), normal filtrede yok sayılır. Admin API kabul eder.
 - `self`: `Scope()` → `x.Id == currentUser.Id`; normal create kapalı.
 - Sözleşme süzmesi: ownership yoksa normal yazma işlemleri, `self`'te create üretilmez; generate notunda bildirilir.
-- Auth: `api.requiresAuth === false` ve yazma / ownership yoksa anonim, aksi halde `RequireAuthorization()`. Admin uçları `Admin` policy (`role` claim'i `Admin`).
+- Auth: `api.requiresAuth === false` ve yazma / ownership yoksa anonim, aksi halde `RequireAuthorization()`. Admin uçları `Admin` policy. Auth katmanlı host'ta (bootstrap) `OnTokenValidated` kullanıcıyı DB'den yükler (yoksa 401, `suspended` 403) ve `role` claim'ini DB'deki rolle değiştirir; ayrıntı [auth.md](auth.md).
 
 ## Sözleşme eşlemesi
 

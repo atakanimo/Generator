@@ -1,0 +1,67 @@
+{{header}}
+// 401 → one refresh for every waiting request, then the request again (docs/backend/auth.md). Do not edit.
+// The host's `api.ts` interceptor calls `refreshSessionOnce()` on a 401 (unless `isAuthRequest`) and repeats the request
+// once when it resolves `true`. `false`: no new session (signed out only when the server refused the refresh token).
+import * as service from './auth.service.generated';
+import type { AuthUser } from './auth.service.generated';
+import { authStorage } from './authStorage.generated';
+
+/** New access token (+ user after a refresh), or `null` when the session is over. */
+export type SessionChange = { accessToken: string; user?: AuthUser } | null;
+type SessionListener = (change: SessionChange) => void;
+
+let listener: SessionListener | null = null;
+let pending: Promise<boolean> | null = null;
+
+/** The auth slice registers here (`bindAuthStore`). */
+export const onSessionChange = (fn: SessionListener) => {
+  listener = fn;
+};
+
+/** Cold start: the stored access token goes into the store before `me` (the interceptor reads it from there). */
+export const adoptStoredAccessToken = (accessToken: string) => listener?.({ accessToken });
+
+/** A 401 from these is the answer itself: no refresh. */
+const NO_REFRESH: string[] = [service.AUTH_ENDPOINTS.login, service.AUTH_ENDPOINTS.refresh, service.AUTH_ENDPOINTS.logout];
+
+export const isAuthRequest = (url: string | undefined) => {
+  const path = (url ?? '').split('?')[0];
+  return NO_REFRESH.some(endpoint => path.endsWith(endpoint));
+};
+
+/** The server said the session is over; a network error or an outage keeps the session. */
+const sessionRefused = (error: unknown) => {
+  const code = (error as { errorData?: { code?: number } } | null)?.errorData?.code;
+  return code === 401 || code === 403;
+};
+
+async function run(): Promise<boolean> {
+  const sent = (await authStorage.read()).refreshToken;
+  if (!sent) return false;
+  try {
+    const response = await service.refresh(sent);
+    if (!response.isSuccess || !response.data) throw response;
+    await authStorage.save(response.data.accessToken, response.data.refreshToken);
+    listener?.({ accessToken: response.data.accessToken, user: response.data.user });
+    return true;
+  } catch (error) {
+    // Another tab renewed first: its tokens are already in storage.
+    const stored = await authStorage.read();
+    if (stored.accessToken && stored.refreshToken && stored.refreshToken !== sent) {
+      listener?.({ accessToken: stored.accessToken });
+      return true;
+    }
+    if (sessionRefused(error)) {
+      await authStorage.clear();
+      listener?.(null);
+    }
+    return false;
+  }
+}
+
+export function refreshSessionOnce(): Promise<boolean> {
+  pending ??= run().finally(() => {
+    pending = null;
+  });
+  return pending;
+}

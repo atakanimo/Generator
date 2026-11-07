@@ -32,6 +32,7 @@ import { createServer } from 'net';
 import { homedir } from 'os';
 import { dirname, join, relative } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
+import { AUTH_TEST_ADMIN } from './auth-scenarios.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const withDocker = !process.argv.includes('--no-docker');
@@ -134,7 +135,7 @@ const gen = await loadBundle();
 const host = join(outDir, 'host');
 rmSync(host, { recursive: true, force: true });
 mkdirSync(host, { recursive: true });
-const boot = gen.bootstrapPythonProject(host, 'SampleApp');
+const boot = await gen.bootstrapPythonProject(host, 'SampleApp', { modules: [], admin: AUTH_TEST_ADMIN });
 check('host: bootstrap', boot.success && boot.package === 'sample_app', boot.error ?? '');
 cpSync(join(fixtures, 'import/src/sample_app/modules'), join(host, 'src/sample_app/modules'), { recursive: true });
 const modelPy = join(host, 'src/sample_app/modules/catalog_items/model.py');
@@ -180,7 +181,9 @@ check('parse: nothing refused', parsed.unsupported.length === 0, json(parsed.uns
 const bad = gen.parsePydanticModel(modelPy, { root: host, className: 'CatalogItemsBad' });
 check('parse: bytes / UUID refused', json(bad.unsupported) === json(['CatalogItemsBad.blob: bytes', 'CatalogItemsBad.token: UUID']), json(bad.unsupported));
 const refused = gen.importPythonModel(host, modelPy, { className: 'CatalogItemsBad' });
-check('import: refused class → error, no manifest row', !refused.success && /Desteklenmeyen/.test(refused.error ?? '') && (gen.readWorkspaceManifest(host)?.models ?? []).length === 0, refused.error);
+// The bootstrap's auth `Users` is the only row (docs/backend/auth.md).
+const onlyUsers = () => json((gen.readWorkspaceManifest(host)?.models ?? []).map((m) => m.model.entityName)) === json(['Users']);
+check('import: refused class → error, no manifest row', !refused.success && /Desteklenmeyen/.test(refused.error ?? '') && onlyUsers(), refused.error);
 
 const preview = gen.previewPythonImport(host, modelPy, { report: false });
 check('preview (IPC path): CatalogItems, collection catalog_items', preview.success && preview.entityName === 'CatalogItems' && preview.collection === 'catalog_items' && !preview.report, preview.error ?? '');
@@ -194,7 +197,11 @@ check('import: G files + K service / repository / hooks created', [...gFiles, 's
 check('import: hand-written model.py kept', readFileSync(modelPy, 'utf8') === readFileSync(join(fixtures, 'import/src/sample_app/modules/catalog_items/model.py'), 'utf8'));
 check('import: note says model.py still defines the class', (imported.notes ?? []).some((n) => n.includes('model.py')), json(imported.notes));
 const scan2 = await gen.scanProject(host);
-check('host: scan after import → generated, nothing importable', json(scan2.models.map((x) => [x.fileName, x.kind])) === json([['catalog_items/model_generated.py', 'generated']]), json(scan2.models));
+check(
+  'host: scan after import → generated, nothing importable',
+  json(scan2.models.map((x) => [x.fileName, x.kind]).sort()) === json([['catalog_items/model_generated.py', 'generated'], ['users/model_generated.py', 'generated']]),
+  json(scan2.models)
+);
 const editor = gen.loadModelForEditor(join(dir, 'model_generated.py'), host, 'python-fastapi');
 check('schema designer load (project:parseModel)', editor.success && editor.model?.entityName === 'CatalogItems' && !!editor.sourceHash, editor.error ?? '');
 const again = gen.generatePythonBackend(host, gen.readWorkspaceManifest(host).models[0].model);

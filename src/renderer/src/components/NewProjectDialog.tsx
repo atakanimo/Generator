@@ -1,7 +1,22 @@
-import { useState } from 'react';
-import { Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, TextField, Typography } from '@mui/material';
+import { useEffect, useState } from 'react';
+import {
+  Alert,
+  Box,
+  Button,
+  Checkbox,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  FormControlLabel,
+  MenuItem,
+  TextField,
+  Typography
+} from '@mui/material';
 import { useAppDispatch } from '../store/hooks';
-import { bootstrapAdminPanel, bootstrapBackendProject, pickDirectory } from '../features/project/projectSlice';
+import { bootstrapAdminPanel, bootstrapBackendProject, loadAuthDefaults, pickDirectory } from '../features/project/projectSlice';
+import { AUTH_ADMIN_RULE, AUTH_MODULES, AUTH_MODULE_INFO, authAdminError, type AuthBootstrapOptions, type AuthModule } from '@shared/authModules';
 import { ADMIN_PANEL_DIR } from '@shared/adminPanel';
 import type { BackendStackInfo } from '@shared/backendStacks';
 import { DATABASE_LABELS, STACK_DATABASES, type BackendDatabase, type BackendIdType, type HostDatabase } from '@shared/backendDatabase';
@@ -20,6 +35,8 @@ const ID_TYPE_LABELS: Record<BackendIdType, string> = { 'uuid-v7': 'uuid v7', ob
  * "Yeni … projesi" (PY9): empty folder + app name (+ database / id type when the stack offers a choice) →
  * `project:bootstrap<Stack>`. Existing projects are refused by main. The pair is written to the manifest and never changes.
  * "Admin paneli de kur": right after the host, an ata-admin-base panel in `<root>/apps/admin` (`project:bootstrapAdmin`).
+ * Auth (docs/backend/auth.md): core always on, optional modules + first admin; the fields start from the last
+ * bootstrap on this machine (`project:getAuthDefaults`).
  */
 const NewProjectDialog = ({ info, onClose, onCreated }: NewProjectDialogProps) => {
   const dispatch = useAppDispatch();
@@ -29,6 +46,20 @@ const NewProjectDialog = ({ info, onClose, onCreated }: NewProjectDialogProps) =
   const [withAdmin, setWithAdmin] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [auth, setAuth] = useState<AuthBootstrapOptions>({ modules: [...AUTH_MODULES], admin: { email: '', password: '', name: 'Admin' } });
+
+  useEffect(() => {
+    if (!info) return;
+    void (async () => {
+      const defaults = await dispatch(loadAuthDefaults()).unwrap();
+      if (defaults) setAuth(defaults);
+    })();
+  }, [info, dispatch]);
+
+  const adminError = authAdminError(auth.admin);
+  const toggleModule = (module: AuthModule, on: boolean) =>
+    setAuth({ ...auth, modules: AUTH_MODULES.filter((m) => (m === module ? on : auth.modules.includes(m))) });
+  const setAdmin = (patch: Partial<AuthBootstrapOptions['admin']>) => setAuth({ ...auth, admin: { ...auth.admin, ...patch } });
 
   const choices = info ? STACK_DATABASES[info.stack] : [];
   const entry = choices.find((c) => c.database === picked.database) ?? choices[0];
@@ -51,7 +82,7 @@ const NewProjectDialog = ({ info, onClose, onCreated }: NewProjectDialogProps) =
     if (!info || !db) return;
     setBusy(true);
     setError(null);
-    const { success, files, error: bootstrapError } = await dispatch(bootstrapBackendProject({ stack: info.stack, root, app, db })).unwrap();
+    const { success, files, error: bootstrapError } = await dispatch(bootstrapBackendProject({ stack: info.stack, root, app, db, auth })).unwrap();
     if (!success) {
       setBusy(false);
       setError(bootstrapError || 'Proje oluşturulamadı');
@@ -122,11 +153,56 @@ const NewProjectDialog = ({ info, onClose, onCreated }: NewProjectDialogProps) =
             </TextField>
           </Box>
         )}
-        <FormControlLabel
+        <Divider sx={{ my: 2 }} />
+        <Typography variant='subtitle2'>Auth</Typography>
+        <Typography variant='caption' color='text.secondary' component='div' sx={{ mb: 1 }}>
+          Her zaman: login, refresh, logout, me, şifre değiştirme, Users modeli (roller: admin / user). Ek modüller (yalnız kullanıcılar için):
+        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+          {AUTH_MODULES.map((m) => (
+            <FormControlLabel
+              key={m}
+              control={<Checkbox size='small' checked={auth.modules.includes(m)} onChange={(e) => toggleModule(m, e.target.checked)} />}
+              label={
+                <Typography variant='body2'>
+                  {AUTH_MODULE_INFO[m].label}{' '}
+                  <Typography component='span' variant='caption' color='text.secondary'>
+                    {AUTH_MODULE_INFO[m].description}
+                  </Typography>
+                </Typography>
+              }
+            />
+          ))}
+        </Box>
+        <Typography variant='subtitle2' sx={{ mt: 2 }}>
+          İlk admin
+        </Typography>
+        <Typography variant='caption' color='text.secondary' component='div' sx={{ mb: 1 }}>
+          Uygulama ilk açıldığında hiç admin yoksa oluşturulur. Projeye yalnız şifrenin bcrypt hash&apos;i yazılır.
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <TextField label='E-posta' fullWidth size='small' value={auth.admin.email} onChange={(e) => setAdmin({ email: e.target.value })} />
+          <TextField label='Ad' fullWidth size='small' value={auth.admin.name} onChange={(e) => setAdmin({ name: e.target.value })} />
+        </Box>
+        <TextField
           sx={{ mt: 1 }}
+          label='Şifre'
+          type='password'
+          fullWidth
+          size='small'
+          value={auth.admin.password}
+          onChange={(e) => setAdmin({ password: e.target.value })}
+          error={Boolean(adminError) && auth.admin.password.length > 0}
+          helperText={adminError ?? 'En az 8 karakter, bir harf ve bir rakam'}
+        />
+        <Divider sx={{ my: 2 }} />
+        <FormControlLabel
           control={<Checkbox checked={withAdmin} onChange={(e) => setWithAdmin(e.target.checked)} />}
           label={`Admin paneli de kur (${ADMIN_PANEL_DIR}: @atakanimo/ata-admin-base, tema, menü, login, i18n)`}
         />
+        <Typography variant='caption' color='text.secondary' component='div' sx={{ ml: 4 }}>
+          {AUTH_ADMIN_RULE}
+        </Typography>
         {error && (
           <Alert severity='error' sx={{ mt: 2 }}>
             {error}
@@ -135,7 +211,7 @@ const NewProjectDialog = ({ info, onClose, onCreated }: NewProjectDialogProps) =
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose}>Vazgeç</Button>
-        <Button variant='contained' onClick={handleCreate} disabled={!root || !app.trim() || !db || busy}>
+        <Button variant='contained' onClick={handleCreate} disabled={!root || !app.trim() || !db || Boolean(adminError) || busy}>
           Oluştur
         </Button>
       </DialogActions>

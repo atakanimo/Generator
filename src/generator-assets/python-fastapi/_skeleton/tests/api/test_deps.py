@@ -1,4 +1,4 @@
-"""`AdminDep` / `DbDep`: JWT (`sub` + `role`), 401 / 403 sözleşme zarfı, veritabanı bağımlılığı."""
+"""`AdminDep` / `DbDep`: JWT `sub` + `users` kaydı (rol, askı), 401 / 403 sözleşme zarfı, veritabanı bağımlılığı."""
 
 from __future__ import annotations
 
@@ -36,9 +36,14 @@ async def test_admin_dep(client, make_token) -> None:
     expired = make_token("u1", role="admin", expires_in=-60)
     _code(await client.get(url, headers={"Authorization": f"Bearer {expired}"}), 401)
     _code(await client.get(url, headers={"Authorization": f"Bearer {make_token('u1', role='user')}"}), 403)
-    _code(await client.get(url, headers={"Authorization": f"Bearer {make_token('u1')}"}), 403)
+    # Rol kayıttan okunur: token'daki `admin` claim'i kaydı olmayan kullanıcıyı geçirmez.
+    ghost = make_token("ghost", role="admin", seed_user=False)
+    _code(await client.get(url, headers={"Authorization": f"Bearer {ghost}"}), 401)
+    suspended = make_token("u2", role="admin", status="suspended")
+    _code(await client.get(url, headers={"Authorization": f"Bearer {suspended}"}), 403)
 
-    for role in ("admin", ["user", "admin"]):
-        resp = await client.get(url, headers={"Authorization": f"Bearer {make_token('u1', role=role)}"})
-        assert resp.status_code == 200, resp.text
-        assert resp.json()["data"] == {"id": "u1", "db": "__app___test"}
+    resp = await client.get(url, headers={"Authorization": f"Bearer {make_token('u1', role='admin')}"})
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["db"] == "__app___test"
+    assert len(data["id"]) == 24

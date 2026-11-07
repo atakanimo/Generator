@@ -18,12 +18,27 @@ class Settings(BaseSettings):
     MONGO_CONNECT_TIMEOUT_MS: int = 5000
     MONGO_SERVER_SELECTION_TIMEOUT_MS: int = 5000
 
-    # JWT (HS256): `sub` = kullanıcı id'si, `role` = rol (string ya da liste). Issuer / audience boşsa denetlenmez.
+    # JWT (HS256): `sub` = kullanıcı id'si; rol `users` kaydından okunur. Issuer / audience boşsa denetlenmez.
     JWT_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"
     JWT_ISSUER: str = ""
     JWT_AUDIENCE: str = ""
-    ADMIN_ROLE: str = "admin"
+    # Auth (docs/backend/auth.md): access / refresh süreleri, login / kod uçlarında IP başına dakikalık sınır.
+    JWT_ACCESS_TTL_MINUTES: int = 15
+    JWT_REFRESH_TTL_DAYS: int = 30
+    AUTH_RATE_LIMIT_PER_MINUTE: int = 10
+    # Sosyal giriş client id'leri (virgülle) ve e-posta (SMTP_HOST boşsa e-postalar log'a yazılır).
+    GOOGLE_CLIENT_IDS: str = ""
+    APPLE_CLIENT_IDS: str = ""
+    # Apple token iptali (hesap silme): Team / key id ve .p8 anahtarı; boşsa iptal atlanır.
+    APPLE_TEAM_ID: str = ""
+    APPLE_KEY_ID: str = ""
+    APPLE_PRIVATE_KEY: str = ""
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    MAIL_FROM: str = ""
 
 
 settings = Settings()

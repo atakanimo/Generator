@@ -5,6 +5,7 @@
 import type { NormalizedApi, NormalizedModel } from './normalizedModel.js';
 import type { ModelDraft } from './modelDraft.js';
 import type { BackendDatabase, BackendIdType, BackendStack, HostDatabase } from './backendDatabase.js';
+import type { AuthBootstrapOptions, WorkspaceAuth } from './authModules.js';
 
 export type SourceType = 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | 'python-fastapi' | null;
 
@@ -88,6 +89,8 @@ export interface ManifestWorkspacePrefs {
   updateExistingBackendFiles?: boolean;
   selectedBackendFiles?: BackendSelectedFiles;
   features?: { deletable?: boolean; updatable?: boolean };
+  /** Shared auth layer modules (docs/backend/auth.md); written by the bootstrap, absent on older hosts. */
+  auth?: WorkspaceAuth;
 }
 
 export interface WorkspaceManifestReadResult {
@@ -297,11 +300,13 @@ export interface ElectronAPI {
     getRelatedModelFields: (projectRoot: string, relationEntityName: string, sourceType?: SourceType) => Promise<RelatedModelFieldsResult>;
     updateModel: (filePath: string, sourceType: SourceType, draft: ModelDraft, projectPath?: string) => Promise<UpdateModelResult>;
     /** New .NET 10 + EF Core host (solution, 4 projects, core assets) in `root` for the chosen database / id type. */
-    bootstrapDotnet: (root: string, app: string, db: HostDatabase) => Promise<BootstrapProjectResult>;
+    bootstrapDotnet: (root: string, app: string, db: HostDatabase, auth: AuthBootstrapOptions) => Promise<BootstrapProjectResult>;
     /** New Python + FastAPI host (pyproject, `src/<package>`, core assets) in `root`; `app` becomes a snake_case package (PY4). */
-    bootstrapPython: (root: string, app: string) => Promise<BootstrapProjectResult>;
+    bootstrapPython: (root: string, app: string, auth: AuthBootstrapOptions) => Promise<BootstrapProjectResult>;
     /** New Express + Mongoose + TypeScript host (skeleton + core assets) in `root`; `app` becomes a kebab-case npm name (PY9). */
-    bootstrapExpress: (root: string, app: string) => Promise<BootstrapProjectResult>;
+    bootstrapExpress: (root: string, app: string, auth: AuthBootstrapOptions) => Promise<BootstrapProjectResult>;
+    /** Auth modules + first admin last used on this machine (docs/backend/auth.md "İlk admin"). */
+    getAuthDefaults: () => Promise<AuthBootstrapOptions>;
     /** New `@atakanimo/ata-admin-base` admin panel in `root`, wired to `stack`'s API prefix / dev port (`shared/adminPanel.ts`). */
     bootstrapAdmin: (root: string, app: string, stack: BackendStack) => Promise<BootstrapProjectResult>;
     /** PY7: parse a hand-written Pydantic module (`modules/<m>/model.py`) + extra-field report of its collection. */

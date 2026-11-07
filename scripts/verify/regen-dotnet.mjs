@@ -18,6 +18,7 @@ import { spawnSync } from 'child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { dirname, join, relative } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
+import { AUTH_ALL_MODULES, AUTH_TEST_ADMIN } from './auth-scenarios.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const args = process.argv.slice(2);
@@ -185,13 +186,15 @@ check('python-parity: idempotent', py2.length === 0, py2.map(f => relative(out, 
 // 4. App flow (D5): the IPC functions the app calls — bootstrap, scan, model editor, generate, admin endpoint lookup.
 reset(join(outBase, 'app-flow'));
 const flowApp = 'FlowHost';
-check('flow: bootstrap refuses a pair dotnet-ef does not generate for', !gen.bootstrapDotnetProject(out, flowApp, { database: 'postgres', idType: 'objectid' }).success);
-const boot = gen.bootstrapDotnetProject(out, flowApp, db);
+const AUTH = { modules: AUTH_ALL_MODULES, admin: AUTH_TEST_ADMIN };
+check('flow: bootstrap refuses a pair dotnet-ef does not generate for', !(await gen.bootstrapDotnetProject(out, flowApp, { database: 'postgres', idType: 'objectid' }, AUTH)).success);
+const boot = await gen.bootstrapDotnetProject(out, flowApp, db, AUTH);
 const flowWorkspace = gen.readWorkspaceManifest(out)?.workspace;
 check('flow: bootstrap', boot.success && flowWorkspace?.backendStack === 'dotnet-ef', boot.error);
 check('flow: manifest records database + id type', flowWorkspace?.database === db.database && flowWorkspace?.idType === db.idType, flowWorkspace);
 let scan = await gen.scanProject(out);
-check('flow: scan detects dotnet-ef (empty host)', scan.success && scan.detectedType === 'dotnet-ef' && scan.models.length === 0, scan);
+// A new host comes with the auth `Users` model (docs/backend/auth.md).
+check('flow: scan detects dotnet-ef (host with Users only)', scan.success && scan.detectedType === 'dotnet-ef' && scan.models.length === 1, scan.models?.map(m => m.fileName));
 const byName = Object.fromEntries(models.map(m => [m.entityName, m]));
 for (const name of ['EventTypes', 'Documents', 'MembershipPlans', 'Templates']) {
   const draft = { model: { ...byName[name], fields: byName[name].fields.filter(f => f.name !== 'createdAt' && f.name !== 'updatedAt') } };
@@ -199,7 +202,7 @@ for (const name of ['EventTypes', 'Documents', 'MembershipPlans', 'Templates']) 
   check(`flow: model editor create ${name}`, r.success, r.error);
 }
 scan = await gen.scanProject(out);
-check('flow: scan lists entity files', scan.models.length === 4, scan.models.map(m => m.fileName));
+check('flow: scan lists entity files', scan.models.length === 5, scan.models.map(m => m.fileName));
 const loaded = Object.fromEntries(gen.loadDotnetModels(gen.findDotnetHost(out)).map(m => [m.model.entityName, m.model]));
 check('flow: manifest settings survive (api, filter)', loaded.EventTypes?.api?.requiresAuth === false
   && loaded.Templates?.fields.find(f => f.name === 'eventTypeId')?.reference?.populate?.join() === '_id,name,isActive', loaded.EventTypes?.api);

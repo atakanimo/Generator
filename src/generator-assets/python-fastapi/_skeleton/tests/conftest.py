@@ -177,13 +177,47 @@ def api_prefix() -> str:
 
 @pytest.fixture
 def make_token() -> Callable[..., str]:
-    """`make_token("user-1", role="admin")`; `expires_in` negatifse süresi geçmiş token."""
+    """`make_token("user-1", role="admin")`; `expires_in` negatifse süresi geçmiş token.
+
+    Auth kullanıcıyı DB'den okur (docs/backend/auth.md): `sub` için test veritabanına bir `users` kaydı yazılır
+    (`sub` ObjectId değilse ondan türetilen sabit id). `role` yoksa `user`; `status="suspended"` askıda kullanıcı.
+    """
+    import hashlib
+
     import jwt
+    from bson import ObjectId
 
     from __app__.core.config import settings
 
-    def _make(sub: str, *, role: str | list[str] | None = None, expires_in: int = 3600) -> str:
-        claims: dict[str, object] = {"sub": sub, "exp": datetime.now(UTC) + timedelta(seconds=expires_in)}
+    def _make(
+        sub: str,
+        *,
+        role: str | list[str] | None = None,
+        expires_in: int = 3600,
+        status: str = "active",
+        seed_user: bool = True,
+    ) -> str:
+        user_id = sub if ObjectId.is_valid(sub) else hashlib.md5(sub.encode()).hexdigest()[:24]
+        roles = [role] if isinstance(role, str) else list(role or [])
+        if seed_user:
+            name = test_db_name("__app___test")
+            with MongoClient(start_server()) as sync_client:
+                sync_client[name]["users"].replace_one(
+                    {"_id": ObjectId(user_id)},
+                    {
+                        "_id": ObjectId(user_id),
+                        "email": f"{user_id}@test.local",
+                        "name": sub,
+                        "role": "admin" if "admin" in roles else "user",
+                        "status": status,
+                        "emailVerified": True,
+                        "provider": "password",
+                        "createdAt": datetime.now(UTC),
+                        "updatedAt": datetime.now(UTC),
+                    },
+                    upsert=True,
+                )
+        claims: dict[str, object] = {"sub": user_id, "exp": datetime.now(UTC) + timedelta(seconds=expires_in)}
         if role is not None:
             claims["role"] = role
         return jwt.encode(claims, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)

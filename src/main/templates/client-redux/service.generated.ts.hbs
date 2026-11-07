@@ -3,7 +3,7 @@
 // custom endpoints go in `{{camel}}.service.ts`.
 {{#if hasOps}}
 import { API } from '{{imports.api}}';
-import { LocalResponse } from '{{imports.localResponse}}';
+import type { LocalResponse } from '{{imports.localResponse}}';
 import { {{commonImports}} } from './common.generated';
 {{/if}}
 

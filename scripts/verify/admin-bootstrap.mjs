@@ -15,7 +15,7 @@
 import { build } from 'esbuild';
 import { spawnSync } from 'child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'fs';
-import { dirname, join } from 'path';
+import { dirname, join, relative } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -91,15 +91,29 @@ if (install) {
     const workspace = join(out, 'workspace');
     mkdirSync(join(workspace, '.generator'), { recursive: true });
     cpSync(join(root, 'scripts/verify/fixtures/varlik360.manifest.v3.json'), join(workspace, '.generator/manifest.json'));
+    const clientModels = [];
     for (const mod of ['symbol-types', 'symbols']) {
       const rel = `src/modules/${mod}/${mod}.model.ts`;
       const parsed = b.parseNormalizedModel(join(varlik, rel), 'nodejs-mongoose');
       const model = b.mergeModel(parsed.model, b.findManifestModelByRelativePath(workspace, rel), 'nodejs-mongoose');
       const r = b.generateAdminConfig({ model, frontendRoot: panel, backendRoot: varlik, baseUrl: '/api' });
       check(`admin config ${mod}`, r.success, r.error);
+      clientModels.push(model);
     }
+    // Client data layer (services + thunks: module slices need the host's root reducer) + shared auth, browser variant (docs/frontend/client-data-layer.md): must compile in a React web host.
+    const clientAuth = b.generateClientModules({
+      clientRoot: panel, preset: b.REDUX_WEB_PRESET, models: clientModels, allModels: clientModels, baseUrl: '/api', layers: { slice: false },
+      auth: { modules: ['register', 'password-reset', 'google', 'apple', 'account-delete'], prefix: '/api', storagePrefix: 'admin' }
+    });
+    const authFiles = clientAuth.files.filter(f => /\/auth[^/]*\.generated\.ts$/.test(f.path)).length;
+    check('client auth files (redux-web)', authFiles === 5, clientAuth.files.map(f => f.path));
     const typecheck = run('npm', ['run', 'typecheck']);
     check('npm run typecheck', typecheck.status === 0, typecheck.status === 0 ? '' : typecheck.stdout.slice(-1500));
+    // Hosts with `verbatimModuleSyntax` (StockExchange web): generated files import types with `import type` / `type X`.
+    const generated = new Set(clientAuth.files.map(f => relative(panel, f.path)));
+    const verbatim = run('npx', ['tsc', '-p', 'tsconfig.app.json', '--noEmit', '--verbatimModuleSyntax']);
+    const verbatimErrors = (verbatim.stdout ?? '').split('\n').filter(l => generated.has(l.split('(')[0]));
+    check('client files compile with verbatimModuleSyntax', verbatimErrors.length === 0, verbatimErrors.join('\n').slice(0, 1500));
     const viteBuild = run('npm', ['run', 'build']);
     check('npm run build', viteBuild.status === 0, viteBuild.status === 0 ? '' : (viteBuild.stdout + viteBuild.stderr).slice(-1500));
   }

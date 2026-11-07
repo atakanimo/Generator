@@ -145,7 +145,7 @@ Axios interceptor **host** projededir, pakette değil. Paketin beklediği:
 3. `config.skipLoading === true` → global loading açılmaz.
 4. `config.skipSuccessToast === true` → başarı toast'u yok.
 5. `axios.isCancel(error)` → toast yok (loading sayacı yine azalır).
-6. Token ve 401 yönetimi host'un işidir.
+6. Token ve 401 yönetimi host'un işidir (refresh: §8).
 7. Bayraklar **header değil, axios config alanıdır**; sunucuya gitmez.
 8. `responseType: 'blob'` (export): başarıda axios yanıtını döner (zarf yok; `data` Blob, `headers['content-disposition']` dosya adı); hata gövdesi Blob'daki JSON zarftan `LocalResponse`'a çevrilip reject edilir. Paket her iki biçimi (yanıt nesnesi ya da çıplak Blob) kabul eder.
 
@@ -163,6 +163,29 @@ declare module 'axios' {
 | export | `skipSuccessToast`, `responseType: 'blob'` (global loading açık) |
 
 Paket kendi hata ya da toast'unu göstermez.
+
+## 8. Auth
+
+Ayrıntı ve kurallar: [backend/auth.md](backend/auth.md). Uçlar `<önek>/auth` altında (Express / .NET `/api`, Python `/api/v1`), zarf §1.
+
+| Uç | Bearer | Gövde | `data` |
+| --- | --- | --- | --- |
+| `POST /login` | | `{ email, password }` | `AuthSession` |
+| `POST /refresh` | | `{ refreshToken }` | `AuthSession` (rotation) |
+| `POST /logout` | | `{ refreshToken? }` | `null` |
+| `GET /me` | ✓ | — | `AuthUser` |
+| `POST /change-password` | ✓ | `{ currentPassword, newPassword }` | `null` |
+| `POST /admin/set-password` | ✓ admin | `{ userId, newPassword }` | `null` |
+| modül uçları | | register, verify-email, send-otp, forgot-password, reset-password, google, apple, set-password (google / apple ile), `DELETE /account`; hepsi yalnız `user` hesapları için (admin yalnız e-posta + şifre) | [backend/auth.md](backend/auth.md#sözleşme) |
+
+```ts
+type AuthUser = { id: string; email: string; name: string; role: 'admin' | 'user'; provider: 'password' | 'google' | 'apple'; emailVerified: boolean; hasPassword: boolean };
+type AuthSession = { accessToken: string; refreshToken: string; expiresIn: number; user: AuthUser; isNewUser?: boolean };
+```
+
+- Access token Bearer header'da (cookie yok); 15 dk. Refresh token 30 gün, her kullanımda yenisi döner.
+- Hata kodları: yanlış kimlik ve geçersiz token 401 (aynı mesaj), `suspended` / admin olmayan 403, doğrulanmamış e-posta 463, rate limit 429.
+- `Users` admin CRUD'u diğer modeller gibidir (§2); `passwordHash` hiçbir cevapta yoktur ve filtrelenmez.
 
 ## Kararlar
 

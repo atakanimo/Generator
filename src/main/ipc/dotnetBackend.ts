@@ -12,7 +12,10 @@ import type { ModelDraft } from '../../shared/modelDraft.js';
 import type { GenerateBackendResult } from '../../shared/ipcTypes.js';
 import { DATABASE_LABELS, STACK_DATABASES, hostDatabaseError, type HostDatabase } from '../../shared/backendDatabase.js';
 import { mergeModel } from '../../shared/modelMerge.js';
+import { buildAuthUsersModel, lockAuthUsersModel, normalizeAuthModules, type AuthBootstrapOptions } from '../../shared/authModules.js';
+import { buildAuthSeedAdmin } from '../utils/authSeed.js';
 import { generateDotnetModules } from '../generators/dotnet-efcore/DotnetEfGenerator.js';
+import { bootstrapDotnetAuth } from '../generators/dotnet-efcore/DotnetAuthBootstrap.js';
 import { bootstrapDotnetHost } from '../generators/dotnet-efcore/DotnetHostBootstrap.js';
 import { DotnetUnsupportedError, dotnetModuleNames } from '../generators/dotnet-efcore/dotnetContext.js';
 import { isValidAppName } from '../generators/dotnet-efcore/dotnetLayout.js';
@@ -104,9 +107,11 @@ export function resolveDotnetHostDatabase(host: DotnetHost): HostDatabase {
 }
 
 /** Regenerates every module with `schema` replacing (or added to) its own entry. */
-export function generateDotnetBackend(projectPath: string, schema: NormalizedModel): GenerateBackendResult & { filePath?: string } {
+export function generateDotnetBackend(projectPath: string, input: NormalizedModel): GenerateBackendResult & { filePath?: string } {
   try {
     const host = requireHost(projectPath);
+    const auth = getWorkspacePreferences(host.root)?.auth;
+    const schema = auth ? lockAuthUsersModel(input, auth.modules) : input;
     const own = dotnetEntityPath(host, schema.entityName);
     const models = loadDotnetModels(host).filter((m) => m.path !== own && m.model.entityName !== schema.entityName).map((m) => m.model);
     const result = generateDotnetModules(host.root, host.app, [...models, schema], resolveDotnetHostDatabase(host));
@@ -137,14 +142,17 @@ export function generateDotnetBackend(projectPath: string, schema: NormalizedMod
 export function writeDotnetModel(projectPath: string, draft: ModelDraft): { success: boolean; filePath?: string; error?: string } {
   try {
     const host = requireHost(projectPath);
-    const filePath = dotnetEntityPath(host, draft.model.entityName);
+    // The auth fields of `Users` stay as the auth layer expects (docs/backend/auth.md).
+    const auth = getWorkspacePreferences(host.root)?.auth;
+    const model = auth ? lockAuthUsersModel(draft.model, auth.modules) : draft.model;
+    const filePath = dotnetEntityPath(host, model.entityName);
     const stash = writeWorkspaceManifestUpdate(host.root, {
       event: 'stash',
-      model: { schema: draft.model, sourceRelativePath: toProjectRelativePath(host.root, filePath) },
+      model: { schema: model, sourceRelativePath: toProjectRelativePath(host.root, filePath) },
       workspace: { backendStack: 'dotnet-ef' }
     });
     if (!stash.success) return { success: false, error: stash.error };
-    const generated = generateDotnetBackend(host.root, draft.model);
+    const generated = generateDotnetBackend(host.root, model);
     return generated.success ? { success: true, filePath } : { success: false, error: generated.error };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
@@ -161,8 +169,17 @@ export function loadDotnetModelDraft(filePath: string, projectPath?: string): { 
   }
 }
 
-/** New host in an empty (or new) folder; the manifest records the stack, database and id type. */
-export function bootstrapDotnetProject(root: string, app: string, db: HostDatabase): { success: boolean; files?: string[]; error?: string } {
+/**
+ * New host in an empty (or new) folder; the manifest records the stack, database and id type. The shared auth layer
+ * (docs/backend/auth.md) comes with it: auth files for the picked modules, first admin seed and the `Users` model
+ * (manifest row + generated module). Async for the same signature as the other stacks' bootstraps.
+ */
+export async function bootstrapDotnetProject(
+  root: string,
+  app: string,
+  db: HostDatabase,
+  auth: AuthBootstrapOptions
+): Promise<{ success: boolean; files?: string[]; error?: string }> {
   try {
     if (!isValidAppName(app)) return { success: false, error: 'Uygulama adı PascalCase olmalı (harf / rakam), ör. SharedFrame.' };
     const dbError = hostDatabaseError('dotnet-ef', db);
@@ -173,12 +190,18 @@ export function bootstrapDotnetProject(root: string, app: string, db: HostDataba
       (n) => /\.slnx?$/.test(n) || n === 'package.json' || n === 'pyproject.toml'
     );
     if (existingProject) return { success: false, error: `Bu klasörde zaten bir proje var (${existingProject}).` };
+    const modules = normalizeAuthModules(auth.modules);
+    const admin = buildAuthSeedAdmin(auth.admin);
     const result = bootstrapDotnetHost(root, app, db);
+    const authFiles = bootstrapDotnetAuth(root, app, db, modules, admin);
     writeWorkspaceManifestUpdate(root, {
       event: 'workspace',
-      workspace: { backendStack: 'dotnet-ef', database: db.database, idType: db.idType }
+      workspace: { backendStack: 'dotnet-ef', database: db.database, idType: db.idType, auth: { modules } }
     });
-    return { success: true, files: result.files.filter((f) => f.action === 'created').map((f) => toProjectRelativePath(root, f.path)) };
+    const users = writeDotnetModel(root, { model: buildAuthUsersModel(modules) });
+    if (!users.success) return { success: false, error: `Users modeli üretilemedi: ${users.error}` };
+    const created = [...result.files, ...authFiles.files].filter((f) => f.action === 'created');
+    return { success: true, files: created.map((f) => toProjectRelativePath(root, f.path)) };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }

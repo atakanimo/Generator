@@ -8,7 +8,7 @@ import type { ManifestWorkspacePrefs } from '../shared/ipcTypes.js';
 import type { BackendStack, HostDatabase } from '../shared/backendDatabase.js';
 import { loadModelForEditor } from './ipc/modelEditor.js';
 import { saveSchemaConfig } from './ipc/configManager.js';
-import { recordWorkspaceManifestUpsert, getWorkspacePreferences, stashModelInManifest, updateWorkspacePreferencesInManifest, reconcileModelFromDisk } from './utils/manifestSnapshot.js';
+import { readWorkspaceManifest, recordWorkspaceManifestUpsert, getWorkspacePreferences, stashModelInManifest, updateWorkspacePreferencesInManifest, reconcileModelFromDisk } from './utils/manifestSnapshot.js';
 import { generateBackend } from './ipc/backendGenerator.js';
 import { existsSync, readFileSync } from 'fs';
 import { modelSourceHash, staleModelSourceError } from './utils/modelSourceHash.js';
@@ -19,6 +19,8 @@ import { getRelatedModelFieldNames } from './ipc/relatedModelFields.js';
 import { log } from './utils/logger.js';
 import { bootstrapDotnetProject, generateDotnetBackend, loadDotnetModelDraft, writeDotnetModel } from './ipc/dotnetBackend.js';
 import { bootstrapExpressProject } from './ipc/expressBackend.js';
+import { readAuthDefaults, writeAuthDefaults } from './ipc/authDefaults.js';
+import { lockAuthUsersModel, type AuthBootstrapOptions } from '../shared/authModules.js';
 import { bootstrapAdminProject } from './ipc/adminPanel.js';
 import {
   bootstrapPythonProject,
@@ -42,6 +44,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+
+/** A host with the shared auth layer keeps the auth fields of `Users` whatever the editor sends (docs/backend/auth.md). */
+function withAuthLock<T extends { entityName: string }>(projectPath: string | undefined, model: T): T {
+  if (!projectPath?.trim() || !model?.entityName) return model;
+  const auth = readWorkspaceManifest(projectPath.trim())?.workspace?.auth;
+  return auth ? (lockAuthUsersModel(model as never, auth.modules) as unknown as T) : model;
+}
+
+/** A successful bootstrap keeps its auth choices as the next dialog's defaults (this machine only). */
+function rememberAuthDefaults<T extends { success: boolean }>(result: T, auth: AuthBootstrapOptions): T {
+  if (result.success) writeAuthDefaults(auth);
+  return result;
+}
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -223,8 +238,9 @@ app.whenReady().then(() => {
 
   ipcMain.handle(
     'project:generateBackend',
-    async (_, { schema, projectPath, isProtectedRoute, sourceType, shouldAddRoute, baseUrl, updateExistingFiles, isAdminUser, selectedFiles, sourceCheck }) => {
+    async (_, { schema: rawSchema, projectPath, isProtectedRoute, sourceType, shouldAddRoute, baseUrl, updateExistingFiles, isAdminUser, selectedFiles, sourceCheck }) => {
       try {
+        const schema = withAuthLock(projectPath, rawSchema);
         const stale = staleModelSourceError(sourceCheck);
         if (stale) return { success: false, error: stale };
         if (isPythonSource(sourceType, projectPath)) {
@@ -292,8 +308,9 @@ app.whenReady().then(() => {
     }
   );
 
-  ipcMain.handle('project:createModel', async (_, { projectPath, sourceType, draft }) => {
+  ipcMain.handle('project:createModel', async (_, { projectPath, sourceType, draft: rawDraft }) => {
     try {
+      const draft = rawDraft?.model ? { ...rawDraft, model: withAuthLock(projectPath, rawDraft.model) } : rawDraft;
       // Python: the manifest is the model's source (K1); nothing to reconcile from the generated file.
       if (isPythonSource(sourceType, projectPath)) return withPythonSourceHash(writePythonModel(projectPath, draft));
       const result = sourceType === 'dotnet-ef' ? writeDotnetModel(projectPath, draft) : await createModel(projectPath, sourceType, draft);
@@ -334,8 +351,9 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('project:updateModel', async (_, { filePath, projectPath, sourceType, draft }) => {
+  ipcMain.handle('project:updateModel', async (_, { filePath, projectPath, sourceType, draft: rawDraft }) => {
     try {
+      const draft = rawDraft?.model ? { ...rawDraft, model: withAuthLock(projectPath, rawDraft.model) } : rawDraft;
       if (isPythonSource(sourceType, projectPath)) return withPythonSourceHash(writePythonModel(projectPath, draft));
       const result = sourceType === 'dotnet-ef' ? writeDotnetModel(projectPath, draft) : await updateModel(filePath, sourceType, draft);
       if (result.success && result.filePath) {
@@ -362,18 +380,25 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('project:bootstrapDotnet', async (_, { root, app: appName, db }: { root?: string; app?: string; db?: HostDatabase }) => {
+  ipcMain.handle(
+    'project:bootstrapDotnet',
+    async (_, { root, app: appName, db, auth }: { root?: string; app?: string; db?: HostDatabase; auth?: AuthBootstrapOptions }) => {
+      const target = root?.trim();
+      if (!target || !appName?.trim()) return { success: false, error: 'Klasör ve uygulama adı gerekli.' };
+      if (!db) return { success: false, error: 'Veritabanı ve id tipi gerekli.' };
+      if (!auth) return { success: false, error: 'Auth ayarları (ilk admin) gerekli.' };
+      return rememberAuthDefaults(await bootstrapDotnetProject(target, appName.trim(), db, auth), auth);
+    }
+  );
+
+  ipcMain.handle('project:bootstrapExpress', async (_, { root, app: appName, auth }: { root?: string; app?: string; auth?: AuthBootstrapOptions }) => {
     const target = root?.trim();
     if (!target || !appName?.trim()) return { success: false, error: 'Klasör ve uygulama adı gerekli.' };
-    if (!db) return { success: false, error: 'Veritabanı ve id tipi gerekli.' };
-    return bootstrapDotnetProject(target, appName.trim(), db);
+    if (!auth) return { success: false, error: 'Auth ayarları (ilk admin) gerekli.' };
+    return rememberAuthDefaults(await bootstrapExpressProject(target, appName.trim(), auth), auth);
   });
 
-  ipcMain.handle('project:bootstrapExpress', async (_, { root, app: appName }: { root?: string; app?: string }) => {
-    const target = root?.trim();
-    if (!target || !appName?.trim()) return { success: false, error: 'Klasör ve uygulama adı gerekli.' };
-    return bootstrapExpressProject(target, appName.trim());
-  });
+  ipcMain.handle('project:getAuthDefaults', async () => readAuthDefaults());
 
   ipcMain.handle('project:bootstrapAdmin', async (_, { root, app: appName, stack }: { root?: string; app?: string; stack?: BackendStack }) => {
     const target = root?.trim();
@@ -398,10 +423,11 @@ app.whenReady().then(() => {
     }
   );
 
-  ipcMain.handle('project:bootstrapPython', async (_, { root, app: appName }: { root?: string; app?: string }) => {
+  ipcMain.handle('project:bootstrapPython', async (_, { root, app: appName, auth }: { root?: string; app?: string; auth?: AuthBootstrapOptions }) => {
     const target = root?.trim();
     if (!target || !appName?.trim()) return { success: false, error: 'Klasör ve uygulama adı gerekli.' };
-    return bootstrapPythonProject(target, appName.trim());
+    if (!auth) return { success: false, error: 'Auth ayarları (ilk admin) gerekli.' };
+    return rememberAuthDefaults(await bootstrapPythonProject(target, appName.trim(), auth), auth);
   });
 
   createWindow();

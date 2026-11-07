@@ -88,14 +88,34 @@ const NotificationsSlicer = createSlice({
 - **RTK kuralı:** bir action için tek `addCase`, ve `addCase`'ler `addMatcher`'lardan önce (ikisi de çalışma anında hata fırlatır; `tsc` yakalamaz). Kullanıcı dosyasında sıra: `add<E>BaseCases` → kendi thunk'larının `addCase`'leri → üretilmiş thunk'ın action'ına ek davranış `builder.addMatcher(thunk.fulfilled.match, …)`.
 - List: sayfa bilgisi + `append`. getOne: `currentItem`. Create: başa eklenir (varsayılan sıra en yeni önce), `total + 1`. Update: listede ve `currentItem`'da `merge<E>Saved`: cevap alanları üstüne yazılır, id'si değişmeyen ilişki populate edilmiş haliyle kalır, değişen `{ id }` olur (sonraki okumada dolar). Delete: id thunk argümanından (`data` `null`), `total - 1`.
 
+## Auth
+
+Backend manifest'inde `workspace.auth` varsa (Generator'ın kurduğu host) `generateClientModules` ortak auth katmanını da üretir ([../backend/auth.md](../backend/auth.md)). `auth` seçeneği: verilmezse manifest'ten okunur (`clientAuthFromManifest`: modüller + önek, Python `/api/v1`, diğerleri `/api`); `false` kapatır; `{ modules, prefix, storagePrefix? }` elle verir.
+
+| Dosya | İçerik |
+| --- | --- |
+| `services/auth.service.generated.ts` | `AuthUser`, `AuthSession`, istek tipleri, `AUTH_ENDPOINTS`; çekirdek + seçili modüllerin fonksiyonları |
+| `services/authStorage.generated.ts` | Token saklama: `redux-rn` AsyncStorage; `redux-web` `localStorage` ("beni hatırla") / `sessionStorage` |
+| `services/authRefresh.generated.ts` | `refreshSessionOnce()` (tek seferlik kuyruk), `onSessionChange`, `isAuthRequest` |
+| `store/thunks/auth.thunk.generated.ts` | `login` (remember), `restoreSession` (soğuk açılışta `me`), `logout`, `changePassword`, modül thunk'ları; hep fulfilled `LocalResponse` |
+| `store/slices/auth.slice.generated.ts` | `authReducer`, `sessionChanged`, `clearSession`, `selectAuth`, `bindAuthStore` |
+
+Hepsi G dosya; UI üretilmez. Host bir kez bağlar (sonuçtaki `notes` satırı da söyler):
+
+- root reducer'a `auth: authReducer`, store kurulunca `bindAuthStore(store)`;
+- `api.ts` isteğe `Authorization: Bearer <state.auth.accessToken>` ekler; 401'de, `isAuthRequest(url)` değilse `await refreshSessionOnce()` true ise isteği bir kez tekrarlar. Soğuk açılışta `restoreSession` kayıtlı access token'ı `me`'den önce slice'a koyar (`adoptStoredAccessToken`), interceptor storage okumaz.
+- Dosyalar `verbatimModuleSyntax` ile derlenir (tip importları `import type` / `type X`).
+
+İki rol de girer (admin paneli yalnız `admin`'i alır).
+
 ## Preset
 
 `clientPreset.ts`. İki preset de aynı klasör ve adları kullanır: `src/services`, `src/store/thunks`, `src/store/slices`; host'tan `API` (`@/services/api`), `LocalResponse` (`@/types`), `RootState` (`@/store`).
 
-| Preset | İstemci | İstek bayrakları |
-| --- | --- | --- |
-| `redux-rn` | Varlik360 `apps/mobile` | Header'da (`config.headers.skipLoading`) |
-| `redux-web` | SharedFrame `apps/web` | Axios config'te (`skipLoading`, `skipSuccessToast`); okumalar (list / getOne) başarı toast'ı göstermez |
+| Preset | İstemci | İstek bayrakları | Token saklama |
+| --- | --- | --- | --- |
+| `redux-rn` | Varlik360 `apps/mobile` | Header'da (`config.headers.skipLoading`) | AsyncStorage |
+| `redux-web` | SharedFrame `apps/web` | Axios config'te (`skipLoading`, `skipSuccessToast`); okumalar (list / getOne) başarı toast'ı göstermez | `localStorage` / `sessionStorage` |
 
 - `optionalAsNull` verilmezse `backendRoot` bir .NET host'u ise açık (BE boş opsiyonel alanı `null` yazar).
 - URL'ler mutlak (`/api/<modül>`): host'un axios `baseURL`'ü yalnız origin'dir (`http://localhost:5080`; canlıda boş = aynı origin). Elle yazılan özel uçlar da `/api/...` yazar.

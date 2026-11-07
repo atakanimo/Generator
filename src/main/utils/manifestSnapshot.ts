@@ -2,6 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSy
 import { dirname, join } from 'path';
 import { parseNormalizedModel } from '../ipc/schemaParser.js';
 import { mergeModel, sanitizeFieldRelationMeta } from '../../shared/modelMerge.js';
+import { lockAuthUsersModel } from '../../shared/authModules.js';
 import { NORMALIZED_MODEL_VERSION, canonicalModel, type NormalizedModel } from '../../shared/normalizedModel.js';
 import type { ManifestWorkspacePrefs } from '../../shared/ipcTypes.js';
 import { LEGACY_HOST_DATABASE, hostDatabaseError, type BackendStack, type HostDatabase } from '../../shared/backendDatabase.js';
@@ -232,7 +233,9 @@ export function applyManifestWrite(prev: WorkspaceManifest | null, request: Mani
 
   if (request.model) {
     const rel = normalizeRelPath(request.model.sourceRelativePath.trim());
-    const { schema } = request.model;
+    // A host with the shared auth layer keeps the auth fields of `Users` (docs/backend/auth.md).
+    const auth = manifest.workspace?.auth ?? request.workspace?.auth;
+    const schema = auth ? lockAuthUsersModel(request.model.schema, auth.modules) : request.model.schema;
     // Stored: fields + UI / API settings; timestamps and the mongoose model name always come from the file.
     const model = canonicalModel({
       schemaVersion: NORMALIZED_MODEL_VERSION,

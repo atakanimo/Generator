@@ -13,6 +13,8 @@
  *  5. Python golden parity (PY6): a Python host generated from `fixtures/dotnet/models.json` (`out/dotnet/<label>/
  *     python-golden`, empty Mongo DB `py_golden` in the same container; StockExchange untouched) vs the `models/` host
  *     on a fresh Postgres DB → `contract-parity.mjs --suite golden-models`. `--python-only` runs steps 4 and 5 only.
+ *  6. Auth (docs/backend/auth.md): a new host through the app's `bootstrapDotnetProject` (every auth module) on the
+ *     chosen database → first admin seeded → `auth-scenarios.mjs`. `--auth-only` runs this step only.
  *
  * `--db sqlserver`: the .NET hosts run on SQL Server instead (Docker `mcr.microsoft.com/mssql/server:2022-latest`,
  * amd64; a fresh container per run, removed at the end); regen-dotnet gets the same flag. `--db mongodb`: a separate
@@ -24,7 +26,7 @@
  *
  * `--id objectid` (MongoDB only): hosts with ObjectId ids; the smokes get `ID_TYPE` (`_smoke-ids.mjs`).
  *
- * Run:  node scripts/verify/dotnet-e2e.mjs [label] [--db postgres|sqlserver|mongodb] [--id uuid-v7|objectid] [--no-parity] [--skip-regen] [--parity-only] [--python-only]
+ * Run:  node scripts/verify/dotnet-e2e.mjs [label] [--db postgres|sqlserver|mongodb] [--id uuid-v7|objectid] [--no-parity] [--skip-regen] [--parity-only] [--python-only] [--auth-only]
  */
 import { build } from 'esbuild';
 import { spawn, spawnSync } from 'child_process';
@@ -32,6 +34,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { tmpdir, userInfo } from 'os';
 import { dirname, join } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
+import { AUTH_ALL_MODULES, AUTH_TEST_ADMIN, otpReaderFromLog, runAuthScenarios } from './auth-scenarios.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const args = process.argv.slice(2);
@@ -45,6 +48,7 @@ const outBase = join(root, 'scripts/verify/out/dotnet', label);
 const varlik = process.env.VARLIK360 ?? '/Users/atakanatabey/Projects/VarlikALL/Varlik360';
 const stockExchange = process.env.STOCKEXCHANGE ?? '/Users/atakanatabey/Projects/VarlikALL/StockExchange';
 const pythonOnly = args.includes('--python-only');
+const authOnly = args.includes('--auth-only');
 const pythonJwtSecret = 'parity-secret-parity-secret-parity-1234';
 const pgHost = process.env.PG_HOST ?? '/tmp';
 const pgUser = process.env.PG_USER ?? userInfo().username;
@@ -156,6 +160,8 @@ async function startDotnetHost(hostDir, db, port) {
   if (dbServer.migrations) {
     const ef = ['-p', 'src/SampleHost.Infrastructure', '-s', 'src/SampleHost.Api'];
     run('dotnet', ['tool', 'restore'], { cwd: hostDir });
+    // A fresh host (auth step) has no obj/ yet: `ef` needs the package assets.
+    run('dotnet', ['restore', '-v', 'q'], { cwd: hostDir });
     run('dotnet', ['ef', 'migrations', 'add', 'Initial', ...ef, '-o', 'Persistence/Migrations'], { cwd: hostDir, env });
     run('dotnet', ['ef', 'database', 'update', ...ef], { cwd: hostDir, env });
   }
@@ -184,6 +190,11 @@ function smoke(script, base) {
 }
 
 async function main() {
+  if (authOnly) {
+    await dbServer.start();
+    await authRun();
+    return;
+  }
   const parityOnly = args.includes('--parity-only') || pythonOnly;
   // 1. Generate + static gates.
   if (!args.includes('--skip-regen') && !parityOnly) {
@@ -195,8 +206,11 @@ async function main() {
 
   await dbServer.start();
 
-  // 2. Smoke against the fixture host.
-  if (!parityOnly) await smokes();
+  // 2. Smoke against the fixture host; 6. auth on a new host.
+  if (!parityOnly) {
+    await smokes();
+    await authRun();
+  }
 
   // 3. Parity with Express.
   if (!parity) return;
@@ -264,6 +278,67 @@ async function pythonParity() {
   python.child.kill('SIGKILL');
 }
 
+/** .NET generator bundle (same entry as `regen-dotnet.mjs`). */
+async function loadDotnetGenerator() {
+  const outfile = join(root, 'scripts/verify/out/.harness/dotnet-e2e-bundle.mjs');
+  mkdirSync(dirname(outfile), { recursive: true });
+  await build({
+    entryPoints: [join(root, 'scripts/verify/_dotnet-entry.ts')],
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    outfile,
+    plugins: [
+      {
+        name: 'stub-electron',
+        setup(api) {
+          api.onResolve({ filter: /^electron$/ }, () => ({ path: 'electron', namespace: 'stub-electron' }));
+          api.onLoad({ filter: /.*/, namespace: 'stub-electron' }, () => ({
+            contents: 'export const app = { getAppPath: () => process.cwd(), isPackaged: false };',
+            loader: 'js'
+          }));
+        }
+      }
+    ],
+    logLevel: 'silent'
+  });
+  return import(pathToFileURL(outfile).href);
+}
+
+/** 6. Shared auth: new host (app bootstrap, every module) → first admin seeded → the stack-neutral auth scenarios. */
+async function authRun() {
+  const gen = await loadDotnetGenerator();
+  const hostDir = join(outBase, 'auth');
+  rmSync(hostDir, { recursive: true, force: true });
+  mkdirSync(hostDir, { recursive: true });
+  const boot = await gen.bootstrapDotnetProject(hostDir, 'SampleHost', { database, idType }, { modules: AUTH_ALL_MODULES, admin: AUTH_TEST_ADMIN });
+  step('auth: bootstrap (every module)', boot.success, boot.error ?? `${boot.files?.length} file(s)`);
+  if (!boot.success) return;
+  const host = await startDotnetHost(hostDir, 'gen_e2e_auth', 5198);
+  try {
+    await waitFor(async () => host.output().includes('auth.seed'), 'first admin seed', 30000).catch(() => {});
+    if (!host.output().includes(`auth.seed ${AUTH_TEST_ADMIN.email}`)) {
+      step('auth: first admin seeded', false, host.output().slice(-1500));
+      return;
+    }
+    step('auth: first admin seeded', true);
+    await runAuthScenarios({
+      base: 'http://localhost:5198',
+      prefix: '/api',
+      admin: AUTH_TEST_ADMIN,
+      usersAdmin: '/api/users/admin',
+      modules: AUTH_ALL_MODULES,
+      readOtp: otpReaderFromLog(() => host.output()),
+      check: (name, ok, detail) => {
+        step(name, ok, ok ? '' : detail);
+        return ok;
+      }
+    });
+  } finally {
+    host.child.kill('SIGKILL');
+  }
+}
+
 /** Python generator bundle (same entry as `regen-python.mjs`). */
 async function loadPythonGenerator() {
   const outfile = join(root, 'scripts/verify/out/.harness/python-e2e-bundle.mjs');
@@ -296,7 +371,7 @@ async function pythonGoldenParity() {
   const hostDir = join(outBase, 'python-golden');
   rmSync(hostDir, { recursive: true, force: true });
   mkdirSync(hostDir, { recursive: true });
-  const boot = gen.bootstrapPythonProject(hostDir, 'SampleHost');
+  const boot = await gen.bootstrapPythonProject(hostDir, 'SampleHost', { modules: [], admin: AUTH_TEST_ADMIN });
   if (!boot.success) throw new Error(`python golden host bootstrap: ${boot.error}`);
   const models = JSON.parse(readFileSync(join(root, 'scripts/verify/fixtures/dotnet/models.json'), 'utf8'));
   gen.generatePythonModules(hostDir, gen.toPythonPackageName('SampleHost'), models);
@@ -310,6 +385,12 @@ async function pythonGoldenParity() {
   await waitFor(async () => (await (await fetch('http://localhost:5196/api/v1/health')).json()).data?.mongoConnected === true, 'Python golden host', 90000).catch((error) => {
     throw new Error(`${error.message}\n${python.output().slice(-2000)}`);
   });
+  // Token users of the golden suite (contract-parity `PYTHON_GOLDEN_*_ID`): the host reads the role from `users`.
+  const now = 'new Date()';
+  const tokenUser = (id, role) =>
+    `{ _id: ObjectId('${id}'), email: '${role}-token@e2e.test', name: '${role}', role: '${role}', status: 'active', emailVerified: true, provider: 'password', createdAt: ${now}, updatedAt: ${now} }`;
+  run('docker', ['exec', 'gen-e2e-mongo', 'mongosh', '--quiet', 'py_golden', '--eval',
+    `db.users.insertMany([${tokenUser('65f0000000000000000000a1', 'admin')}, ${tokenUser('65f0000000000000000000a2', 'user')}])`]);
   const dotnet = await startDotnetHost(join(outBase, 'models'), 'gen_e2e_pygolden', 5197);
   const r = run('node', [join(root, 'scripts/verify/contract-parity.mjs'), '--suite', 'golden-models'], {
     env: { PYTHON_BASE: 'http://localhost:5196', DOTNET_BASE: 'http://localhost:5197', ...jwt },

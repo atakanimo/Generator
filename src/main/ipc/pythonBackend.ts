@@ -9,6 +9,9 @@
  * PY7: project scan (manifest modules + hand-written `modules/<m>/model.py` that can be imported), import of a
  * Pydantic class (`parsePydanticModel` → manifest row → generate) and the extra-field report of its collection.
  */
+import { buildAuthUsersModel, lockAuthUsersModel, normalizeAuthModules, type AuthBootstrapOptions } from '../../shared/authModules.js';
+import { bootstrapPythonAuth } from '../generators/python-fastapi/PythonAuthBootstrap.js';
+import { buildAuthSeedAdmin } from '../utils/authSeed.js';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import type { NormalizedModel } from '../../shared/normalizedModel.js';
@@ -48,8 +51,14 @@ export interface PythonHost {
 }
 
 /** New host in an empty (or new) folder; `app` is turned into a snake_case package name; the manifest records the stack. */
-export function bootstrapPythonProject(root: string, app: string): PythonBootstrapResponse {
+/**
+ * New host + the shared auth layer (docs/backend/auth.md): auth files for the picked modules, first admin seed, and the
+ * `Users` model (manifest row + generated module). Async for the same signature as the other stacks' bootstraps.
+ */
+export async function bootstrapPythonProject(root: string, app: string, auth: AuthBootstrapOptions): Promise<PythonBootstrapResponse> {
   try {
+    const modules = normalizeAuthModules(auth.modules);
+    const admin = buildAuthSeedAdmin(auth.admin);
     const pkg = toPythonPackageName(app);
     if (!isValidPythonPackage(pkg)) {
       return { success: false, error: 'Uygulama adı geçerli bir Python paket adına çevrilemedi (harfle başlamalı), ör. AlphaTerminal → alpha_terminal.' };
@@ -60,8 +69,16 @@ export function bootstrapPythonProject(root: string, app: string): PythonBootstr
     const hostError = existingHostError(root);
     if (hostError) return { success: false, error: hostError };
     const result = bootstrapPythonHost(root, pkg);
-    writeWorkspaceManifestUpdate(root, { event: 'workspace', workspace: { backendStack: 'python-fastapi', ...onlyHostDatabase('python-fastapi') } });
-    const created = result.files.filter((f) => f.action === 'created').map((f) => toProjectRelativePath(root, f.path));
+    const authFiles = bootstrapPythonAuth(root, app.trim(), pkg, modules, admin);
+    writeWorkspaceManifestUpdate(root, {
+      event: 'workspace',
+      workspace: { backendStack: 'python-fastapi', ...onlyHostDatabase('python-fastapi'), auth: { modules } }
+    });
+    const users = writePythonModel(root, { model: buildAuthUsersModel(modules) });
+    if (!users.success) return { success: false, error: `Users modeli üretilemedi: ${users.error}` };
+    const created = [...result.files, ...authFiles.files]
+      .filter((f) => f.action === 'created')
+      .map((f) => toProjectRelativePath(root, f.path));
     log(`[python] bootstrap ${pkg}: ${created.length} file(s)`, 'info');
     return { success: true, package: pkg, files: created };
   } catch (error) {
@@ -104,10 +121,12 @@ export function loadPythonModels(root: string): NormalizedModel[] {
 }
 
 /** Regenerates every manifest module with `schema` replacing (or added to) its own entry. */
-export function generatePythonBackend(projectPath: string, schema: NormalizedModel): GenerateBackendResult & { filePath?: string } {
+export function generatePythonBackend(projectPath: string, input: NormalizedModel): GenerateBackendResult & { filePath?: string } {
   try {
     const host = requireHost(projectPath);
     assertHostDatabase(host.root, 'python-fastapi');
+    const auth = readWorkspaceManifest(host.root)?.workspace?.auth;
+    const schema = auth ? lockAuthUsersModel(input, auth.modules) : input;
     const own = pythonModelPath(host, schema.entityName);
     const models = loadPythonModels(host.root).filter((m) => m.entityName !== schema.entityName);
     const result = generatePythonModules(host.root, host.pkg, [...models, schema]);
@@ -144,21 +163,24 @@ export interface PythonModelWriteResult {
 export function writePythonModel(projectPath: string, draft: ModelDraft): PythonModelWriteResult {
   try {
     const host = requireHost(projectPath);
-    const filePath = pythonModelPath(host, draft.model.entityName);
+    // The auth fields of `Users` stay as the auth layer expects (docs/backend/auth.md).
+    const auth = readWorkspaceManifest(host.root)?.workspace?.auth;
+    const model = auth ? lockAuthUsersModel(draft.model, auth.modules) : draft.model;
+    const filePath = pythonModelPath(host, model.entityName);
     const sourceRelativePath = toProjectRelativePath(host.root, filePath);
     const stash = writeWorkspaceManifestUpdate(host.root, {
       event: 'stash',
-      model: { schema: draft.model, sourceRelativePath },
+      model: { schema: model, sourceRelativePath },
       workspace: { backendStack: 'python-fastapi' }
     });
     if (!stash.success) return { success: false, error: stash.error };
-    const generated = generatePythonBackend(host.root, draft.model);
+    const generated = generatePythonBackend(host.root, model);
     if (!generated.success) return { success: false, error: generated.error };
     const row = readWorkspaceManifest(host.root)?.models.find((m) => m.sourceRelativePath === sourceRelativePath);
     return {
       success: true,
       filePath,
-      schema: row?.model ?? draft.model,
+      schema: row?.model ?? model,
       sourceRelativePath,
       manifestPath: getWorkspaceManifestPath(host.root),
       manifestUpdated: true

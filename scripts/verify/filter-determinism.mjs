@@ -16,6 +16,7 @@ import { build } from 'esbuild';
 import { mkdirSync, rmSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
+import { AUTH_TEST_ADMIN } from './auth-scenarios.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const out = join(root, 'scripts/verify/out/filter-determinism');
@@ -74,13 +75,14 @@ const models = [
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 const db = { database: 'postgres', idType: 'uuid-v7' };
-const boot = gen.bootstrapDotnetProject(out, 'FilterHost', db);
+const boot = await gen.bootstrapDotnetProject(out, 'FilterHost', db, { modules: [], admin: AUTH_TEST_ADMIN });
 check('bootstrap', boot.success, boot.error);
 for (const model of models) {
   const r = gen.writeDotnetModel(out, { model });
   check(`model editor save ${model.entityName}`, r.success, r.error);
 }
-const rows = gen.readWorkspaceManifest(out)?.models ?? [];
+// The bootstrap's auth `Users` row is not one of the fixture models (docs/backend/auth.md).
+const rows = (gen.readWorkspaceManifest(out)?.models ?? []).filter(r => r.model.entityName !== 'Users');
 check('manifest has every model', rows.length === models.length, rows.map(r => r.model.entityName));
 for (const row of rows) {
   const r = gen.generateDotnetBackend(out, row.model);
@@ -140,7 +142,8 @@ for (const [label, list] of [['raw manifest rows', rows.map(r => r.model)], ['me
   const dn = dotnetFilters(list);
   const py = pythonFilters(list);
   for (const model of list) for (const f of model.fields) {
-    if (f.name === 'createdAt' || f.name === 'updatedAt') continue;
+    // Hidden fields (`Users.passwordHash`, docs/backend/auth.md) are never filterable on any path.
+    if (f.name === 'createdAt' || f.name === 'updatedAt' || f.access?.hidden) continue;
     const key = `${model.entityName}.${f.name}`;
     const expected = contractName[gen.effectiveFilterType(f)];
     check(`${label} ${key}: .NET ${expected}`, dn.get(key) === expected, dn.get(key));

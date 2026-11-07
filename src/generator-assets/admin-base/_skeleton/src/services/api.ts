@@ -80,10 +80,57 @@ const handleResponseSuccess = (axiosResponse: AxiosResponse<any>) => {
   return Promise.resolve(response as unknown as AxiosResponse<any>);
 };
 
+/** `refreshed`: yeni token var; `expired`: BE refresh token'ı reddetti (oturum biter); `offline`: sunucuya ulaşılamadı. */
+type RefreshResult = 'refreshed' | 'expired' | 'offline';
+
+/** Aynı anda gelen 401'ler tek refresh'i bekler (refresh token her kullanımda döner; ikinci istek eskisiyle 401 alırdı). */
+let refreshing: Promise<RefreshResult> | null = null;
+
+/**
+ * Refresh token ile yeni oturum (docs/backend/auth.md). Token storage'dan okunur: başka sekme yenilediyse güncel olan
+ * oradadır. Interceptor'sız (döngü olmasın).
+ */
+async function refreshSession(): Promise<RefreshResult> {
+  const sent = getTokenFromStorage(APP_CONFIG.storage.refreshToken);
+  if (!sent) return 'expired';
+  const { sessionRefreshed, tokenAdopted } = await import('@/store/slices/authSlice');
+  try {
+    const res = await axios.post(APP_CONFIG.auth.refresh, { refreshToken: sent }, { baseURL: BASE_URL });
+    store.dispatch(sessionRefreshed(res.data.data));
+    return 'refreshed';
+  } catch (error) {
+    // Başka sekme aynı anda yeniledi: onun token'ları storage'da.
+    const stored = getTokenFromStorage(APP_CONFIG.storage.refreshToken);
+    const access = getTokenFromStorage(APP_CONFIG.storage.token);
+    if (stored && access && stored !== sent) {
+      store.dispatch(tokenAdopted({ token: access, refreshToken: stored }));
+      return 'refreshed';
+    }
+    return axios.isAxiosError(error) && !error.response ? 'offline' : 'expired';
+  }
+}
+
+const isAuthCall = (url: string | undefined) => {
+  const path = (url ?? '').split('?')[0];
+  return path.endsWith(APP_CONFIG.auth.login) || path.endsWith(APP_CONFIG.auth.refresh) || path.endsWith(APP_CONFIG.auth.logout);
+};
+
 const handleResponseError = async (error: AxiosError) => {
   stopLoading(error.config);
   // İptal edilen istekler (ör. yerini yenisine bırakan autocomplete) kullanıcı için hata değil.
   if (axios.isCancel(error as unknown)) return Promise.reject(error);
+
+  // Access token'ın süresi doldu: bir kez yenile, isteği tekrarla; yenilenemezse oturum kapanır.
+  const original = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
+  let offline = false;
+  if (error.response?.status === 401 && store && original && !original._retried && !isAuthCall(original.url)) {
+    refreshing ??= refreshSession().finally(() => {
+      refreshing = null;
+    });
+    const result = await refreshing;
+    if (result === 'refreshed') return API({ ...original, _retried: true } as InternalAxiosRequestConfig);
+    offline = result === 'offline';
+  }
 
   const response: LocalResponse<null> = { isSuccess: false, data: null, uiMessage: '', errorData: { header: '', message: '', code: 0 } };
   if (error.response) {
@@ -93,9 +140,10 @@ const handleResponseError = async (error: AxiosError) => {
       header: data?.errorData?.header ?? '',
       message: data?.errorData?.message ?? error.message
     };
-    if (error.response.status === 401 && store) {
-      const { logout } = await import('@/store/slices/authSlice');
-      store.dispatch(logout());
+    // Sunucuya ulaşılamadıysa oturum kalır; bağlantı gelince tekrar denenir.
+    if (error.response.status === 401 && store && !offline && !isAuthCall(error.config?.url)) {
+      const { clearSession } = await import('@/store/slices/authSlice');
+      store.dispatch(clearSession());
     }
   } else {
     response.errorData = { header: 'ERR_NETWORK', message: 'Sunucuya ulaşılamadı.', code: 0 };

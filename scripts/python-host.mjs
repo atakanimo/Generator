@@ -4,7 +4,11 @@
  * (`project:bootstrapPython`, `project:createModel` / `updateModel`, `project:generateBackend`). Until the
  * "Yeni Python projesi" button exists (plan PY9) this is the way to start a host without the Electron UI.
  *
- *   node scripts/python-host.mjs bootstrap <dir> <AppName>     empty folder → skeleton + core assets + manifest
+ *   node scripts/python-host.mjs bootstrap <dir> <AppName>     empty folder → skeleton + core assets + auth + manifest;
+ *                                                               first admin + auth modules from the app's own defaults
+ *                                                               (`<userData>/auth-defaults.json`), overridden by
+ *                                                               AUTH_ADMIN_EMAIL / AUTH_ADMIN_PASSWORD / AUTH_ADMIN_NAME /
+ *                                                               AUTH_MODULES (comma list, empty = core only)
  *   node scripts/python-host.mjs model <dir> <models.json>     each NormalizedModel (array or one object) → manifest
  *                                                               row + generate (model editor path)
  *   node scripts/python-host.mjs generate <dir>                regenerate every manifest module
@@ -27,6 +31,7 @@
  */
 import { build } from 'esbuild';
 import { existsSync, mkdirSync, readFileSync } from 'fs';
+import { homedir } from 'os';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 
@@ -70,6 +75,21 @@ async function loadGenerator() {
   return import(pathToFileURL(outfile).href);
 }
 
+/** Same first admin / modules as the "Yeni proje" dialog (docs/backend/auth.md "İlk admin"); env wins. */
+function authOptions() {
+  const file = join(homedir(), 'Library/Application Support/universal-code-generator/auth-defaults.json');
+  const stored = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
+  const env = process.env;
+  const modules = env.AUTH_MODULES !== undefined ? env.AUTH_MODULES.split(',').map((m) => m.trim()).filter(Boolean) : (stored.modules ?? []);
+  const admin = {
+    email: env.AUTH_ADMIN_EMAIL ?? stored.admin?.email ?? '',
+    password: env.AUTH_ADMIN_PASSWORD ?? stored.admin?.password ?? '',
+    name: env.AUTH_ADMIN_NAME ?? stored.admin?.name ?? 'Admin'
+  };
+  if (!admin.email || !admin.password) usage(`İlk admin yok: AUTH_ADMIN_EMAIL + AUTH_ADMIN_PASSWORD ver ya da uygulamada bir proje oluştur (${file}).`);
+  return { modules, admin };
+}
+
 if (!command || !dirArg) usage();
 const dir = resolve(dirArg);
 const gen = await loadGenerator();
@@ -77,7 +97,7 @@ const gen = await loadGenerator();
 if (command === 'bootstrap') {
   if (!extra) usage('Uygulama adı eksik (ör. SampleHost).');
   mkdirSync(dir, { recursive: true });
-  const res = gen.bootstrapPythonProject(dir, extra);
+  const res = await gen.bootstrapPythonProject(dir, extra, authOptions());
   if (!res.success) usage(`bootstrap: ${res.error}`);
   console.log(`bootstrap: ${res.files?.length ?? 0} dosya, paket ${gen.toPythonPackageName(extra)} (${dir})`);
   console.log('Sonra: cp .env.example .env (JWT_SECRET en az 32 karakter), uv sync, uv run pytest');

@@ -1,13 +1,13 @@
-"""FastAPI dependency'leri: kimlik (JWT HS256, `sub` + `role`), admin yetkisi, veritabanı.
+"""FastAPI dependency'leri: kimlik (JWT HS256 `sub`, kullanıcı DB'den), admin yetkisi, veritabanı.
 
-Anlam .NET iskeletiyle aynı: `sub` kullanıcı id'si, `role` rol (string ya da liste); admin uçları `ADMIN_ROLE`'ü ister.
-Token yok / geçersiz → 401, rol yok → 403; `ContractRoute` ikisini de sözleşme zarfına çevirir.
+Rol token'dan değil `users` kaydından okunur (docs/backend/auth.md "Roller"): rol değişikliği ve askıya alma hemen
+geçerli. Token yok / geçersiz / kullanıcı yok → 401, askıda → 403, admin değil → 403; `ContractRoute` zarfa çevirir.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Annotated
+from dataclasses import dataclass, field
+from typing import Annotated, Any
 
 import jwt
 from fastapi import Depends, HTTPException
@@ -15,6 +15,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from __app__.core.config import settings
 from __app__.core.db import Database, get_db
+from __app__.modules.auth.service import load_user
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -22,14 +23,20 @@ _bearer = HTTPBearer(auto_error=False)
 @dataclass(frozen=True, slots=True)
 class CurrentUser:
     id: str
-    roles: frozenset[str]
+    role: str
+    doc: dict[str, Any] = field(compare=False, repr=False)
+
+    @property
+    def roles(self) -> frozenset[str]:
+        return frozenset({self.role})
 
     @property
     def is_admin(self) -> bool:
-        return settings.ADMIN_ROLE in self.roles
+        return self.role == "admin"
 
 
-def decode_token(token: str) -> CurrentUser:
+def decode_token(token: str) -> str:
+    """Geçerli token'ın `sub`'ı; değilse 401."""
     try:
         claims = jwt.decode(
             token,
@@ -41,17 +48,22 @@ def decode_token(token: str) -> CurrentUser:
         )
     except jwt.InvalidTokenError as exc:
         raise HTTPException(status_code=401) from exc
-    raw_role = claims.get("role")
-    roles = [raw_role] if isinstance(raw_role, str) else raw_role if isinstance(raw_role, list) else []
-    return CurrentUser(id=str(claims["sub"]), roles=frozenset(str(r) for r in roles))
+    return str(claims["sub"])
 
 
-def get_current_user(
+async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+    db: Annotated[Database, Depends(get_db)],
 ) -> CurrentUser:
     if credentials is None or not credentials.credentials:
         raise HTTPException(status_code=401)
-    return decode_token(credentials.credentials)
+    user_id = decode_token(credentials.credentials)
+    user = await load_user(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=401)
+    if user.get("status") == "suspended":
+        raise HTTPException(status_code=403)
+    return CurrentUser(id=str(user["_id"]), role=str(user.get("role") or "user"), doc=user)
 
 
 def require_admin(user: Annotated[CurrentUser, Depends(get_current_user)]) -> CurrentUser:

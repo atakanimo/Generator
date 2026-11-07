@@ -1,6 +1,7 @@
 /** English texts; same keys as `tr.ts`. */
 const en = {
   common: {
+    serviceUnavailable: 'Service unavailable',
     success: 'Success',
     failed: 'Failed',
     error: 'Error',
@@ -26,7 +27,33 @@ const en = {
   },
   auth: {
     noToken: 'No token provided',
-    invalidToken: 'Invalid or expired token'
+    invalidToken: 'Invalid or expired token',
+    invalidCredentials: 'Wrong e-mail or password',
+    suspended: 'Account is suspended',
+    emailNotVerified: 'E-mail address is not verified',
+    loggedIn: 'Signed in',
+    loggedOut: 'Signed out',
+    wrongPassword: 'Current password is wrong',
+    passwordChanged: 'Password updated',
+    passwordTooShort: 'Password must be at least 8 characters',
+    passwordTooLong: 'Password is too long (at most 72 bytes)',
+    passwordWeak: 'Password must contain a letter and a digit',
+    otpSent: 'A verification code was sent to the e-mail address',
+    invalidCode: 'Code is invalid or expired',
+    emailVerified: 'E-mail verified',
+    emailRequired: 'The provider did not share an e-mail address',
+    emailInUse: 'This e-mail belongs to another account; sign in with that account',
+    accountDeleted: 'Account deleted',
+    adminNotAllowed: 'This action is not available for admin accounts',
+    adminPasswordOnly: 'Admin accounts sign in with e-mail and password only',
+    passwordAlreadySet: 'This account already has a password; use change password',
+    passwordCreated: 'Password created',
+    tooManyRequests: 'Too many attempts; try again later',
+    mail: {
+      verifySubject: '__App__ verification code',
+      resetSubject: '__App__ password reset code',
+      codeText: 'Your code: {{code}}. Valid for {{minutes}} minutes.'
+    }
   },
   rateLimit: {
     tooManyRequests: 'Too Many Requests'

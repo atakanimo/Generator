@@ -24,6 +24,8 @@ export interface ClientPreset {
    * `config` (admin-base / web: `skipLoading` / `skipSuccessToast` on the axios config).
    */
   requestFlags: 'headers' | 'config';
+  /** Where the auth tokens live (docs/backend/auth.md): the phone's AsyncStorage or the browser's storage. */
+  tokenStorage: 'async-storage' | 'browser';
 }
 
 /** Varlik360 `apps/mobile`: React Native, RTK, axios `API` in `@/services/api`. */
@@ -31,7 +33,8 @@ export const REDUX_RN_PRESET: ClientPreset = {
   id: 'redux-rn',
   dirs: { services: 'src/services', thunks: 'src/store/thunks', slices: 'src/store/slices' },
   imports: { api: '@/services/api', localResponse: '@/types', rootState: '@/store', services: '@/services' },
-  requestFlags: 'headers'
+  requestFlags: 'headers',
+  tokenStorage: 'async-storage'
 };
 
 /**
@@ -41,7 +44,8 @@ export const REDUX_RN_PRESET: ClientPreset = {
 export const REDUX_WEB_PRESET: ClientPreset = {
   ...REDUX_RN_PRESET,
   id: 'redux-web',
-  requestFlags: 'config'
+  requestFlags: 'config',
+  tokenStorage: 'browser'
 };
 
 export const CLIENT_PRESETS: Record<ClientPresetId, ClientPreset> = {

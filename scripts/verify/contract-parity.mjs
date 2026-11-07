@@ -418,7 +418,12 @@ async function goldenModelsSuite() {
     },
     dotnet: { ...dotnetStack({}), path: (r) => `/api/${r}/admin` }
   };
-  stacks.python.tokens = stacks.dotnet.tokens;
+  // The Python host reads the role from its `users` collection (docs/backend/auth.md): its tokens name two users the
+  // e2e writes there (ObjectId ids); the .NET models host has no auth layer and keeps its random subjects.
+  stacks.python.tokens = {
+    admin: sign({ ...contractClaims, sub: process.env.PYTHON_GOLDEN_ADMIN_ID ?? '65f0000000000000000000a1', role: 'admin' }),
+    user: sign({ ...contractClaims, sub: process.env.PYTHON_GOLDEN_USER_ID ?? '65f0000000000000000000a2' })
+  };
   driftFields = new Set();
   const scenario = makeScenario(stacks, {
     'delete referenced event type': '.NET refuses (FK Restrict, or CheckInUseAsync on MongoDB) → 409; Python deletes (200) — same as Express (symbols suite)'

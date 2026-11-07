@@ -28,6 +28,7 @@ const keep = process.argv.includes('--keep');
 /** Modules the mobile app takes from the Generator today (plan §5). */
 const MOBILE = ['AppVersionConfigs', 'DailyPortfolio', 'Notifications', 'SymbolTypes', 'Symbols', 'Transactions', 'UserAssetCategories', 'UserWatchList', 'Users'];
 const MOBILE_TSC_BASELINE = 2;
+const AUTH_MODULES = ['register', 'password-reset', 'google', 'apple', 'account-delete'];
 
 const outfile = join(root, 'scripts/verify/out/.harness/client-bundle.mjs');
 mkdirSync(dirname(outfile), { recursive: true });
@@ -77,13 +78,20 @@ const NO_SLICE = new Set(['Users']);
 const run = () => {
   const common = { clientRoot: copy, preset: b.REDUX_RN_PRESET, allModels, backendRoot: varlik, baseUrl: '/api', now };
   const parts = [
-    b.generateClientModules({ ...common, models: models.filter(m => !NO_SLICE.has(m.entityName)) }),
-    b.generateClientModules({ ...common, models: models.filter(m => NO_SLICE.has(m.entityName)), layers: { slice: false } })
+    // Shared auth layer (docs/backend/auth.md), every module: the AsyncStorage variant must compile in the mobile app.
+    b.generateClientModules({ ...common, models: models.filter(m => !NO_SLICE.has(m.entityName)), auth: { modules: AUTH_MODULES, prefix: '/api', storagePrefix: 'varlik' } }),
+    b.generateClientModules({ ...common, models: models.filter(m => NO_SLICE.has(m.entityName)), layers: { slice: false }, auth: false })
   ];
   return { files: parts.flatMap(p => p.files), modules: parts.flatMap(p => p.modules), warnings: parts.flatMap(p => p.warnings), notes: parts.flatMap(p => p.notes) };
 };
 const first = run();
 for (const w of first.warnings) console.log(`  warn: ${w}`);
+const AUTH_FILES = ['services/auth.service', 'services/authStorage', 'services/authRefresh', 'thunks/auth.thunk', 'slices/auth.slice'];
+for (const f of AUTH_FILES) {
+  const [layer, name] = f.split('/');
+  check(existsSync(join(copy, b.REDUX_RN_PRESET.dirs[layer], `${name}.generated.ts`)), `auth: ${name}.generated.ts missing`);
+}
+check(/AsyncStorage/.test(readFileSync(join(servicesDir, 'authStorage.generated.ts'), 'utf8')), 'auth: mobile token storage is not AsyncStorage');
 
 // Operations = normal API surface; nothing else is generated.
 for (const ctx of first.modules) {

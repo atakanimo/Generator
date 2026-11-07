@@ -10,6 +10,7 @@ import {
   requestContextMiddleware,
   requestIdMiddleware
 } from '@middlewares';
+import authRoutes from '@modules/auth/auth.routes';
 import healthRoutes from '@modules/health/health.routes';
 
 /**
@@ -28,6 +29,7 @@ export function createApp() {
   app.use(express.json({ limit: '1mb' }));
 
   app.use('/api', healthRoutes);
+  app.use('/api/auth', authRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

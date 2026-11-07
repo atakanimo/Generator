@@ -11,8 +11,11 @@
  *     (normal list / getOne, admin) → `generateBackend` with "update existing files": base URL `/api`, normal and admin
  *     routers mounted in `src/app.ts` before the 404 handler; a second generate mounts nothing twice.
  *  4. `npm run typecheck`, `npm test`, `npm run build` (tsc + tsc-alias) with the module.
- *  5. Docker `mongo:7` + `node dist/index.js`: health (`mongoConnected: true`), 401 / 403 envelopes, normal list
- *     without auth, then `dotnet-py1-formats-smoke.mjs` (the scenarios .NET and Varlik360 pass) on the new module.
+ *     The bootstrap also lays down the shared auth layer (docs/backend/auth.md): every module, a first admin, and the
+ *     `Users` model generated (manifest row, admin router mounted).
+ *  5. Docker `mongo:7` + `node dist/index.js`: health (`mongoConnected: true`), the first admin seeded, 401
+ *     envelopes, normal list without auth, `dotnet-py1-formats-smoke.mjs` (the scenarios .NET and Varlik360 pass) on
+ *     the new module with the admin's login token, then the shared auth scenarios (`auth-scenarios.mjs`).
  *  6. Stack info (`src/shared/backendStacks.ts`, the buttons' popover): for .NET, Express and Python every tree entry
  *     marked `bootstrap` exists right after that stack's bootstrap; doc files exist; versions in the info match the
  *     skeletons (Express / Mongoose / Zod / TypeScript majors, Python `requires-python`, .NET SDK).
@@ -28,6 +31,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
+import { AUTH_ALL_MODULES, AUTH_TEST_ADMIN, otpReaderFromLog, runAuthScenarios } from './auth-scenarios.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const keep = process.argv.includes('--keep');
@@ -39,6 +43,7 @@ const jwt = { JWT_SECRET: 'express-bootstrap-secret-0123456789abcdef', JWT_ISSUE
 const PORT = 5196;
 const MONGO_PORT = 27031;
 const MONGO = 'gen-express-bootstrap-mongo';
+const AUTH = { modules: AUTH_ALL_MODULES, admin: AUTH_TEST_ADMIN };
 
 let failed = 0;
 let server;
@@ -118,22 +123,25 @@ async function waitFor(check, ms) {
 }
 
 async function bootstrapStep(api) {
-  const result = api.bootstrapExpressProject(host, appName);
+  const result = await api.bootstrapExpressProject(host, appName, AUTH);
   check('bootstrapExpressProject', result.success && result.package === 'sample-shop', result.error ?? `${result.files?.length} dosya, paket ${result.package}`);
   const manifest = api.readWorkspaceManifest(host);
   check('manifest backendStack nodejs-mongoose', manifest?.workspace?.backendStack === 'nodejs-mongoose', JSON.stringify(manifest?.workspace));
+  check('manifest auth modules + Users row', manifest?.workspace?.auth?.modules?.length === AUTH_ALL_MODULES.length && manifest.models.some((m) => m.model.entityName === 'Users'), JSON.stringify(manifest?.workspace?.auth));
+  check('first admin seed: hash only', /\$2b\$12\$/.test(readFileSync(join(host, 'src/seed/initial-admin.ts'), 'utf8')) && !readFileSync(join(host, 'src/seed/initial-admin.ts'), 'utf8').includes(AUTH_TEST_ADMIN.password));
+  check('auth module files', ['src/modules/auth/auth.routes.ts', 'src/core/auth/social.ts', 'src/core/auth/otp.ts'].every((f) => existsSync(join(host, f))));
   const tokens = listFiles(host).filter((f) => /__app__|__App__/.test(readFileSync(f, 'utf8')) || /__app__|__App__/.test(f));
   check('no skeleton token left', tokens.length === 0, tokens.join(', '));
   const pkg = JSON.parse(readFileSync(join(host, 'package.json'), 'utf8'));
   check('package.json name', pkg.name === 'sample-shop', pkg.name);
-  const again = api.bootstrapExpressProject(host, appName);
+  const again = await api.bootstrapExpressProject(host, appName, AUTH);
   check('second bootstrap refused', !again.success && /package\.json/.test(again.error ?? ''), again.error);
   const rewrite = api.bootstrapExpressHost(host, appName, 'sample-shop').files.filter((f) => f.action === 'created');
   check('second host bootstrap writes nothing', rewrite.length === 0, rewrite.map((f) => f.path).join(', '));
-  const bad = api.bootstrapExpressProject(mkdtempSync(join(tmpdir(), 'gen-express-bad-')), '123');
+  const bad = await api.bootstrapExpressProject(mkdtempSync(join(tmpdir(), 'gen-express-bad-')), '123', AUTH);
   check('invalid app name refused', !bad.success, bad.error);
   const scan = await api.scanProject(host);
-  check('scan: nodejs-mongoose, no model', scan.success && scan.detectedType === 'nodejs-mongoose' && scan.models.length === 0, JSON.stringify({ type: scan.detectedType, models: scan.models?.length, error: scan.error }));
+  check('scan: nodejs-mongoose, only Users', scan.success && scan.detectedType === 'nodejs-mongoose' && scan.models.length === 1, JSON.stringify({ type: scan.detectedType, models: scan.models?.length, error: scan.error }));
 }
 
 function npmChecks(label) {
@@ -183,7 +191,7 @@ async function modelStep(api) {
   );
   check('admin mount path read back', api.findAdminMountPath(host, 'reminders') === '/api/reminders/admin', api.findAdminMountPath(host, 'reminders'));
   const scan = await api.scanProject(host);
-  check('scan: one model', scan.models?.length === 1, scan.models?.map((m) => m.fileName).join(', '));
+  check('scan: Users + the new model', scan.models?.length === 2, scan.models?.map((m) => m.fileName).join(', '));
   return gen.success;
 }
 
@@ -204,8 +212,7 @@ async function httpStep() {
       NODE_ENV: 'development',
       PORT: String(PORT),
       MONGODB_URI: `mongodb://localhost:${MONGO_PORT}/express_bootstrap`,
-      ADMIN_ROLE: 'admin',
-      LOG_LEVEL: 'warn',
+      LOG_LEVEL: 'info',
       ...jwt
     }
   });
@@ -217,13 +224,16 @@ async function httpStep() {
   check('health envelope', health.status === 200 && health.json.isSuccess === true && health.json.errorData === null && typeof health.json.traceId === 'string');
   const anon = await call('POST', '/api/reminders/admin/get-all', { body: {} });
   check('admin without token → 401 envelope', anon.status === 401 && anon.json?.errorData?.code === 401, JSON.stringify(anon.json));
-  const user = await call('POST', '/api/reminders/admin/get-all', { body: {}, auth: token({ sub: 'u1', role: 'user' }) });
-  check('admin with user role → 403', user.status === 403 && user.json?.errorData?.code === 403, JSON.stringify(user.json));
+  const forged = await call('POST', '/api/reminders/admin/get-all', { body: {}, auth: token({ sub: '0123456789abcdef01234567', role: 'admin' }) });
+  check('signed admin claim of an unknown user → 401 (role read from the DB)', forged.status === 401, JSON.stringify(forged.json));
   const wrongIssuer = await call('POST', '/api/reminders/admin/get-all', { body: {}, auth: token({ sub: 'u1', role: 'admin', iss: 'other' }) });
   check('wrong issuer → 401', wrongIssuer.status === 401);
+  const seeded = await waitFor(async () => output.includes('auth.seed'), 15000);
+  const login = await call('POST', '/api/auth/login', { body: { email: AUTH_TEST_ADMIN.email, password: AUTH_TEST_ADMIN.password } });
+  if (!check('first admin seeded and logs in', seeded && login.status === 200 && login.json?.data?.accessToken, JSON.stringify(login.json)?.slice(0, 300))) return;
   const smoke = spawnSync('node', [join(root, 'scripts/verify/dotnet-py1-formats-smoke.mjs')], {
     encoding: 'utf8',
-    env: { ...process.env, ...jwt, API_BASE: `http://localhost:${PORT}` }
+    env: { ...process.env, ...jwt, API_BASE: `http://localhost:${PORT}`, ACCESS_TOKEN: login.json.data.accessToken }
   });
   const lines = smoke.stdout.trim().split('\n');
   // KNOWN: `numberFormat` is a C# / Python choice; the Express model editor hides it and the Mongoose model file does
@@ -236,9 +246,18 @@ async function httpStep() {
   check('py1 formats smoke (new Express host)', unknown.length === 0 && pass > 0, `${pass} PASS, ${fails.length - unknown.length} KNOWN${smoke.stderr ? `\n${smoke.stderr}` : ''}`);
   const normal = await call('POST', '/api/reminders/get-all', { body: {} });
   check('normal list without auth (requiresAuth false)', normal.status === 200 && normal.json?.data?.total >= 2, JSON.stringify(normal.json).slice(0, 300));
+  await runAuthScenarios({
+    base: `http://localhost:${PORT}`,
+    prefix: '/api',
+    admin: AUTH_TEST_ADMIN,
+    usersAdmin: '/api/users/admin',
+    modules: AUTH_ALL_MODULES,
+    readOtp: otpReaderFromLog(() => output),
+    check
+  });
 }
 
-function stackInfoStep(api, expressHost) {
+async function stackInfoStep(api, expressHost) {
   const majors = JSON.parse(readFileSync(join(host, 'package.json'), 'utf8'));
   const deps = { ...majors.dependencies, ...majors.devDependencies };
   const scratch = mkdtempSync(join(tmpdir(), 'gen-stack-info-'));
@@ -249,12 +268,12 @@ function stackInfoStep(api, expressHost) {
       if (info.stack === 'dotnet-ef') {
         target = join(scratch, 'dotnet');
         names = { app: 'StackInfo', pkg: '' };
-        const r = api.bootstrapDotnetProject(target, names.app, { database: 'postgres', idType: 'uuid-v7' });
+        const r = await api.bootstrapDotnetProject(target, names.app, { database: 'postgres', idType: 'uuid-v7' }, AUTH);
         check('stack info: .NET bootstrap', r.success, r.error ?? '');
       } else if (info.stack === 'python-fastapi') {
         target = join(scratch, 'python');
         names = { app: 'StackInfo', pkg: api.toPythonPackageName('StackInfo') };
-        const r = api.bootstrapPythonProject(target, names.app);
+        const r = await api.bootstrapPythonProject(target, names.app, AUTH);
         check('stack info: Python bootstrap', r.success, r.error ?? '');
       }
       const paths = api.stackTreePaths(info, names);
@@ -291,7 +310,7 @@ try {
   mkdirSync(host, { recursive: true });
   const api = await loadBundle();
   await bootstrapStep(api);
-  stackInfoStep(api, host);
+  await stackInfoStep(api, host);
   const install = run('npm', ['install', '--no-audit', '--no-fund', '--prefer-offline'], host);
   check('npm install', install.ok, install.ok ? '' : tail(install.output));
   if (install.ok) {

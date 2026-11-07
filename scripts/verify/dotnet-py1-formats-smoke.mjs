@@ -14,7 +14,8 @@ if(!secret){console.error('JWT_SECRET gerekli');process.exit(1);}
 const b64=v=>Buffer.from(JSON.stringify(v)).toString('base64url');
 const now=Math.floor(Date.now()/1000);
 const h=`${b64({alg:'HS256',typ:'JWT'})}.${b64({sub:SUBJECT,role:'admin',...(process.env.TOKEN_USER_ID?{userId:process.env.TOKEN_USER_ID}:{}),iat:now,exp:now+600,iss:process.env.JWT_ISSUER,aud:process.env.JWT_AUDIENCE})}`;
-const tok=`${h}.${createHmac('sha256',secret).update(h).digest('base64url')}`;
+// ACCESS_TOKEN: a real login's token (hosts with the shared auth layer read the user from the DB).
+const tok=process.env.ACCESS_TOKEN??`${h}.${createHmac('sha256',secret).update(h).digest('base64url')}`;
 const call=async(m,p,b,headers={})=>{const r=await fetch(base+p,{method:m,headers:{'content-type':'application/json',authorization:`Bearer ${tok}`,...headers},body:b&&JSON.stringify(b)});return {s:r.status,j:await r.json().catch(()=>null),h:r.headers}};
 let f=0;const ck=(n,ok,d)=>{if(!ok)f++;console.log(ok?'PASS':'FAIL',n,ok?'':JSON.stringify(d))};
 const api='/api/reminders/admin';

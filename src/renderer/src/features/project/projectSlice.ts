@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
+import type { AuthBootstrapOptions } from '@shared/authModules';
 import type { NormalizedModel } from '@shared/normalizedModel';
 import type {
   BackendSelectedFiles,
@@ -460,17 +461,35 @@ export const pickDirectory = createAsyncThunk('project/pickDirectory', async ():
  */
 export const bootstrapBackendProject = createAsyncThunk(
   'project/bootstrapBackendProject',
-  async ({ stack, root, app, db }: { stack: NewProjectStack; root: string; app: string; db: HostDatabase }): Promise<BootstrapProjectResult> => {
+  async ({
+    stack,
+    root,
+    app,
+    db,
+    auth
+  }: {
+    stack: NewProjectStack;
+    root: string;
+    app: string;
+    db: HostDatabase;
+    auth: AuthBootstrapOptions;
+  }): Promise<BootstrapProjectResult> => {
     const api = window.electronAPI?.project;
     if (stack === 'dotnet-ef') {
       if (!api?.bootstrapDotnet) return { success: false, error: 'Project bootstrap API not available' };
-      return api.bootstrapDotnet(root, app, db);
+      return api.bootstrapDotnet(root, app, db, auth);
     }
     const call = stack === 'nodejs-mongoose' ? api?.bootstrapExpress : api?.bootstrapPython;
     if (!call) return { success: false, error: 'Project bootstrap API not available' };
-    return call(root, app);
+    return call(root, app, auth);
   }
 );
+
+/** Auth modules + first admin of the last bootstrap on this machine (`project:getAuthDefaults`); never rejects. */
+export const loadAuthDefaults = createAsyncThunk('project/loadAuthDefaults', async (): Promise<AuthBootstrapOptions | null> => {
+  const call = window.electronAPI?.project?.getAuthDefaults;
+  return call ? call() : null;
+});
 
 /** New admin panel (`project:bootstrapAdmin`); same contract as `bootstrapBackendProject`. */
 export const bootstrapAdminPanel = createAsyncThunk(

@@ -38,7 +38,7 @@ uv run uvicorn orders_api.api.main:app --reload          # http://localhost:8000
 uv run python -m orders_api.worker                       # job'lar (APScheduler)
 ```
 
-Admin uçları `POST /api/v1/admin-crud/<route>/get-all`, `GET …/{id}`, `POST …/create`, `POST …/update/{id}`, `DELETE …/{id}`; `Authorization: Bearer <JWT>` (`sub` + `role: "admin"`, `ADMIN_ROLE` ile değişir). Mongo kapalıyken uygulama açılır, sağlık ucu `mongoConnected: false`, CRUD uçları 503. Açılışta Mongo bağlıysa unique index'ler kurulur (`api/indexes_generated.py`). Model değişince yeniden generate: editörde kaydet ya da `node scripts/python-host.mjs generate <dir>`.
+Admin uçları `POST /api/v1/admin-crud/<route>/get-all`, `GET …/{id}`, `POST …/create`, `POST …/update/{id}`, `DELETE …/{id}`; `Authorization: Bearer <JWT>`; kullanıcı her istekte DB'den okunur, admin = DB'deki `role === "admin"` (env yok; [auth.md](auth.md)). Mongo kapalıyken uygulama açılır, sağlık ucu `mongoConnected: false`, CRUD uçları 503. Açılışta Mongo bağlıysa unique index'ler kurulur (`api/indexes_generated.py`). Model değişince yeniden generate: editörde kaydet ya da `node scripts/python-host.mjs generate <dir>`.
 
 ## Çağrı zinciri
 

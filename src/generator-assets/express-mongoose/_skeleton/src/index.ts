@@ -3,8 +3,9 @@ import 'dotenv/config';
 
 import { createApp } from '@/app';
 import { requireJwtSecret } from '@config/env';
-import { connectDB } from '@db/connection';
+import { connectDB, isMongoConnected } from '@db/connection';
 import { getAppLogger } from '@core/logging/logger';
+import { seedAuth } from '@modules/auth/auth.seed';
 
 requireJwtSecret();
 
@@ -14,5 +15,12 @@ createApp().listen(port, () => {
   getAppLogger().info({ event: 'server.listening', port }, `__App__ API http://localhost:${port}/api/health`);
 });
 
-// Mongo kapalıyken de uygulama açılır; sağlık ucu `mongoConnected: false` döner.
-void connectDB();
+// Mongo kapalıyken de uygulama açılır; sağlık ucu `mongoConnected: false` döner. Bağlanınca ilk admin kurulur.
+void connectDB().then(async () => {
+  if (!isMongoConnected()) return;
+  try {
+    await seedAuth();
+  } catch (error) {
+    getAppLogger().error({ err: error, event: 'auth.seed-failed' }, 'İlk admin kurulamadı');
+  }
+});

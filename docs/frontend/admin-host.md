@@ -22,8 +22,8 @@ Hepsi K (bir kez yazılır, sonra kullanıcının); `modules/resources.generated
 | `src/routes/` | `routes.ts`: menü sırası (Dashboard, `createAdminRoutes(resources)`); `ProtectedRoute` |
 | `src/layout/MainLayout.tsx` | `AtaAdminLayout` (ortam etiketi, sürüm, dil / tema, çıkış) |
 | `src/pages/` | Login (`AtaLoginPage`), Dashboard (`AdminDashboard`); tema ve dil üst bardaki düğmelerden |
-| `src/store/` | `theme` (mod tarayıcıda saklanır, çekmece), `auth` (login / me thunk'ları, "beni hatırla"), `common` (global loading) |
-| `src/services/` | `api.ts` interceptor (token, loading, `uiMessage` / hata toast'u, 401 → çıkış), `auth.services.ts` |
+| `src/store/` | `theme` (mod tarayıcıda saklanır, çekmece), `auth` (login / me / logout thunk'ları, access + refresh token, "beni hatırla"), `common` (global loading) |
+| `src/services/` | `api.ts` interceptor (token, loading, `uiMessage` / hata toast'u, 401 → tek seferlik refresh, olmazsa çıkış), `auth.services.ts` |
 | `src/hooks/`, `src/theme/`, `src/i18n/`, `src/components/`, `src/helper/`, `src/types/`, `src/utils/` | SharedFrame admin ile aynı |
 
 Tokenlar: `__App__` panel adı, `__app__` npm adı (`OrdersApi` → `orders-api-admin`, `OrdersAdmin` → `orders-admin`), `__API_PREFIX__` / `__API_DEV_URL__` backend'e göre:
@@ -38,7 +38,14 @@ Kurulumdan sonra ilk Frontend generate'ten önce panelde `npm install` yapılır
 
 ## Backend beklentisi
 
-Generator auth uçlarını üretmez. Backend `POST <önek>/auth/login` → `{ token, user }` ve `GET <önek>/auth/me` → `user` vermelidir (zarf: [api-contract.md](../api-contract.md)); `user.role !== 'admin'` girişte reddedilir. Yollar `src/config/app.ts`'te değiştirilir.
+Generator'ın kurduğu Express / .NET / Python host'u bu uçları zaten verir ([../backend/auth.md](../backend/auth.md), sözleşme §8). Panel şunları kullanır:
+
+- `POST <önek>/auth/login` → `AuthSession` (`{ accessToken, refreshToken, expiresIn, user }`); `user.role !== 'admin'` girişte reddedilir ve o refresh token `logout` ile iptal edilir.
+- `GET <önek>/auth/me` → `AuthUser`: kayıtlı token açılışta bununla doğrulanır.
+- `POST <önek>/auth/refresh` `{ refreshToken }` → yeni çift: `api.ts` 401'de bir kez çağırır (aynı anda gelen 401'ler tek isteği bekler), isteği bir kez tekrarlar; başarısızsa `clearSession`.
+- `POST <önek>/auth/logout` `{ refreshToken }`: çıkışta; cevap ne olursa olsun yerel oturum kapanır.
+
+Token'lar "Beni hatırla" seçimine göre `localStorage` ya da `sessionStorage`'da (`APP_CONFIG.storage.token` / `refreshToken`); refresh aynı yere yazar. Yollar `src/config/app.ts`'te. Eski host (`{ token, user }` veren) Faz B'de geçene kadar bu paneli kullanamaz.
 
 ## Kurallar
 

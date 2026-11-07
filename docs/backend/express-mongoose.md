@@ -38,7 +38,7 @@ src/modules/<m>/             (G) model, crud, filters, types, service(.admin), s
 tests/health.test.ts         (K)
 ```
 
-Auth: `Authorization: Bearer <JWT>`; kullanıcı id'si `userId` ya da `sub`, `exp` zorunlu, `JWT_ISSUER` / `JWT_AUDIENCE` ayarlıysa denetlenir. Admin: `role` (string ya da liste) `ADMIN_ROLE`'ü (varsayılan `admin`, üç stack'te aynı) içerir ya da id `ADMIN_USER_IDS`'te (Varlik360 kuralı). Dil: `lang` / `x-lang` başlığı, `?lang=`, `Accept-Language`; varsayılan `tr`. `X-Request-Id` (yoksa `X-Trace-Id`) okunur, yanıta ve zarfın `traceId`'sine yazılır.
+Auth: `Authorization: Bearer <JWT>`; kullanıcı id'si `userId` ya da `sub`, `exp` zorunlu, `JWT_ISSUER` / `JWT_AUDIENCE` ayarlıysa denetlenir. Kullanıcı her istekte DB'den okunur: yoksa 401, `status: suspended` 403; admin = DB'deki `role === 'admin'` (env yok). Login / refresh / me ve `Users` modeli bootstrap'la gelir: [auth.md](auth.md). Dil: `lang` / `x-lang` başlığı, `?lang=`, `Accept-Language`; varsayılan `tr`. `X-Request-Id` (yoksa `X-Trace-Id`) okunur, yanıta ve zarfın `traceId`'sine yazılır.
 
 Bilinen: Express model editöründe `numberFormat` (int) seçimi yok ve Mongoose model dosyası bu bilgiyi taşımaz (`src/shared/modelDraft.ts`); editörden oluşturulan modelde sayı alanı ondalık kabul eder. Kapı: `scripts/verify/express-bootstrap.mjs` ([verification.md](../verification.md)).
 

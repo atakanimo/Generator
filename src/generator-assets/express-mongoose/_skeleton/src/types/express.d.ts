@@ -1,15 +1,19 @@
 /** Express `Request` ekleri (middleware'lerin yazdığı alanlar). */
-export {};
+import type { IUsers } from '@modules/users/users.model';
 
 declare global {
   namespace Express {
     interface Request {
       /** `x-request-id` (en çok 128 karakter) ya da üretilen UUID: `requestIdMiddleware`. */
       requestId?: string;
-      /** Token'ın `userId` ya da `sub` claim'i: `authMiddleware`. */
+      /** Token'ın `sub` claim'i: `authMiddleware`. */
       userId?: string;
-      /** Token'ın `role` claim'i (string ya da liste): `authMiddleware`. */
+      /** Giriş yapmış kullanıcının kaydı (DB'den): `authMiddleware`. */
+      authUser?: IUsers;
+      /** `[authUser.role]`: `authMiddleware`. */
       userRoles?: string[];
     }
   }
 }
+
+export {};

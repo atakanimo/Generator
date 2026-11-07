@@ -31,8 +31,8 @@ const AppContent: React.FC = () => {
   const theme = createAppTheme(mode);
 
   useEffect(() => {
-    // Kayıtlı token varsa kullanıcıyı doğrula (geçersizse çıkış).
-    if (store.getState().auth.token) dispatch(me());
+    // Kayıtlı oturum (access ya da yalnız refresh token) `me` ile doğrulanır; süresi dolmuşsa interceptor yeniler.
+    if (store.getState().auth.checking) dispatch(me());
   }, [dispatch]);
 
   return (

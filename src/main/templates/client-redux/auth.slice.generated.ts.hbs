@@ -1,0 +1,91 @@
+{{header}}
+// Auth state (docs/backend/auth.md): user, access token (the interceptor's `Authorization`), cold-start check.
+// Register it as `auth` in the root reducer and call `bindAuthStore(store)` once. Do not edit.
+import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
+import type { AuthSession, AuthUser } from '{{imports.services}}/auth.service.generated';
+import { onSessionChange, type SessionChange } from '{{imports.services}}/authRefresh.generated';
+import * as thunks from '{{thunksImport}}/auth.thunk.generated';
+
+export interface AuthState {
+  user: AuthUser | null;
+  accessToken: string | null;
+  isAuthenticated: boolean;
+  /** True until `restoreSession` has checked a stored session. */
+  checking: boolean;
+}
+
+export const authInitialState: AuthState = { user: null, accessToken: null, isAuthenticated: false, checking: true };
+
+const signedIn = (state: AuthState, session: AuthSession) => {
+  state.user = session.user;
+  state.accessToken = session.accessToken;
+  state.isAuthenticated = true;
+  state.checking = false;
+};
+
+const signedOut = (state: AuthState) => {
+  state.user = null;
+  state.accessToken = null;
+  state.isAuthenticated = false;
+  state.checking = false;
+};
+
+const authSlice = createSlice({
+  name: 'auth',
+  initialState: authInitialState,
+  reducers: {
+    /** From the refresh queue: a new access token (signed in once the user is known), or `null` when the session is over. */
+    sessionChanged: (state, { payload }: PayloadAction<SessionChange>) => {
+      if (!payload) return signedOut(state);
+      state.accessToken = payload.accessToken;
+      if (!payload.user) return;
+      state.user = payload.user;
+      state.isAuthenticated = true;
+      state.checking = false;
+    },
+    /** Local sign-out without the server call (e.g. the host's own 401 handling). */
+    clearSession: signedOut
+  },
+  extraReducers: builder => {
+    builder
+      .addCase(thunks.login.fulfilled, (state, { payload }) => {
+        if (payload.isSuccess && payload.data) signedIn(state, payload.data);
+      })
+      .addCase(thunks.restoreSession.fulfilled, (state, { payload }) => {
+        if (!payload.isSuccess || !payload.data) return signedOut(state);
+        state.user = payload.data;
+        state.accessToken = payload.accessToken;
+        state.isAuthenticated = true;
+        state.checking = false;
+      })
+      .addCase(thunks.logout.fulfilled, signedOut)
+      .addCase(thunks.changePassword.fulfilled, (state, { payload }) => {
+        if (payload.isSuccess) signedOut(state);
+      }){{#if register}}
+      .addCase(thunks.verifyEmail.fulfilled, (state, { payload }) => {
+        if (payload.isSuccess && payload.data) signedIn(state, payload.data);
+      }){{/if}}{{#if google}}
+      .addCase(thunks.loginWithGoogle.fulfilled, (state, { payload }) => {
+        if (payload.isSuccess && payload.data) signedIn(state, payload.data);
+      }){{/if}}{{#if apple}}
+      .addCase(thunks.loginWithApple.fulfilled, (state, { payload }) => {
+        if (payload.isSuccess && payload.data) signedIn(state, payload.data);
+      }){{/if}}{{#if social}}
+      .addCase(thunks.setPassword.fulfilled, (state, { payload }) => {
+        if (payload.isSuccess && state.user) state.user.hasPassword = true;
+      }){{/if}}{{#if accountDelete}}
+      .addCase(thunks.deleteAccount.fulfilled, (state, { payload }) => {
+        if (payload.isSuccess) signedOut(state);
+      }){{/if}};
+  }
+});
+
+export const { sessionChanged, clearSession } = authSlice.actions;
+export const authReducer = authSlice.reducer;
+export const selectAuth = (state: { auth: AuthState }) => state.auth;
+
+/** Once after the store is created: the refresh queue writes renewed sessions (or the sign-out) into this slice. */
+export const bindAuthStore = (store: { dispatch: (action: ReturnType<typeof sessionChanged>) => unknown }) =>
+  onSessionChange(session => {
+    store.dispatch(sessionChanged(session));
+  });

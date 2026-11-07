@@ -1,6 +1,6 @@
 """API giriş noktası: `uvicorn __app__.api.main:app`.
 
-`create_app()` middleware'leri, sağlık ucunu ve üretilen admin CRUD router'larını (`routers_generated.py`) bağlar;
+`create_app()` middleware'leri, sağlık ucunu, auth uçlarını (`modules/auth`) ve üretilen admin CRUD router'larını (`routers_generated.py`) bağlar;
 açılışta üretilen modüllerin index'leri kurulur (`indexes_generated.py`).
 Elle yazılan router'lar da burada eklenir.
 """
@@ -25,6 +25,9 @@ from __app__.core.http.contract import (
     install_contract_handlers,
 )
 from __app__.core.http.middleware.trace import LEGACY_TRACE_ID_HEADER, TRACE_ID_HEADER, TraceIdMiddleware
+from __app__.modules.auth.router import router as auth_router
+from __app__.modules.auth.seed import seed_auth
+from __app__.modules.auth.service import ensure_auth_indexes
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -37,6 +40,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     if is_mongo_connected():
         # Üretilen modüllerin index'leri (unique dahil); Mongo kapalıysa uygulama yine açılır.
         await ensure_crud_indexes(get_db())
+        # Auth: token tablolarının index'leri ve ilk admin (docs/backend/auth.md).
+        await ensure_auth_indexes(get_db())
+        await seed_auth(get_db())
     try:
         yield
     finally:
@@ -73,6 +79,7 @@ def create_app() -> FastAPI:
     app.add_middleware(TraceIdMiddleware)
 
     app.include_router(health_router, prefix=settings.API_PREFIX)
+    app.include_router(auth_router, prefix=settings.API_PREFIX)
     for router in ADMIN_CRUD_ROUTERS:
         app.include_router(router, prefix=settings.API_PREFIX)
     return app

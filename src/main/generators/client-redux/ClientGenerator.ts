@@ -17,6 +17,8 @@ import { isGeneratorOwnedSource } from '../../utils/generatedFileOwnership.js';
 import { moduleNameFromEntity } from '../../utils/namingUtils.js';
 import { getTemplatesDir } from '../../utils/templateHelpers.js';
 import { buildClientModuleContext, type ClientModuleContext } from './clientContext.js';
+import { normalizeAuthModules, type AuthModule } from '../../../shared/authModules.js';
+import { readWorkspaceManifest } from '../../utils/manifestSnapshot.js';
 import type { ClientPreset } from './clientPreset.js';
 
 export type ClientWriteAction = 'created' | 'updated' | 'unchanged' | 'skipped-user-owned' | 'skipped-exists';
@@ -43,6 +45,19 @@ export interface ClientGenerateOptions {
   layers?: Partial<Record<ClientLayer, boolean>>;
   /** Header date (tests pin it). */
   now?: Date;
+  /**
+   * Shared auth layer (docs/backend/auth.md): types, service, refresh queue, token storage, thunks and slice for these
+   * modules. Default: the backend manifest's `workspace.auth` (none for a host made before it).
+   */
+  auth?: ClientAuthOptions | false;
+}
+
+export interface ClientAuthOptions {
+  modules: readonly AuthModule[];
+  /** `/api` (Express, .NET) or `/api/v1` (Python). */
+  prefix: string;
+  /** Storage key prefix of the tokens (app name). */
+  storagePrefix?: string;
 }
 
 export type ClientLayer = 'service' | 'thunk' | 'slice';
@@ -102,8 +117,9 @@ function writeOnce(path: string, content: string): ClientWrittenFile {
 }
 
 function commonImports(ctx: ClientModuleContext): string {
-  const names = ctx.ops.list ? ['ListPaginationBody', 'PaginatedList'] : [];
-  return [...names, 'RequestOptions', 'requestFlags'].join(', ');
+  // Type-only names marked `type` (hosts with `verbatimModuleSyntax`).
+  const types = ctx.ops.list ? ['ListPaginationBody', 'PaginatedList'] : [];
+  return [...types, 'RequestOptions'].map(name => `type ${name}`).concat('requestFlags').join(', ');
 }
 
 /** Template data of one module: the context plus names derived for the thunk / slice templates. */
@@ -205,5 +221,54 @@ export function generateClientModules(options: ClientGenerateOptions): ClientGen
       }
     }
   }
+  const auth = options.auth === false ? null : (options.auth ?? (backendRoot ? clientAuthFromManifest(backendRoot) : null));
+  if (auth) files.push(...generateClientAuth(clientRoot, preset, auth, header, notes));
   return { files, modules, warnings, notes };
+}
+
+/** `workspace.auth` of the backend manifest → what the client generates; `null` for a host without the auth layer. */
+export function clientAuthFromManifest(backendRoot: string): ClientAuthOptions | null {
+  const workspace = readWorkspaceManifest(backendRoot)?.workspace;
+  if (!workspace?.auth) return null;
+  return { modules: normalizeAuthModules(workspace.auth.modules), prefix: workspace.backendStack === 'python-fastapi' ? '/api/v1' : '/api' };
+}
+
+/** G files of the shared auth layer; UI stays in the host (login / register screens). */
+function generateClientAuth(clientRoot: string, preset: ClientPreset, auth: ClientAuthOptions, header: string, notes: string[]): ClientWrittenFile[] {
+  const has = (m: AuthModule) => auth.modules.includes(m);
+  const purposes = [...(has('register') ? ["'verify'"] : []), ...(has('password-reset') ? ["'reset'"] : [])];
+  const data = {
+    header,
+    imports: preset.imports,
+    thunksImport: `${preset.imports.rootState}/thunks`,
+    headers: preset.requestFlags === 'headers',
+    asyncStorage: preset.tokenStorage === 'async-storage',
+    storagePrefix: (auth.storagePrefix ?? 'app').toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+    prefix: auth.prefix.replace(/\/+$/, ''),
+    moduleList: auth.modules.length ? auth.modules.join(', ') : 'core only',
+    register: has('register'),
+    passwordReset: has('password-reset'),
+    otp: purposes.length > 0,
+    otpPurposes: purposes.join(' | '),
+    google: has('google'),
+    apple: has('apple'),
+    // A Google / Apple account has no password until it creates one (`set-password`).
+    social: has('google') || has('apple'),
+    accountDelete: has('account-delete')
+  };
+  const servicesDir = join(clientRoot, preset.dirs.services);
+  const files = [
+    writeGenerated(join(servicesDir, 'auth.service.generated.ts'), render('auth.service.generated.ts', data)),
+    writeGenerated(join(servicesDir, 'authStorage.generated.ts'), render('authStorage.generated.ts', data)),
+    writeGenerated(join(servicesDir, 'authRefresh.generated.ts'), render('authRefresh.generated.ts', data)),
+    writeGenerated(join(clientRoot, preset.dirs.thunks, 'auth.thunk.generated.ts'), render('auth.thunk.generated.ts', data)),
+    writeGenerated(join(clientRoot, preset.dirs.slices, 'auth.slice.generated.ts'), render('auth.slice.generated.ts', data))
+  ];
+  if (files.some((f) => f.action === 'created')) {
+    notes.push(
+      `Auth: root reducer'a auth: authReducer (${preset.imports.rootState}/slices/auth.slice.generated), store kurulunca bindAuthStore(store); ` +
+        `api.ts interceptor'ı 401'de (isAuthRequest değilse) refreshSessionOnce() → true ise isteği bir kez tekrarlar; Authorization = state.auth.accessToken`
+    );
+  }
+  return files;
 }

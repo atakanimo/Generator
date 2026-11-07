@@ -6,6 +6,7 @@
  * `hooks.py`, `service.py`, `__init__.py`, the module test `tests/modules/<folder>/test_admin_crud.py`) are created once. A generate only ensures the core assets (create-only);
  * the skeleton belongs to the bootstrap, so an existing host (StockExchange) gets no new skeleton files.
  */
+import { AUTH_USERS_ENTITY } from '../../../shared/authModules.js';
 import Handlebars from 'handlebars';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
@@ -64,7 +65,10 @@ function moduleFiles(root: string, ctx: PythonModuleContext): WrittenFile[] {
     ...renderPythonOwnedFiles(ctx).map(({ file, content }) => writeOnce(join(dir, file), content))
   ];
   // Written once, and only into a host that has a `tests/` folder (the skeleton does; a copied `src/` alone does not).
-  const test = renderPythonModuleTest(ctx);
+  // The shared auth layer's `Users` (docs/backend/auth.md) is covered by the auth scenarios: its rows are also the
+  // test tokens' users and the seeded admin, so the generic list / count assertions do not hold there.
+  const authUsers = ctx.entity === AUTH_USERS_ENTITY && existsSync(join(pythonLayout(root, ctx.pkg).packageDir, 'modules', 'auth'));
+  const test = authUsers ? undefined : renderPythonModuleTest(ctx);
   if (test && existsSync(join(root, 'tests'))) files.push(writeOnce(join(root, test.file), test.content));
   return files;
 }
