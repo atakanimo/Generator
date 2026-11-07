@@ -11,7 +11,9 @@ export type FieldKind =
   | 'object'
   | 'map'
   /** Serbest JSON değer (ör. Mongoose `Mixed`): tabloda kısaltılmış JSON, formda JSON metni. */
-  | 'json';
+  | 'json'
+  /** Yüklenecek dosya (`File`). Yalnızca action `input`'unda; varsa action multipart gönderilir. */
+  | 'file';
 
 /** Form açıldığında hesaplanan create başlangıç değeri. `currentUserId`: `AtaAdminProvider.getCurrentUserId`. */
 export interface DynamicDefault {
@@ -106,7 +108,20 @@ export interface JsonFieldConfig extends FieldCommon {
   kind: 'json';
 }
 
-export type FieldConfig = ScalarFieldConfig | EnumFieldConfig | RelationFieldConfig | ObjectFieldConfig | MapFieldConfig | JsonFieldConfig;
+export interface FileFieldConfig extends FieldCommon {
+  kind: 'file';
+  /** `<input accept>`: ör. `image/*,video/*`. */
+  accept?: string;
+}
+
+export type FieldConfig =
+  | ScalarFieldConfig
+  | EnumFieldConfig
+  | RelationFieldConfig
+  | ObjectFieldConfig
+  | MapFieldConfig
+  | JsonFieldConfig
+  | FileFieldConfig;
 
 // ---------------------------------------------------------------------------
 // Tip seviyesinde satır çıkarımı: `defineResourceSchema` ile tanımlanan alanlardan
@@ -129,6 +144,8 @@ type BaseValue<F> = F extends { kind: 'enum'; numbers: readonly (infer N)[] }
           ? Record<string, ScalarValue<V>>
           : F extends { kind: 'json' }
             ? unknown
+            : F extends { kind: 'file' }
+            ? File
             : F extends { kind: infer K }
             ? ScalarValue<K>
             : never;

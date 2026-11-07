@@ -2,6 +2,17 @@
 
 SharedFrame, StockExchange, Varlik360 ve CeyizDefterim için. Bu hostlardaki üretilmiş dosya Generator ile yazılır. Generator deposunun kendi kaynağı (`src/`, `packages/admin-base`, şablonlar, doğrulama betikleri) bu kuralla üretilmez.
 
+## Öncelik
+
+Dosya adı ve yeri için Generator'ın bir çıktısı varsa (admin iskeleti `src/generator-assets/admin-base/_skeleton`, istemci veri katmanı `docs/frontend/client-data-layer.md`, backend damgalı dosyalar) doğru yer odur; host kodu ona taşınır. Generator'ın çıktısı olmayan yerde host kuralı seçer.
+
+## Kapsam
+
+- **Admin (`apps/admin`): zorunlu.** Her hostta entity admin ekranı ve admin config Generator ile yazılır; elle CRUD modülü (sayfa, tablo, servis, thunk, slice, route) açılmaz.
+- **Kullanıcı uygulamaları (`apps/web`, `apps/mobile`): zorunlu değil.** Veri katmanı (servis, thunk, slice) Generator ile üretilebilir ya da elle yazılabilir; ekranlar her zaman elle yazılır. Üretilmiş bir dosya (`*.generated.ts`, ilk satır damgalı) yine elle düzenlenmez; özel kod başlıksız dosyaya gider.
+- **Backend:** damgalı dosyalar Generator'ındır (aşağıda).
+- **Auth her yerde istisnadır.** Generator auth üretemez; admin, web ve mobilde auth servisi / thunk'ı / slice'ı elle yazılır ve mevcut haliyle kalır. TanStack'e ya da Generator çıktısına taşınmaz.
+
 ## Generator'ın yazdığı
 
 - Admin config: `apps/admin/src/modules/<modül>/<modül>.generated.config.ts` ve `modules/resources.generated.ts`. Yeni bir entity admin ekranı hostta sayfa, tablo, servis veya route olarak yazılmaz; paket config'i çizer.
@@ -31,6 +42,8 @@ Python'a özel kurulum, içe aktarma ve önizleme `scripts/python-host.mjs` içi
 ## Kuralın durduğu yer
 
 Metin tek yerdedir: bu dosya ve `.cursor/rules/AtaProjectCommon.mdc`. SharedFrame, StockExchange, Varlik360 ve CeyizDefterim kendi `.cursor/rules/AtaProjectCommon.mdc` dosyasında buna symlink tutar. Host tek başına açıldığında Cursor o kuralı okur; üretim komutu Generator'ın mutlak yolunu kullanır. Metin değişince yalnız Generator'daki dosya düzenlenir.
+
+Admin frontend kuralı da aynı düzendedir: kaynak `.cursor/rules/frontend.admin.mdc`, dört host `.cursor/rules/frontend.admin.mdc` symlink'i tutar. Web (`frontend.web.mdc`) ve mobil (`frontend.mobile.mdc`) kuralları her hostun kendi dosyasıdır; `frontend.common.mdc` yoktur.
 
 ## Paket davranışı
 

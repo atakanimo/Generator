@@ -3,12 +3,14 @@ import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { Box, IconButton, Link, Tooltip, Typography } from '@mui/material';
 import { useState } from 'react';
+import type { AnyResource } from '../../schema/extend.js';
 import type { FieldConfig } from '../../schema/fields.js';
 import { relationLabel } from '../../schema/relation.js';
 import type { ResourceSchema } from '../../schema/resource.js';
 import { enumLabelOf } from '../enumChoices.js';
 import { formatDate, formatDateTime, isEmptyValue, shortId, valueSummary } from '../format.js';
 import { fieldLabelKey, useAdminTexts } from '../useAdminTexts.js';
+import { FileCell } from './FileCell.js';
 
 const cellTextSx = { fontSize: '0.875rem', minWidth: 0 } as const;
 
@@ -107,4 +109,20 @@ export function ValueCell({ resource, field, value, onOpenJson }: ValueCellProps
       if (field.component === 'image' && typeof value === 'string') return <ImageCell url={value} />;
       return <TextCell text={list.map(String).join(', ')} />;
   }
+}
+
+export interface FieldCellProps {
+  resource: AnyResource;
+  field: FieldConfig;
+  row: { id: string } & Record<string, unknown>;
+  onOpenJson: (title: string, value: unknown) => void;
+}
+
+/** Tablo ve detay hücresi: `extensions.fields.<ad>.cell`, sonra `.file`, yoksa türe göre varsayılan. */
+export function FieldCell({ resource, field, row, onOpenJson }: FieldCellProps) {
+  const override = resource.extensions?.fields?.[field.name];
+  const value = row[field.name];
+  if (override?.cell) return <override.cell row={row} value={value} />;
+  if (override?.file && !isEmptyValue(value)) return <FileCell resource={resource} row={row} name={String(value)} options={override.file} />;
+  return <ValueCell resource={resource} field={field} value={value} onOpenJson={onOpenJson} />;
 }

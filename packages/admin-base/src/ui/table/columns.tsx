@@ -4,7 +4,7 @@ import type { AnyResource } from '../../schema/extend.js';
 import type { FieldConfig } from '../../schema/fields.js';
 import type { AdminTexts } from '../useAdminTexts.js';
 import { fieldLabelKey } from '../useAdminTexts.js';
-import { IdCell, ValueCell } from './cells.js';
+import { FieldCell, IdCell } from './cells.js';
 
 type Row = { id: string } & Record<string, unknown>;
 
@@ -48,8 +48,6 @@ export interface BuildColumnsOptions {
 }
 
 export function buildColumns({ resource, texts, onOpenJson, renderActions, actionsWidth = 112 }: BuildColumnsOptions): GridColDef<Row>[] {
-  const overrides = resource.extensions?.fields ?? {};
-
   const columns: GridColDef<Row>[] = [
     {
       field: 'id',
@@ -63,18 +61,12 @@ export function buildColumns({ resource, texts, onOpenJson, renderActions, actio
 
   for (const field of resource.fields) {
     if (!field.list || field.writeOnly) continue;
-    const Cell = overrides[field.name]?.cell;
     columns.push({
       field: field.name,
       headerName: texts.fieldLabel(fieldLabelKey(resource, [field.name]), field),
       sortable: isColumnSortable(resource, field),
       ...sizeFor(field),
-      renderCell: params =>
-        Cell ? (
-          <Cell row={params.row} value={params.row[field.name]} />
-        ) : (
-          <ValueCell resource={resource} field={field} value={params.row[field.name]} onOpenJson={onOpenJson} />
-        )
+      renderCell: params => <FieldCell resource={resource} field={field} row={params.row} onOpenJson={onOpenJson} />
     });
   }
 

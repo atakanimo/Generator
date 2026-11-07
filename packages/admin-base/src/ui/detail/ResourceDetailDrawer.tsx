@@ -5,7 +5,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { resourceKeys, useResourceOne } from '../../react/hooks.js';
 import type { AnyResource, DetailViewOptions, RowAction } from '../../schema/extend.js';
-import { IdCell, ValueCell } from '../table/cells.js';
+import { FieldCell, IdCell } from '../table/cells.js';
+import { RelatedList } from './RelatedList.js';
 import { fieldLabelKey, useAdminTexts } from '../useAdminTexts.js';
 
 type Row = { id: string } & Record<string, unknown>;
@@ -41,7 +42,6 @@ function DetailBody({ resource, row, options, actions, onAction, onEdit, onDelet
   const one = useResourceOne(resource, fetch ? row.id : undefined);
   // Kayıt gelene kadar (ya da `fetch: false`) listedeki satır gösterilir.
   const current = (fetch ? (one.data as Row | undefined) : undefined) ?? row;
-  const overrides = resource.extensions?.fields ?? {};
   const fields = options.hideFields ? [] : resource.fields.filter(f => !f.writeOnly);
   const Extra = options.component;
   const refresh = async () => {
@@ -67,19 +67,15 @@ function DetailBody({ resource, row, options, actions, onAction, onEdit, onDelet
               <IdCell id={current.id} />
             </DetailItem>
           )}
-          {fields.map(field => {
-            const Cell = overrides[field.name]?.cell;
-            return (
-              <DetailItem key={field.name} label={texts.fieldLabel(fieldLabelKey(resource, [field.name]), field)}>
-                {Cell ? (
-                  <Cell row={current} value={current[field.name]} />
-                ) : (
-                  <ValueCell resource={resource} field={field} value={current[field.name]} onOpenJson={onOpenJson} />
-                )}
-              </DetailItem>
-            );
-          })}
+          {fields.map(field => (
+            <DetailItem key={field.name} label={texts.fieldLabel(fieldLabelKey(resource, [field.name]), field)}>
+              <FieldCell resource={resource} field={field} row={current} onOpenJson={onOpenJson} />
+            </DetailItem>
+          ))}
           {Extra ? <Extra row={current} refresh={refresh} close={onClose} /> : null}
+          {(options.related ?? []).map(related => (
+            <RelatedList key={related.resource} options={related} row={current} onChanged={refresh} onOpenJson={onOpenJson} />
+          ))}
         </Stack>
       </Box>
       {visibleActions.length > 0 || onEdit || onDelete ? (

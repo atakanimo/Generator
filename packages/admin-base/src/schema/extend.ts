@@ -72,6 +72,21 @@ export interface FormFieldProps<V> {
 /** Seçenekleri çalışma anında yükler; sonuç resource + alan başına önbelleğe alınır. */
 export type LoadOptions = (ctx: { signal: AbortSignal }) => Promise<readonly string[]>;
 
+/**
+ * Alan değeri dosya adıdır, dosyanın kendisi BE'de: hücre `GET {endpoint}/:id/{path}?variant=` (→ `{ url }`)
+ * ile adresi alır. Küçük resim yüklenemezse bir kez `openVariant`'a düşer; ada tıklamak dosyayı yeni sekmede açar.
+ */
+export interface FilePreviewOptions<Row> {
+  /** Varsayılan `file-url`. */
+  path?: string;
+  /** Küçük resim varyantı; yoksa küçük resim gösterilmez. */
+  thumbnailVariant?: string;
+  /** Açılan varyant (`?variant=`); yoksa parametre gönderilmez. */
+  openVariant?: string;
+  /** Satırda küçük resim var mı (ör. yalnız fotoğraf). Varsayılan: `thumbnailVariant` verildiyse her satır. */
+  hasThumbnail?(row: Row): boolean;
+}
+
 export type FieldOverrides<Row> = {
   [K in keyof Row]?: {
     cell?: ComponentType<CellProps<Row, Row[K]>>;
@@ -81,6 +96,8 @@ export type FieldOverrides<Row> = {
      * `string` alanında formda select, `filter: 'enum'` ile filtrede seçim kutusu çıkarır.
      */
     loadOptions?: LoadOptions;
+    /** Tabloda ve detayda dosya önizlemesi; `cell` verilirse o geçerli. */
+    file?: FilePreviewOptions<Row>;
   };
 };
 
@@ -97,6 +114,23 @@ export interface DetailViewProps<Row> {
   close: () => void;
 }
 
+/**
+ * Detayda ilişkili kayıtlar (ör. etkinliğin siparişleri): hedef resource'un tablosu, sunucu sayfalamalı.
+ * Hedefin satır ve detay aksiyonları satırda çıkar; aksiyon sonrası hem hedef hem bu resource yenilenir.
+ */
+export interface RelatedListOptions<Row> {
+  /** Registry'deki hedef resource'un `name`'i. */
+  resource: string;
+  /** Liste filtresi, ör. `row => ({ eventId: row.id })`. */
+  filters(row: Row): Record<string, unknown>;
+  /** Gösterilen kolonlar (sırası korunur); yoksa hedefin `list: true` alanları. */
+  fields?: readonly string[];
+  /** Başlık (i18n anahtarı ya da metin); yoksa hedefin başlığı. */
+  title?: string;
+  /** Varsayılan 10. */
+  pageSize?: number;
+}
+
 /** Salt okunur detay drawer'ı; satırda "Detay" ikonu açar, `placement: 'detail'` aksiyonları burada çıkar. */
 export interface DetailViewOptions<Row> {
   /** Drawer açılınca kayıt `getOne` ile çekilir; `false` → listedeki satır gösterilir. Varsayılan `true`. */
@@ -105,6 +139,8 @@ export interface DetailViewOptions<Row> {
   component?: ComponentType<DetailViewProps<Row>>;
   /** `true` → alan listesi gizlenir, yalnızca `component` görünür. */
   hideFields?: boolean;
+  /** `component`'ın altında, sırayla çizilen ilişkili kayıt tabloları. */
+  related?: ReadonlyArray<RelatedListOptions<Row>>;
 }
 
 /** `modules/<m>/<m>.generated.ts` içeriği: Generator bir kez oluşturur, sonra dokunmaz. */

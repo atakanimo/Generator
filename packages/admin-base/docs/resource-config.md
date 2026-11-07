@@ -45,6 +45,7 @@ Ortak: `name`, `label`, `isArray`, `required`, `nullable`, `readonly`, `hideOnCr
 | `object` | `fields`, `typeName?` | okunur özet + JSON penceresi | iç içe form (dizide satır ekle / sil) | obje |
 | `map` | `valueKind` | özet | anahtar / değer listesi | obje |
 | `json` | — | kısaltılmış JSON | JSON metni | serbest |
+| `file` | `accept?` | — | dosya seçici | `File`; yalnızca action `input`'unda, varsa istek multipart gider |
 
 - `filter`: `eq | regex | range | date-range | boolean | enum | relation`. Yalnızca `filter`'ı olan alanlar filtre çubuğunda çıkar.
 - `sortable`: kolon sunucu sıralaması. Varsayılan skaler, dizi olmayan alanlarda açık; `false` kapatır. `true` ilişki / obje / dizi alanını sıralanabilir yapmaz.
@@ -90,9 +91,11 @@ export const userSubscriptionsResource = extendResource(userSubscriptionsSchema,
 | `icon` | Sol menü ikonu |
 | `actions` | `placement: 'row' \| 'detail'` → `POST {endpoint}/:id/actions/:id`; `'toolbar' \| 'bulk'` → `POST {endpoint}/actions/:id` (`{ ids, ...input }`). `run` verilirse çağrı yerine o çalışır. `input` küçük bir form, `confirm` onay diyaloğu. Başarı metni BE `uiMessage`'ından |
 | `actions[].visible / disabled` | Satır / detay aksiyonunda `(row) => boolean`; toolbar / toplu aksiyonda `({ listBody, selectedIds }) => boolean` |
-| `fields` | Alan başına `cell` (tablo ve detay hücresi), `formField` (form bileşeni) ve `loadOptions` override'ı |
+| `fields` | Alan başına `cell` (tablo ve detay hücresi), `formField` (form bileşeni), `loadOptions` ve `file` override'ı |
+| `fields.<ad>.file` | Değer dosya adı, dosya BE'de: `{ path?, thumbnailVariant?, openVariant?, hasThumbnail?(row) }`. Hücre `GET {endpoint}/:id/{path ?? 'file-url'}?variant=` → `{ url }` ile adresi arka planda alır (TanStack, 60 sn taze). Küçük resim yüklenemezse bir kez `openVariant`'a düşer; ada tıklamak `openVariant`'ı yeni sekmede açar. `cell` verilirse o geçerli |
 | `fields.<ad>.loadOptions` | `({ signal }) => Promise<string[]>`: seçenekleri çalışma anında yükler (resource + alan başına önbellekli). `enum` alanında statik `options`'ın yerine geçer; `string` alanında formda select, `filter: 'enum'` ile filtrede seçim kutusu çıkarır. Etiket yine `admin.<resource>.enums.<alan>.<değer>` |
 | `slots` | `toolbarStart`, `aboveTable`, `belowTable` |
 | `detail` | Salt okunur detay drawer'ı; satırda "Detay" ikonu açar. `placement: 'detail'` aksiyonu varsa kendiliğinden açık; `true` ya da `{ fetch?, component?, hideFields? }`. `fetch` (varsayılan `true`) kaydı `getOne` ile çeker, `false` listedeki satırı gösterir. `component` alanların altına eklenir (`{ row, refresh, close }`). `false` → detay yok, `detail` aksiyonları satırda |
+| `detail.related` | Detayda ilişkili kayıt tabloları, `component`'ın altında: `[{ resource, filters(row), fields?, title?, pageSize? }]`. Hedef registry'den bulunur, `get-all` `filters(row)` ile süzülür (ör. `row => ({ eventId: row.id })`), sunucu sayfalamalı (varsayılan 10). Hedefin `row` ve `detail` aksiyonları satırda çıkar; aksiyon sonrası hedef ve detayın resource'u yenilenir. `fields` kolonları ve sırasını seçer |
 
 Özel aksiyon, hücre ve slot'lar yalnızca `<m>.generated.ts`'e yazılır; `.generated.config.ts` her generate'te ezilir.

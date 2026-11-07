@@ -1,7 +1,7 @@
 import type { AxiosInstance, AxiosRequestConfig } from 'axios';
 import type { ApiResponse, Id, ListBody, PaginatedList } from '../contract/api.js';
 import type { AtaRequestFlags } from './axiosFlags.js';
-import type { ActionParams, DataProvider, ExportBody, ExportFile, RequestOptions, ResourceRef } from './dataProvider.js';
+import type { ActionParams, DataProvider, ExportBody, ExportFile, FileUrlParams, RequestOptions, ResourceRef } from './dataProvider.js';
 
 /** What the provider calls: an `AxiosInstance` fits, so does a wrapper with only `request`. */
 export type AtaHttp = Pick<AxiosInstance, 'request'> | { request(config: AxiosRequestConfig): Promise<unknown> };
@@ -48,6 +48,27 @@ function readExportResponse(res: unknown, fallbackName: string): ExportFile {
   return { blob: response.data, filename: filenameFromDisposition(disposition) ?? fallbackName };
 }
 
+/** Gövdede dosya (`Blob`) varsa multipart: alan başına bir parça, dizi her eleman için tekrarlanır, obje JSON metni. */
+export function toActionBody(body: Record<string, unknown>): Record<string, unknown> | FormData {
+  if (!Object.values(body).some(v => v instanceof Blob)) return body;
+  const form = new FormData();
+  for (const [key, value] of Object.entries(body)) {
+    for (const item of Array.isArray(value) ? value : [value]) {
+      if (item === undefined || item === null) continue;
+      if (item instanceof Blob) form.append(key, item);
+      else form.append(key, typeof item === 'object' ? JSON.stringify(item) : String(item));
+    }
+  }
+  return form;
+}
+
+function actionConfig(opts: RequestOptions | undefined, url: string, body: Record<string, unknown>): AxiosRequestConfig & AtaRequestFlags {
+  const data = toActionBody(body);
+  // Instance varsayılanı JSON ise axios FormData'yı JSON'a çevirir; multipart verilince sınır (boundary) eklenir.
+  const headers = data instanceof FormData ? { 'Content-Type': 'multipart/form-data' } : undefined;
+  return { ...writeConfig(opts), method: 'POST', url, data, ...(headers ? { headers } : {}) };
+}
+
 /** Sözleşmedeki endpoint setini (§2) host axios'u üzerinden çağıran `DataProvider`. */
 export function createAtaRestProvider({ http }: AtaRestProviderOptions): DataProvider {
   // Host interceptor AxiosResponse yerine `LocalResponse` döndürür.
@@ -75,19 +96,18 @@ export function createAtaRestProvider({ http }: AtaRestProviderOptions): DataPro
     },
     action<T>(resource: ResourceRef, actionId: string, { id, ids, input }: ActionParams, opts?: RequestOptions) {
       if (id !== undefined) {
-        return send<T>({
-          ...writeConfig(opts),
-          method: 'POST',
-          url: joinPath(resource.endpoint, id, 'actions', actionId),
-          data: input ?? {}
-        });
+        return send<T>(actionConfig(opts, joinPath(resource.endpoint, id, 'actions', actionId), input ?? {}));
       }
-      return send<T>({
-        ...writeConfig(opts),
-        method: 'POST',
-        url: joinPath(resource.endpoint, 'actions', actionId),
-        data: { ...input, ...(ids ? { ids } : {}) }
+      return send<T>(actionConfig(opts, joinPath(resource.endpoint, 'actions', actionId), { ...input, ...(ids ? { ids } : {}) }));
+    },
+    async fileUrl(resource: ResourceRef, id: Id, { path = 'file-url', variant }: FileUrlParams = {}, opts?: RequestOptions) {
+      const res = await send<{ url?: string } | null>({
+        ...readConfig(opts),
+        method: 'GET',
+        url: joinPath(resource.endpoint, id, path),
+        params: variant ? { variant } : undefined
       });
+      return res?.url ?? null;
     },
     async exportCsv(resource: ResourceRef, body: ExportBody, opts?: RequestOptions) {
       const res = await http.request({

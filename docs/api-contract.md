@@ -37,6 +37,7 @@ interface IApiResponse<T> {
 | delete | `DELETE {endpoint}/:id` | — | `null` |
 | satır aksiyonu | `POST {endpoint}/:id/actions/:actionId` | aksiyon girdisi | serbest |
 | toplu aksiyon | `POST {endpoint}/actions/:actionId` | `{ ids?, ...input }` | serbest |
+| dosya adresi (admin, seçilirse) | `GET {endpoint}/:id/file-url?variant=` | — | `{ url }` (süreli imzalı adres) |
 | export (admin, seçilirse) | `POST {endpoint}/export` | ExportBody | — (`text/csv`, zarfsız) |
 | autocomplete | hedefin `get-all`'u | `{ filters: { [display]: "…" }, limit: 20 }` | `PaginatedList<Row>` |
 
@@ -133,6 +134,7 @@ type PaginatedList<T> = { items: T[]; total: number; hasMore: boolean; currentPa
 ## 6. Aksiyonlar
 
 - Satır: `POST {endpoint}/:id/actions/:actionId`. Toplu: `POST {endpoint}/actions/:actionId`, body `{ ids?, ...input }`.
+- Girdide dosya (`kind: 'file'`) varsa body `multipart/form-data`: alan başına bir parça, dizi (`ids` dahil) her eleman için tekrarlanır, obje JSON metni, `null` gönderilmez. Dosya yüklemesi bu yolla bir toplu aksiyondur (ör. `POST {endpoint}/actions/upload`).
 - Normal zarf döner; başarı metni `uiMessage`'dan gelir.
 - Bugün elle yazılır (Express: `custom-routes` + `custom-methods` blokları).
 

@@ -24,6 +24,7 @@ function emptyValue(field: FieldConfig): unknown {
       return false;
     case 'relation':
     case 'datetime':
+    case 'file':
       return null;
     case 'json':
       return '';
