@@ -34,6 +34,14 @@ export interface ExportFile {
   filename: string;
 }
 
+/** `GET {endpoint}/:id/{path}?variant=` → `{ url }` (süreli imzalı depolama adresi). */
+export interface FileUrlParams {
+  /** Varsayılan `file-url`. */
+  path?: string;
+  /** Ör. `thumb`, `original`; yoksa parametre gönderilmez. */
+  variant?: string;
+}
+
 /** Paketin BE ile konuştuğu tek arayüz. Varsayılan uygulama: `createAtaRestProvider`. */
 export interface DataProvider {
   list<T>(resource: ResourceRef, body: ListBody, opts?: RequestOptions): Promise<PaginatedList<T>>;
@@ -42,6 +50,8 @@ export interface DataProvider {
   update<T>(resource: ResourceRef, id: Id, data: Record<string, unknown>, opts?: RequestOptions): Promise<T>;
   remove(resource: ResourceRef, id: Id, opts?: RequestOptions): Promise<void>;
   action<T>(resource: ResourceRef, actionId: string, params: ActionParams, opts?: RequestOptions): Promise<T>;
+  /** Kaydın dosya adresi; BE adres vermezse `null`. */
+  fileUrl(resource: ResourceRef, id: Id, params?: FileUrlParams, opts?: RequestOptions): Promise<string | null>;
   /** CSV export (`operations` `export` içeriyorsa). */
   exportCsv(resource: ResourceRef, body: ExportBody, opts?: RequestOptions): Promise<ExportFile>;
 }

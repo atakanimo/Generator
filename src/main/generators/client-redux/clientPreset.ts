@@ -19,32 +19,25 @@ export interface ClientPreset {
     /** Alias of `dirs.services` used by thunks / slices. */
     services: string;
   };
-  /**
-   * How request flags reach the interceptor: `headers` (Varlik360 mobile reads `config.headers.skipLoading`) or
-   * `config` (admin-base / web: `skipLoading` / `skipSuccessToast` on the axios config).
-   */
-  requestFlags: 'headers' | 'config';
   /** Where the auth tokens live (docs/backend/auth.md): the phone's AsyncStorage or the browser's storage. */
   tokenStorage: 'async-storage' | 'browser';
 }
+
+// Request flags (`skipLoading`, `skipSuccessToast`) always ride on the axios config: every client shares one
+// interceptor (`services/api`, docs/frontend/http-layer.md), so presets no longer differ here.
 
 /** Varlik360 `apps/mobile`: React Native, RTK, axios `API` in `@/services/api`. */
 export const REDUX_RN_PRESET: ClientPreset = {
   id: 'redux-rn',
   dirs: { services: 'src/services', thunks: 'src/store/thunks', slices: 'src/store/slices' },
   imports: { api: '@/services/api', localResponse: '@/types', rootState: '@/store', services: '@/services' },
-  requestFlags: 'headers',
   tokenStorage: 'async-storage'
 };
 
-/**
- * React web (SharedFrame `apps/web`): same layout and names as `redux-rn`; the interceptor reads `skipLoading` /
- * `skipSuccessToast` from the axios config (contract §7), and reads never show the success toast.
- */
+/** React web (SharedFrame `apps/web`): same layout, names and flags as `redux-rn`. */
 export const REDUX_WEB_PRESET: ClientPreset = {
   ...REDUX_RN_PRESET,
   id: 'redux-web',
-  requestFlags: 'config',
   tokenStorage: 'browser'
 };
 

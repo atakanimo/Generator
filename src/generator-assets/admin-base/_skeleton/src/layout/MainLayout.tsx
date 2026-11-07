@@ -9,7 +9,7 @@ import { GetAuthState, GetThemeState } from '@/store';
 import { setDrawerOpen, toggleTheme } from '@/store/slices/themeSlice';
 import { logout } from '@/store/slices/authSlice';
 import { ProtectedRoutes, routeTitle } from '@/routes/routes';
-import { getAppEnv } from '@/utils/appEnv';
+import { getAppEnv } from '@/config/env';
 import { toggleLanguage } from '@/i18n';
 
 interface MainLayoutProps {

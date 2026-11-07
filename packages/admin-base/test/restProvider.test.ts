@@ -52,6 +52,43 @@ describe('createAtaRestProvider', () => {
     });
   });
 
+  it('action: input dosya içeriyorsa multipart; dizi parçalara, null düşer', async () => {
+    const { http, request } = fakeHttp();
+    const file = new File(['abc'], 'a.jpg', { type: 'image/jpeg' });
+    await createAtaRestProvider({ http }).action(resource, 'upload', { ids: ['x1', 'x2'], input: { file, eventId: 'e1', comment: null } });
+    const config = request.mock.calls[0][0];
+    expect(config.url).toBe('/api/userSubscriptions/admin/actions/upload');
+    expect(config.headers).toEqual({ 'Content-Type': 'multipart/form-data' });
+    const form = config.data as FormData;
+    expect(form).toBeInstanceOf(FormData);
+    expect((form.get('file') as File).name).toBe('a.jpg');
+    expect(form.get('eventId')).toBe('e1');
+    expect(form.getAll('ids')).toEqual(['x1', 'x2']);
+    expect(form.has('comment')).toBe(false);
+  });
+
+  it('action: dosya yoksa JSON gövde, header verilmez', async () => {
+    const { http, request } = fakeHttp();
+    await createAtaRestProvider({ http }).action(resource, 'refund', { id: 'x1', input: { reason: 'r' } });
+    expect(request.mock.calls[0][0].headers).toBeUndefined();
+    expect(request.mock.calls[0][0].data).toEqual({ reason: 'r' });
+  });
+
+  it('fileUrl: GET :id/file-url?variant, okuma bayrakları, url döner', async () => {
+    const { http, request } = fakeHttp({ isSuccess: true, data: { url: 'https://cdn/x.jpg' } });
+    const provider = createAtaRestProvider({ http });
+    expect(await provider.fileUrl(resource, 'x1', { variant: 'thumb' }, { background: true })).toBe('https://cdn/x.jpg');
+    expect(request.mock.calls[0][0]).toMatchObject({
+      method: 'GET',
+      url: '/api/userSubscriptions/admin/x1/file-url',
+      params: { variant: 'thumb' },
+      skipSuccessToast: true,
+      skipLoading: true
+    });
+    await provider.fileUrl(resource, 'x1', { path: 'download' });
+    expect(request.mock.calls[1][0]).toMatchObject({ url: '/api/userSubscriptions/admin/x1/download', params: undefined });
+  });
+
   it('background → skipLoading, signal iletilir', async () => {
     const { http, request } = fakeHttp();
     const signal = new AbortController().signal;

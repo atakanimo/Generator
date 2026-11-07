@@ -30,9 +30,15 @@ async def test_trace_id_headers(client, api_prefix: str) -> None:
 
 
 async def test_turkish_ui_message(client, api_prefix: str) -> None:
-    tr = (await client.get(f"{api_prefix}/health", headers={"lang": "tr"})).json()
+    tr = (await client.get(f"{api_prefix}/health", headers={"Accept-Language": "tr-TR,tr;q=0.9"})).json()
     en = (await client.get(f"{api_prefix}/health")).json()
     assert tr["uiMessage"] and en["uiMessage"] and tr["uiMessage"] != en["uiMessage"]
+
+
+async def test_language_comes_only_from_accept_language(client, api_prefix: str) -> None:
+    default = (await client.get(f"{api_prefix}/health")).json()["uiMessage"]
+    for headers in ({"lang": "tr"}, {"x-lang": "tr"}, {"Accept-Language": "de-DE"}):
+        assert (await client.get(f"{api_prefix}/health", headers=headers)).json()["uiMessage"] == default
 
 
 async def test_errors_outside_routes_use_the_envelope(client, api_prefix: str) -> None:
@@ -42,7 +48,7 @@ async def test_errors_outside_routes_use_the_envelope(client, api_prefix: str) -
     assert set(body) == ENVELOPE_KEYS
     assert body["isSuccess"] is False and body["errorData"]["code"] == 404 and body["traceId"] == "trace-404"
 
-    wrong_method = await client.post(f"{api_prefix}/health", headers={"lang": "tr"})
+    wrong_method = await client.post(f"{api_prefix}/health", headers={"Accept-Language": "tr"})
     assert wrong_method.status_code == 405
     err = wrong_method.json()["errorData"]
     assert err["code"] == 405 and err["message"] == "Bu uç bu yöntemi desteklemiyor."

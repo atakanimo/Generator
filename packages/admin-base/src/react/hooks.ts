@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { RELATION_OPTIONS_LIMIT, type Id, type ListBody } from '../contract/api.js';
-import type { ActionParams } from '../data/dataProvider.js';
+import type { ActionParams, FileUrlParams } from '../data/dataProvider.js';
 import { bindResourceApi, type ResourceApi } from '../data/resourceApi.js';
 import type { LoadOptions } from '../schema/extend.js';
 import type { FieldConfig, RelationFieldConfig } from '../schema/fields.js';
@@ -13,7 +13,8 @@ import { useAtaAdmin } from './context.js';
 export const resourceKeys = {
   all: (name: string) => ['ata-admin', name] as const,
   list: (name: string, body: ListBody) => ['ata-admin', name, 'list', body] as const,
-  one: (name: string, id: Id) => ['ata-admin', name, 'one', id] as const
+  one: (name: string, id: Id) => ['ata-admin', name, 'one', id] as const,
+  fileUrl: (name: string, id: Id, params: FileUrlParams) => ['ata-admin', name, 'file-url', id, params] as const
 };
 
 export function useResourceApi<S extends ResourceSchema>(resource: S): ResourceApi<InferRow<S>> {
@@ -52,6 +53,17 @@ export function useResourceOne<S extends ResourceSchema>(resource: S, id: Id | u
     queryKey: resourceKeys.one(resource.name, id ?? ''),
     queryFn: ({ signal }) => api.getOne(id as Id, { signal }),
     enabled: id !== undefined
+  });
+}
+
+/** Kaydın dosya adresi, arka planda (global loading yok). İmzalı adres süreli: `staleTime` kısa tutulur. */
+export function useResourceFileUrl(resource: ResourceSchema, id: Id, params: FileUrlParams, options?: { enabled?: boolean }) {
+  const api = useResourceApi(resource);
+  return useQuery({
+    queryKey: resourceKeys.fileUrl(resource.name, id, params),
+    queryFn: ({ signal }) => api.fileUrl(id, params, { signal, background: true }),
+    staleTime: 60_000,
+    enabled: options?.enabled
   });
 }
 

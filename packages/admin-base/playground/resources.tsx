@@ -1,5 +1,7 @@
+import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline';
+import PermMediaOutlinedIcon from '@mui/icons-material/PermMediaOutlined';
 import SyncOutlinedIcon from '@mui/icons-material/SyncOutlined';
 import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 import { Box, Chip } from '@mui/material';
@@ -64,6 +66,20 @@ export const userSubscriptionsSchema = defineResourceSchema({
   ]
 });
 
+export const mediaSchema = defineResourceSchema({
+  schemaVersion: 1,
+  name: 'media',
+  endpoint: '/api/media/admin',
+  menu: { order: 4 },
+  operations: ['delete'],
+  fields: [
+    { name: 'fileName', kind: 'string', readonly: true, list: true, filter: 'regex' },
+    { name: 'mediaType', kind: 'enum', options: ['photo', 'video'], readonly: true, list: true, filter: 'enum' },
+    { name: 'comment', kind: 'string', nullable: true, list: true },
+    { name: 'createdAt', kind: 'datetime', readonly: true, list: true }
+  ]
+});
+
 // --- <m>.generated.ts (elle genişletilen) -------------------------------------------------
 
 const statusColor = { active: 'success', grace_period: 'warning', billing_retry: 'warning', canceled: 'default', expired: 'default' } as const;
@@ -123,14 +139,42 @@ export const userSubscriptionsResource = extendResource(userSubscriptionsSchema,
   }
 });
 
-export const usersResource = extendResource(usersSchema, { icon: PeopleOutlineIcon });
+export const usersResource = extendResource(usersSchema, {
+  icon: PeopleOutlineIcon,
+  // Detayda kullanıcının abonelikleri; `grant-premium` satır aksiyonu orada da çalışır.
+  detail: {
+    related: [{ resource: 'user-subscriptions', filters: row => ({ userId: row.id }), fields: ['subscriptionId', 'status', 'currentPeriodEnd'], pageSize: 5 }]
+  }
+});
 
-export const resources: AnyResource[] = [usersResource, subscriptionsSchema, userSubscriptionsResource];
+/** Dosya yükleme (toolbar action, `kind: 'file'` → multipart) ve imzalı adresle önizleme (`fields.<ad>.file`). */
+export const mediaResource = extendResource(mediaSchema, {
+  icon: PermMediaOutlinedIcon,
+  actions: [
+    {
+      id: 'upload',
+      label: 'Medya yükle',
+      icon: <CloudUploadOutlinedIcon fontSize='small' />,
+      placement: 'toolbar',
+      input: [
+        { name: 'file', kind: 'file', label: 'Dosya', accept: 'image/*,video/*', required: true },
+        { name: 'comment', kind: 'string', label: 'Yorum' }
+      ]
+    }
+  ],
+  fields: {
+    fileName: { file: { thumbnailVariant: 'thumb', openVariant: 'original', hasThumbnail: row => row.mediaType === 'photo' } }
+  },
+  detail: true
+});
+
+export const resources: AnyResource[] = [usersResource, subscriptionsSchema, userSubscriptionsResource, mediaResource];
 
 /** Host'un i18n'i; bulunmayan anahtarlar paketin varsayılanına düşer. */
 export const translations: Record<string, string> = {
   'admin.users.title': 'Kullanıcılar',
   'admin.subscriptions.title': 'Abonelik paketleri',
+  'admin.media.title': 'Medya',
   'admin.user-subscriptions.title': 'Kullanıcı abonelikleri',
   'admin.user-subscriptions.fields.userId': 'Kullanıcı',
   'admin.user-subscriptions.fields.subscriptionId': 'Paket',

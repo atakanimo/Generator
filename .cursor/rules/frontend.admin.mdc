@@ -1,0 +1,177 @@
+---
+description: Admin — ata-admin-base, Generator, TanStack Query, api interceptor, servis, sayfa akışı, i18n (SharedFrame, StockExchange, Varlik360, CeyizDefterim için ortak)
+globs:
+  - apps/admin/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Frontend — apps/admin
+
+Bu metin dört hostta aynıdır: kaynak `Generator/.cursor/rules/frontend.admin.mdc`, hostlardaki `.cursor/rules/frontend.admin.mdc` ona symlink'tir. Metin değişince yalnız Generator'daki dosya düzenlenir. Üretim komutları ve neyin üretildiği: `AtaProjectCommon.mdc`.
+
+## Yığın
+
+Vite, TypeScript, React 19, MUI 7 (`@mui/material`, `@mui/x-data-grid`) + Emotion, `@atakanimo/ata-admin-base`, TanStack Query (`@tanstack/react-query`, admin-base'in peer'ı), Redux Toolkit (yalnız auth / tema / loading), React Router 7, Axios, i18next, Day.js, react-toastify. `@/` `src` köküdür. `../../../` zinciri yok.
+
+## Generator zorunludur
+
+**Hiçbir admin'de thunk ve slice generate edilmez.** Admin'ler TanStack Query yapısındadır; thunk / slice (`client-redux`) yalnız web ve mobilde üretilir.
+
+**Auth istisnadır.** Generator auth üretemez; her admin'de auth (`auth.service.ts`, login / me thunk'ları, `auth.slice.ts`; eski admin'lerde ayrı `auth.thunk.ts`) elle yazılır ve mevcut haliyle kalır. TanStack'e taşınmaz; "admin'de thunk yok" kuralı auth'u kapsamaz.
+
+
+- Entity admin ekranı (liste, form, detay, route, menü) elle yazılmaz. Model değişir, sonra `node /Users/atakanatabey/Projects/Generator/scripts/host.mjs admin-config <host> [Entity]`.
+- `modules/<modül>/<modül>.generated.config.ts` ve `modules/resources.generated.ts` elle düzenlenmez.
+- Elle kalan: bir kez oluşan `modules/<modül>/<modül>.generated.ts` (`extendResource` ile aksiyon, hücre, ikon) ve o modülün özel bileşenleri (`modules/<modül>/` altında, ör. detay görünümü, önizleme hücresi).
+- Config'in anlatamadığı admin arayüzü host'a yazılmaz: `packages/admin-base`'e eklenir, `npm run playground` ile doğrulanır, sonra paket sürümü yükseltilir.
+- Entity CRUD'u için servis, thunk ve slice yazılmaz; admin-base data provider'ı `API` instance'ını kullanır, veri TanStack Query cache'indedir.
+- Generator'ın iki ayrı istemci çıktısı vardır: admin için admin-base + TanStack Query (bu dosya), web / mobil için `client-redux` (servis + thunk + slice, `frontend.web.mdc` / `frontend.mobile.mdc`). Admin'e `client-redux` çıktısı (`*.thunk.ts`, `*.slice.generated.ts`) yazılmaz.
+
+## Dosya düzeni
+
+Ortak ağaç ve isimler: `docs/klasorRefactor.md`. Admin iskeleti `src/generator-assets/admin-base/_skeleton` bu ağacı izler.
+
+```
+src/
+  modules/<modül>/      # Generator: *.generated.config.ts; elle: *.generated.ts + özel bileşenler
+  modules/resources.generated.ts
+  pages/<Sayfa>/        # CRUD olmayan sayfalar: Login, Dashboard, Logs, Metrics, Jobs, Screen
+  components/Core/      # Button, Text, TextInput, Toast, LoadingOverlay; barrel components/index.ts
+  services/api/         # ortak http katmanı (index, hooks, auth, platform)
+  services/<kaynak>.service.ts
+  store/index.ts        # root reducer + store
+  store/slices/         # yalnız auth.slice.ts, common.slice.ts, theme.slice.ts
+  hooks/                # useAppDispatch, useAppSelector, useCustomTranslation, useTheme
+  i18n/                 # index.ts + locales/tr.ts, en.ts
+  types/                # index.ts (barrel `@/types`), API/
+  routes/routes.ts      # menü sırası
+  routes/guards/        # ProtectedRoute
+  layout/ theme/ helper/ config/   # ortam okuma config/env.ts; utils/, lib/, store/thunks/ yok
+```
+
+CRUD dışı sayfa `pages/<Sayfa>/index.tsx`'tir. `modules/` yalnız entity'lere aittir. React'sız yardımcı `helper/`, ortam `config/env.ts`, uygulama sabiti `config/app.ts`. Paylaşılan UI `components/Core/<Ad>/index.tsx`.
+
+## API (`services/api.ts`)
+
+Tek axios instance: `API`. İkinci `axios.create` yok. admin-base data provider'ı ve elle yazılan servisler aynı instance'ı kullanır. Store döngüsü `injectStore(store)` ile çözülür. Base URL `VITE_API_BASE_URL`.
+
+- Request: `skipLoading` yoksa sayaç artar, `setCommonLoading(true)`. Token store'dan (`auth.token`), yoksa storage'dan; varsa `Authorization: Bearer`.
+- Success: sayaç düşünce loading kapanır. Gövde `LocalResponse` olur. Başarı toast'ı yalnız GET/HEAD olmayan, `/get-all` ve `/me` olmayan isteklerde, dolu `uiMessage` varsa ve `skipSuccessToast` yoksa basılır. Blob cevabı (`responseType: 'blob'`) zarfsızdır.
+- Error: loading kapanır. Gövde `LocalResponse` olur; `errorData.message` tek error toast olarak basılır. `401` → `logout`. İptal edilen istek sessizdir. Promise `LocalResponse` ile reddedilir.
+- `skipLoading` ve `skipSuccessToast` axios config bayrağıdır (header değil).
+
+```typescript
+export type LocalResponse<T> = {
+  isSuccess: boolean
+  data: T | null
+  uiMessage: string
+  errorData: { header: string; message: string; code: number } | null
+}
+```
+
+Admin uçları `/api/{kaynak}/admin/...`'tır. Liste `page` 1 tabanlıdır; DataGrid 0 tabanlıdır, köprüyü admin-base kurar.
+
+## Servis
+
+`services/<feature>.service.ts`: CRUD dışı uçlar (log, metrik, özel aksiyon, dosya). Yalnız URL, method, data ve config bayrakları. `try/catch`, toast, Redux ve ikinci istek yok. Dönüş `Promise<LocalResponse<T>>`. Default export bir nesnedir (`const logsServices = { getAll }; export default logsServices`). Bileşen `API`'yi doğrudan çağırmaz; servis fonksiyonunu `useQuery` / `useMutation` içinde kullanır.
+
+## Veri: TanStack Query
+
+Sunucu verisinin tek kaynağı TanStack Query cache'idir (admin-base'in `QueryClient`'ı). Redux'a ve `useState`'e kopyalanmaz.
+
+- **Entity:** admin-base hook'ları: `useResourceList`, `useResourceOne`, `useResourceMutations`, `useResourceAction`, `useRelationOptions`. Query key'ler `resourceKeys` altındadır (`['ata-admin', name, ...]`).
+- **CRUD dışı okuma:** `useQuery({ queryKey: ['<feature>', ...arg], queryFn: () => <feature>Services.get…(arg) })`. Arka plan / yenileme isteği `skipLoading` ile gider; ekran göstergesini `isFetching`'den okur.
+- **CRUD dışı yazma:** `useMutation({ mutationFn, onSuccess })`. Entity cache'ini etkileyen yazma sonrası `queryClient.invalidateQueries({ queryKey: resourceKeys.all(schema.name) })`.
+- **Redux yalnız:** `auth` (login / me thunk'ları `auth.slice.ts` içinde, her zaman `fulfilled`), `common` (global loading sayacı), `theme`. Yeni domain slice ve `store/thunks/` açılmaz.
+- Interceptor hata cevabında Promise'i `LocalResponse` ile reddeder; hata `useQuery` / `useMutation`'ın `error` durumudur, toast'ı interceptor zaten basmıştır.
+
+## Dashboard (istisna)
+
+`pages/Dashboard/index.tsx` bu dosyadaki veri kurallarının dışındadır. Bütün admin'lerde aynı kalıptır: sayfa veriyi kendi yöntemiyle çeker (mevcut `useEffect`, thunk / slice, servis) ve ekranı admin-base `AdminDashboard` basar.
+
+- Mevcut dashboard sayfasına dokunulmaz: TanStack Query'ye taşınmaz, servis / thunk / slice yapısı değiştirilmez, refactor edilmez.
+- Değişiklik yalnızca kullanıcı açıkça istediğinde yapılır (yeni kart, tablo, uç).
+- Raporlarda ve taramalarda dashboard "eski yapı" / "kurala aykırı" sayılmaz.
+
+## Önce admin-base
+
+Entity ekranında config'in karşıladığı ihtiyaç host'ta bileşen olarak yazılmaz:
+
+| İhtiyaç | admin-base karşılığı |
+| --- | --- |
+| Dosya yükleme | Toolbar action, `input`'ta `{ kind: 'file', accept }`; istek multipart `POST {endpoint}/actions/<id>` |
+| Dosya önizleme / açma | `fields.<ad>.file: { thumbnailVariant, openVariant, hasThumbnail }` → `GET {endpoint}/:id/file-url` |
+| Detayda ilişkili kayıtlar | `detail.related: [{ resource, filters: row => ({ <fk>: row.id }), fields }]` |
+| Satır / toplu işlem | `actions` (`run` yok → `/actions/:actionId`) |
+
+Config'in karşılamadığı yeni bir ihtiyaç önce `packages/admin-base`'e eklenir, `npm run playground` ile doğrulanır, sürüm yükseltilir. `detail.component` yalnız sunucuya gitmeyen görünüm (satırdan kota kartı gibi) ya da `services` + `useQuery` ile okunan CRUD dışı veri içindir.
+
+## Sorumluluk
+
+| İş | Sahip | Olmayan yer |
+| --- | --- | --- |
+| Loading aç / kapa | `api.ts` interceptor | Sayfa, bileşen |
+| Loading bayrağı | `commonSlice` (global), `isFetching` / `isPending` (yerel) | `useState` |
+| Toast (API sonucu) | `api.ts` interceptor (`showSuccess` / `showError`) | Sayfa, bileşen, `onSuccess` / `onError` |
+| HTTP | `*.service.ts`, entity için admin-base data provider | Bileşen |
+| Sunucu verisi | TanStack Query cache | Redux slice, `useState` |
+| Entity CRUD ekranı | Generator + admin-base | Host kodu |
+| Oturum / tema / dil | Redux `auth`, `theme`, `common` | TanStack |
+
+## Sayfa: API sonucuna toast yok
+
+`onSuccess: () => showSuccess(...)`, `if (isSuccess) showSuccess(...)`, `onError: () => showError(...)` yasak. Başarı / hata mesajı sunucunun `uiMessage` / `errorData.message`'ıdır, interceptor basar; bu toast'lar için çeviri anahtarı yazılmaz. API'ye bağlı olmayan yerel geri bildirim (kopyalandı, dosya boyutu sınırı) toast olabilir. Sunucu `uiMessage`'ı çeviri anahtarı değildir.
+
+## Destructuring
+
+Okunurluğu artırdığı yerde nesne destructuring kullanılır: hook dönüşü, selector sonucu, props.
+
+```typescript
+const { data: logs, isFetching } = useQuery({ queryKey: ['logs', page], queryFn: () => logsServices.getAll(page) })
+const { mutate: unlock, isPending } = useMutation({ mutationFn: eventsServices.unlockQrKit })
+const { token, user } = useAppSelector(GetAuthState)
+
+export const Card = ({ title, onClose }: CardProps) => ...
+```
+
+Aynı kapsamda iki sorgu varsa yeniden adlandırılır (`const { data: orders } = ...`, `const { data: qrKit } = ...`).
+
+## Sayfa / ekran akışı
+
+Sayfa, ekran ve bileşen yalnız UI durum geçişlerini yönetir (dialog kapatma, formu sıfırlama, yönlendirme, yeniden okuma).
+
+- **`try/catch/finally` yok.** Hata `useQuery` / `useMutation` durumudur. `mutateAsync` + `try/catch` yerine `mutate(vars, { onSuccess })`.
+- **`.then(...).catch(...).finally(...)` zinciri yok.**
+- **Veri okumak için `useEffect` + `useState` yok;** `useQuery` iptali ve yarışı kendisi çözer. TanStack dışı kalan zorunlu bir async iş (`useEffect` içinde `await` sonrası state yazan) varsa `cancelled` bayrağı taşır: cleanup bayrağı `true` yapar, `await`'ten sonraki ilk satır `if (cancelled) return`.
+- Oturum akışı (login / me) `dispatch(thunk()).unwrap()` sonrası `isSuccess` ile dallanır.
+- API dışı reddedebilen platform işlemleri (`navigator.share`, `navigator.clipboard`, dosya okuma) `helper/` fonksiyonuna alınır; hata orada ele alınır. Sayfa yine `try/catch` yazmaz.
+
+```typescript
+const { data: metrics } = useQuery({
+  queryKey: ['metrics', range],
+  queryFn: () => metricsServices.getSummary(range)
+})
+
+const queryClient = useQueryClient()
+const { mutate: unlockQrKit, isPending } = useMutation({
+  mutationFn: eventsServices.unlockQrKit,
+  onSuccess: () => queryClient.invalidateQueries({ queryKey: ['events', 'qr-kit', eventId] })
+})
+
+const handleLogin = async () => {
+  const { isSuccess } = await dispatch(login({ email, password })).unwrap()
+  if (isSuccess) navigate(APP_CONFIG.homePath)
+}
+```
+
+## Hooks
+
+Paylaşılan hook `src/hooks/` altında, `use` ile başlar, barrel `@/hooks`. Redux için `useAppDispatch` / `useAppSelector`; ham `useDispatch` / `useSelector` yok. Sunucu verisi için TanStack (`useQuery`, `useMutation`, admin-base `useResource…`). Bir hook tek iş yapar.
+
+## i18n
+
+`src/i18n/index.ts` + `src/i18n/locales/tr.ts` (`export const tr = {...}`, tip kaynağı) ve `en.ts` (`export const en: typeof tr = {...}`); JSON locale yoktur; admin-base metinleri (`adminBaseTexts`, `adminBaseTextsEn`) bunlarla birleştirilir. İki dosyada aynı anahtar ağacı; yeni metin ikisine birden. Bileşende ham `t()` yok, `useCustomTranslation` kullanılır. Kullanıcıya görünen metin koda gömülmez.
+
+## Doğrulama
+
+`apps/admin` içinden: `npm run typecheck` (ya da `npx tsc -b`), `npm run lint`, `npm run build`.

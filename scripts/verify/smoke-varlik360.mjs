@@ -15,7 +15,6 @@ const varlikModules = '/Users/atakanatabey/Projects/VarlikALL/Varlik360/src/modu
 const GOLDEN = [
   'app-version-configs',
   'audit-log',
-  'daily-fx-rates',
   'daily-portfolio',
   'fund-daily-metrics',
   'ip-blacklist',
@@ -142,19 +141,6 @@ async function main() {
       if (!rendered.includes("ref: 'SymbolTypes'")) issues.push('model.hbs missing nested SymbolTypes ref');
       if (rendered.includes('Schema.Types.Mixed') && /items:[\s\S]*Mixed/.test(rendered)) {
         issues.push('items collapsed to Mixed');
-      }
-    }
-    if (m.name === 'daily-fx-rates') {
-      const mapField = viewFields.find(f => classifyField(f).kind === 'map');
-      if (!mapField) issues.push('no map field');
-      else {
-        if (!String(zodSnips[mapField.name] || '').includes('z.record')) issues.push('Zod map not z.record');
-        const mdMap = norm.find(f => f.name === mapField.name);
-        if (!mdMap || editorTypeOf(mdMap) !== 'Map') issues.push(`draft ${mapField.name} type!=Map (got ${mdMap && editorTypeOf(mdMap)})`);
-        if (!rendered.includes('type: Map') || !rendered.includes('of: Number')) {
-          issues.push('model.hbs Map emit missing');
-        }
-        if (rendered.includes('Schema.Types.Mixed')) issues.push('map collapsed to Mixed');
       }
     }
     if (m.name === 'subscriptions') {

@@ -1,7 +1,7 @@
 import type { Id, ListBody, PaginatedList } from '../contract/api.js';
 import type { ResourceSchema } from '../schema/resource.js';
 import { toWriteBody } from '../schema/write.js';
-import type { ActionParams, DataProvider, ExportBody, ExportFile, RequestOptions } from './dataProvider.js';
+import type { ActionParams, DataProvider, ExportBody, ExportFile, FileUrlParams, RequestOptions } from './dataProvider.js';
 
 /** Tek bir resource'a bağlanmış API; custom action `run` fonksiyonlarına `ctx.api` olarak verilir. */
 export interface ResourceApi<Row> {
@@ -12,6 +12,7 @@ export interface ResourceApi<Row> {
   remove(id: Id, opts?: RequestOptions): Promise<void>;
   action<T = unknown>(actionId: string, params?: ActionParams, opts?: RequestOptions): Promise<T>;
   exportCsv(body?: ExportBody, opts?: RequestOptions): Promise<ExportFile>;
+  fileUrl(id: Id, params?: FileUrlParams, opts?: RequestOptions): Promise<string | null>;
 }
 
 export function bindResourceApi<Row>(provider: DataProvider, resource: ResourceSchema): ResourceApi<Row> {
@@ -23,6 +24,7 @@ export function bindResourceApi<Row>(provider: DataProvider, resource: ResourceS
     remove: (id, opts) => provider.remove(resource, id, opts),
     action: <T>(actionId: string, params: ActionParams = {}, opts?: RequestOptions) =>
       provider.action<T>(resource, actionId, params, opts),
-    exportCsv: (body = {}, opts) => provider.exportCsv(resource, body, opts)
+    exportCsv: (body = {}, opts) => provider.exportCsv(resource, body, opts),
+    fileUrl: (id, params, opts) => provider.fileUrl(resource, id, params, opts)
   };
 }

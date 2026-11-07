@@ -174,7 +174,7 @@ export function generateClientModules(options: ClientGenerateOptions): ClientGen
   const files: ClientWrittenFile[] = [];
   const modules: ClientModuleContext[] = [];
 
-  files.push(writeGenerated(join(servicesDir, 'common.generated.ts'), render('common.generated.ts', { header, headers: preset.requestFlags === 'headers' })));
+  files.push(writeGenerated(join(servicesDir, 'common.generated.ts'), render('common.generated.ts', { header })));
 
   for (const model of models) {
     const moduleName = moduleNameFromEntity(model.entityName);
@@ -241,7 +241,6 @@ function generateClientAuth(clientRoot: string, preset: ClientPreset, auth: Clie
     header,
     imports: preset.imports,
     thunksImport: `${preset.imports.rootState}/thunks`,
-    headers: preset.requestFlags === 'headers',
     asyncStorage: preset.tokenStorage === 'async-storage',
     storagePrefix: (auth.storagePrefix ?? 'app').toLowerCase().replace(/[^a-z0-9]+/g, '_'),
     prefix: auth.prefix.replace(/\/+$/, ''),

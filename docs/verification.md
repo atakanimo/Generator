@@ -6,7 +6,7 @@ Betikler `scripts/verify/` altında. Generator'ın arayüzle aynı çağrıları
 
 Varlik360 BE: `/Users/atakanatabey/Projects/VarlikALL/Varlik360/src/modules/**/*.model.ts`. Her model crash'siz parse edilmeli ve dolu `fields` üretmeli (boş `fields` = hata).
 
-15 modül: `app-version-configs`, `audit-log`, `daily-fx-rates`, `daily-portfolio`, `fund-daily-metrics`, `ip-blacklist`, `notifications`, `subscriptions`, `symbol-types`, `symbols`, `transactions`, `user-asset-categories`, `user-subscriptions`, `user-watch-list`, `users`.
+14 modül: `app-version-configs`, `audit-log`, `daily-portfolio`, `fund-daily-metrics`, `ip-blacklist`, `notifications`, `subscriptions`, `symbol-types`, `symbols`, `transactions`, `user-asset-categories`, `user-subscriptions`, `user-watch-list`, `users`.
 
 **Gerçek Varlik360 klasörüne yazılmaz.** Regen betikleri kopya üzerinde çalışır (`out/regen/<etiket>/`). İstisna: `admin-config-check` `apps/admin` içinde geçici bir klasör açıp siler; `migrate-module` bilerek Varlik360'a yazar (yalnızca taşıma işinde).
 
@@ -17,11 +17,12 @@ Varlik360 BE: `/Users/atakanatabey/Projects/VarlikALL/Varlik360/src/modules/**/*
 | `node scripts/verify/test-core-assets.mjs` | Core asset birim testleri (`toWire`, `extractListPagination`, id / sort eşlemesi, gizli alan strip, auth scope, `dateOnlyRangeFilter`, ortak hook yardımcıları `service-hooks`, update `null` → `$unset` `merge-patch`) | saniyeler |
 | `node scripts/verify/smoke-varlik360.mjs` | Golden set: parse → field kind → model editörü taslağı → `model.hbs` | saniyeler |
 | `node scripts/verify/admin-config-check.mjs [--keep]` | Bütün modeller → admin config, `apps/admin` içinde `tsc` + eşleme kontrolleri | ~1 dk |
+| `node scripts/verify/client-http-sync.mjs [--keep]` | Ortak HTTP katmanı asset sync'i (docs/frontend/http-layer.md), geçici workspace'te: platform tespiti + manifest seçimi, plan manifest'e yazmaz, köprü seçimi (legacy-admin / legacy-mobile / generated), yazma, ikinci apply boş, projeye ait `auth.ts` / `hooks.ts` korunur, değişen ortak dosya `differs`, eski `services/api.ts` notu, Express host'u Express kalır | saniyeler |
 | `node scripts/verify/filter-determinism.mjs` | Liste filtresi tek kural (`src/shared/fieldFilter.ts`): .NET host'a model editöründen kaydet, sonra `host.mjs` gibi ham manifest satırlarıyla generate → hiçbir dosya yazılmaz (tek entity de); her alan için .NET / Python / admin config / client / designer varsayılanı aynı filtre (`filter.type` yoksa sayı → eq, range yalnız manifest öyle diyorsa) | ~5 sn |
 | `node scripts/verify/regen-varlik360.mjs --manifest` | Manifest v3 round trip; eski manifest yok sayılır, tercihler korunur, bir kez yedeklenir | saniyeler |
 | `node scripts/verify/regen-varlik360.mjs --p5` | Model başına `api` + hidden / adminOnly round trip, dosyadan API tespiti, yeni model route kuralları, enum / default | saniyeler |
 | `node scripts/verify/regen-varlik360.mjs --resave-models [etiket]` | Model editörü yolu (`loadModelDraft` → `updateModel`) | dakikalar |
-| `node scripts/verify/regen-varlik360.mjs <etiket> --planned --core-overlay` | Kopyaya 15 modül update mode'da üretilir, Varlik360'a göre drift, kopyada `tsc --noEmit` | uzun; arka planda çalıştır |
+| `node scripts/verify/regen-varlik360.mjs <etiket> --planned --core-overlay` | Kopyaya 14 modül update mode'da üretilir, Varlik360'a göre drift, kopyada `tsc --noEmit` | uzun; arka planda çalıştır |
 | `node scripts/verify/regen-varlik360.mjs --compare <sol> <sağ>` | İki regen etiketi arasında dosya farkı (`<sol>..<sağ>.patch`); 0 = aynı | saniyeler |
 | `node scripts/verify/regen-varlik360.mjs --core-assets <etiket> [assetDir]` | Host kopyasında core asset'ler değiştirilip `tsc` | dakikalar |
 | `node scripts/verify/express-py1-e2e.mjs [--keep]` | PY1 biçimleri Express'te: `Reminders` fixture modeli (`fixtures/dotnet/models.json`) Varlik360 kopyasına üretilir, `src/app.ts`'e bağlanır, kopyada `tsc` (yalnız yeni modülün çeviri anahtarları hariç), Docker'da Mongo + HTTP uygulaması → `dotnet-py1-formats-smoke.mjs` (.NET ile aynı 17 senaryo). Docker gerekir | ~1 dk |
@@ -35,9 +36,10 @@ Varlik360 BE: `/Users/atakanatabey/Projects/VarlikALL/Varlik360/src/modules/**/*
 | Değişiklik | Kapı |
 | --- | --- |
 | Her değişiklik | Generator `npx tsc --noEmit -p tsconfig.json`: `src/generator-assets` dışı hata sayısı artmaz (bugün 3). `npm run build:electron` başarılı |
-| Parser, `modelCreator`, `mongooseModelContext`, field kind / token, `normalizedModel*`, `modelMerge`, manifest | smoke 15 / 15, `--manifest`, `--p5`, `--resave-models` + `--compare` |
+| Parser, `modelCreator`, `mongooseModelContext`, field kind / token, `normalizedModel*`, `modelMerge`, manifest | smoke 14 / 14, `--manifest`, `--p5`, `--resave-models` + `--compare` |
 | BE şablonları / `BackendGenerator` | `express-py1-e2e` (tip bilgileri, kısıtlar, `traceId`); regen `--planned --core-overlay` → tabana göre `--compare` yalnızca beklenen fark, kopyada `tsc` artmaz, custom blok içerikleri birebir |
 | Core asset'ler | `test-core-assets` + `--core-assets` |
+| İstemci HTTP katmanı (`generator-assets/client-http/`, `assetSync.ts` client-http, `clientPlatform.ts`) | `client-http-sync`, projelerde `http-layer-parity` |
 | Admin config | `admin-config-check` |
 | Admin paneli iskeleti (`generator-assets/admin-base/`, `AdminHostBootstrap`, `adminPanel.ts`) | `admin-bootstrap --install` |
 | Liste filtresi (`fieldFilter.ts`, emitter filtreleri, `modelMerge` varsayılanları) | `filter-determinism`, sonra `regen-dotnet` / `regen-python` (Python `test_contacts_cases` range'i açık filtreyle bekler) |

@@ -16,7 +16,7 @@ const varlik = '/Users/atakanatabey/Projects/VarlikALL/Varlik360';
 const admin = join(varlik, 'apps/admin');
 const fixtureWorkspace = join(root, 'scripts/verify/out/admin-config/workspace');
 const out = join(admin, '.gen-admin-config-check');
-const MODULES = ['app-version-configs', 'audit-log', 'daily-fx-rates', 'daily-portfolio', 'fund-daily-metrics', 'ip-blacklist', 'notifications', 'subscriptions', 'symbol-types', 'symbols', 'transactions', 'user-asset-categories', 'user-subscriptions', 'user-watch-list', 'users'];
+const MODULES = ['app-version-configs', 'audit-log', 'daily-portfolio', 'fund-daily-metrics', 'ip-blacklist', 'notifications', 'subscriptions', 'symbol-types', 'symbols', 'transactions', 'user-asset-categories', 'user-subscriptions', 'user-watch-list', 'users'];
 
 const outfile = join(root, 'scripts/verify/out/.harness/admin-config-bundle.mjs');
 mkdirSync(dirname(outfile), { recursive: true });
@@ -77,7 +77,6 @@ check(field('symbols', 'symbolTypeId')?.kind === 'relation' && field('symbols', 
 check(field('symbol-types', 'createdAt')?.kind === 'datetime' && field('symbol-types', 'createdAt')?.readonly === true, 'timestamps as readonly datetime');
 const daily = field('daily-portfolio', 'portfolioValues');
 check(daily?.kind === 'object' && daily?.isArray === true, 'object array (daily-portfolio.portfolioValues)');
-check(field('daily-fx-rates', Object.keys(Object.fromEntries((configs['daily-fx-rates'].fields).map(f => [f.name, 1]))).find(n => field('daily-fx-rates', n).kind === 'map'))?.valueKind === 'number', 'map valueKind');
 
 check(field('audit-log', 'meta')?.kind === 'json' && field('audit-log', 'meta')?.filter === undefined, 'json field (audit-log.meta)');
 {

@@ -2,7 +2,9 @@
 /**
  * Var olan host'un core asset'lerini Generator'daki güncel hâliyle karşılaştırır. Asset'ler
  * create-only yazıldığı için Generator düzeltmeleri eski host'lara kendiliğinden gitmez; bu komut farkı gösterir ve
- * yalnız onaylanan dosyaları yazar. Stack host'tan bulunur (.NET, Python, Express). Skeleton dosyaları kapsam dışı.
+ * yalnız onaylanan dosyaları yazar. Stack host'tan bulunur (.NET, Python, Express; istemci uygulaması: ortak HTTP katmanı,
+ * docs/frontend/http-layer.md). Skeleton dosyaları kapsam dışı. Projeye ait dosyalar (istemcide `api/auth.ts`,
+ * `api/hooks.ts`) yalnız yoksa yazılır; varsa `proje` olarak listelenir, dokunulmaz.
  *
  *   node scripts/assets-sync.mjs <dir>                       özet: eksik / farklı / aynı (yazmaz)
  *   node scripts/assets-sync.mjs <dir> --diff [yol…]         farklı dosyaların diff'i (yol verilirse yalnız onlar)
@@ -65,15 +67,18 @@ try {
   process.exit(1);
 }
 if (!plan) {
-  console.error(`Host tanınmadı (.NET .slnx/.sln, Python pyproject + src/<pkg>/core, Express package.json + src/core): ${dir}`);
+  console.error(`Host tanınmadı (.NET .slnx/.sln, Python pyproject + src/<pkg>/core, istemci package.json (React) + src/, Express package.json + src/core): ${dir}`);
   process.exit(1);
 }
 const diffs = gen.diffAssets(plan);
-const pending = diffs.filter((d) => d.status !== 'same');
+const pending = diffs.filter((d) => d.status === 'missing' || d.status === 'differs');
 
 if (mode === '') {
-  console.log(`${plan.stack}: ${diffs.length} asset — eksik ${diffs.filter((d) => d.status === 'missing').length}, farklı ${diffs.filter((d) => d.status === 'differs').length}, aynı ${diffs.filter((d) => d.status === 'same').length}`);
-  for (const d of pending) console.log(`  ${d.status === 'missing' ? '+' : '~'} ${d.rel}`);
+  const count = (status) => diffs.filter((d) => d.status === status).length;
+  const owned = count('owned');
+  console.log(`${plan.stack}${plan.platform ? ` (${plan.platform})` : ''}: ${diffs.length} asset — eksik ${count('missing')}, farklı ${count('differs')}, aynı ${count('same')}${owned ? `, proje ${owned}` : ''}`);
+  for (const d of pending) console.log(`  ${d.status === 'missing' ? '+' : '~'} ${d.rel}${d.createOnly ? ' (projeye ait; yalnız bu kez yazılır)' : ''}`);
+  for (const note of plan.notes ?? []) console.log(`  ! ${note}`);
   if (pending.length) console.log('\nFark: --diff [yol…]  Yaz: --apply yol [yol…] | --apply-all');
 } else if (mode === '--diff') {
   const tmp = mkdtempSync(join(tmpdir(), 'assets-sync-'));

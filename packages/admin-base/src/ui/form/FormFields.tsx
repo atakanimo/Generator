@@ -190,6 +190,25 @@ function ControlledField({ resource, field, mode, path, label, topLevel }: Field
   const Override = topLevel ? resource.extensions?.fields?.[field.name]?.formField : undefined;
   if (Override) return <Override value={value} onChange={onChange} disabled={disabled} error={error} />;
 
+  if (field.kind === 'file') {
+    const file = value instanceof File ? value : null;
+    return (
+      <Box>
+        <Box sx={{ fontSize: '0.8125rem', color: 'text.secondary', mb: 1 }}>{label}</Box>
+        <Button variant='outlined' component='label' disabled={disabled} color={error ? 'error' : 'primary'}>
+          {file ? texts.text('changeFile') : texts.text('chooseFile')}
+          <input hidden type='file' accept={field.accept} ref={ref} onBlur={onBlur}
+            onChange={e => onChange(e.target.files?.[0] ?? null)} />
+        </Button>
+        {error || file ? (
+          <FormHelperText error={Boolean(error)}>
+            {error ?? `${file?.name} · ${Math.max(1, Math.round((file?.size ?? 0) / 1024))} KB`}
+          </FormHelperText>
+        ) : null}
+      </Box>
+    );
+  }
+
   if (field.kind === 'map') return <MapEditor field={field} label={label} value={value} onChange={onChange} disabled={disabled} />;
 
   if (field.kind === 'json') {

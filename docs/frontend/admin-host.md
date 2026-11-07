@@ -23,7 +23,7 @@ Hepsi K (bir kez yazılır, sonra kullanıcının); `modules/resources.generated
 | `src/layout/MainLayout.tsx` | `AtaAdminLayout` (ortam etiketi, sürüm, dil / tema, çıkış) |
 | `src/pages/` | Login (`AtaLoginPage`), Dashboard (`AdminDashboard`); tema ve dil üst bardaki düğmelerden |
 | `src/store/` | `theme` (mod tarayıcıda saklanır, çekmece), `auth` (login / me / logout thunk'ları, access + refresh token, "beni hatırla"), `common` (global loading) |
-| `src/services/` | `api.ts` interceptor (token, loading, `uiMessage` / hata toast'u, 401 → tek seferlik refresh, olmazsa çıkış), `auth.services.ts` |
+| `src/services/api/` | ortak http katmanı (`index.ts` interceptor: token, loading, `uiMessage` / hata toast'u, 401 → tek seferlik refresh, olmazsa çıkış; `hooks.ts`, `auth.ts`, `platform.ts`). `services/auth.service.ts` auth istisnası |
 | `src/hooks/`, `src/theme/`, `src/i18n/`, `src/components/`, `src/helper/`, `src/types/`, `src/utils/` | SharedFrame admin ile aynı |
 
 Tokenlar: `__App__` panel adı, `__app__` npm adı (`OrdersApi` → `orders-api-admin`, `OrdersAdmin` → `orders-admin`), `__API_PREFIX__` / `__API_DEV_URL__` backend'e göre:

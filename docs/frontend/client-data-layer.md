@@ -112,10 +112,13 @@ Hepsi G dosya; UI üretilmez. Host bir kez bağlar (sonuçtaki `notes` satırı 
 
 `clientPreset.ts`. İki preset de aynı klasör ve adları kullanır: `src/services`, `src/store/thunks`, `src/store/slices`; host'tan `API` (`@/services/api`), `LocalResponse` (`@/types`), `RootState` (`@/store`).
 
-| Preset | İstemci | İstek bayrakları | Token saklama |
-| --- | --- | --- | --- |
-| `redux-rn` | Varlik360 `apps/mobile` | Header'da (`config.headers.skipLoading`) | AsyncStorage |
-| `redux-web` | SharedFrame `apps/web` | Axios config'te (`skipLoading`, `skipSuccessToast`); okumalar (list / getOne) başarı toast'ı göstermez | `localStorage` / `sessionStorage` |
+| Preset | İstemci | Token saklama |
+| --- | --- | --- |
+| `redux-rn` | Varlik360 `apps/mobile`, CeyizDefterim `apps/mobile` | AsyncStorage |
+| `redux-web` | SharedFrame `apps/web`, StockExchange `apps/web` | `localStorage` / `sessionStorage` |
+
+İstek bayrakları ikisinde de axios config'inde (`skipLoading`, `skipSuccessToast`; okumalar başarı mesajı göstermez):
+bütün istemciler aynı interceptor'ı kullanır (docs/frontend/http-layer.md).
 
 - `optionalAsNull` verilmezse `backendRoot` bir .NET host'u ise açık (BE boş opsiyonel alanı `null` yazar).
 - URL'ler mutlak (`/api/<modül>`): host'un axios `baseURL`'ü yalnız origin'dir (`http://localhost:5080`; canlıda boş = aynı origin). Elle yazılan özel uçlar da `/api/...` yazar.

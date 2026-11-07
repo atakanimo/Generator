@@ -39,7 +39,10 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-_language: ContextVar[str] = ContextVar("contract_language", default="en")
+SUPPORTED_LANGUAGES: tuple[str, ...] = ("en", "tr")
+DEFAULT_LANGUAGE = "en"
+
+_language: ContextVar[str] = ContextVar("contract_language", default=DEFAULT_LANGUAGE)
 _trace_id: ContextVar[str | None] = ContextVar("contract_trace_id", default=None)
 
 
@@ -62,7 +65,7 @@ class ContractResponse[T](BaseModel):
 
 
 def current_language() -> str:
-    """İsteğin dili (`tr` / `en`); route dışında `en`."""
+    """İsteğin dili (`SUPPORTED_LANGUAGES`); route dışında `DEFAULT_LANGUAGE`."""
     return _language.get()
 
 
@@ -75,14 +78,16 @@ def contract_ok[T](data: T | None = None, ui_message: str | None = None) -> Cont
     )
 
 
+def normalize_language(value: str | None) -> str | None:
+    """`tr-TR,tr;q=0.9` → `tr`; desteklenmeyen ya da boş değer → `None`."""
+    tag = (value or "").split(",")[0].split(";")[0].strip()
+    code = tag.replace("_", "-").split("-")[0].lower()
+    return code if code in SUPPORTED_LANGUAGES else None
+
+
 def request_language(request: Request) -> str:
-    raw = (
-        request.headers.get("lang")
-        or request.headers.get("x-lang")
-        or request.headers.get("accept-language")
-        or "en"
-    )
-    return "tr" if raw.strip().lower().startswith("tr") else "en"
+    """İstek dili yalnız `Accept-Language` (api-contract K6)."""
+    return normalize_language(request.headers.get("accept-language")) or DEFAULT_LANGUAGE
 
 
 def _error_response(status: int, code: int, header: str, message: str) -> JSONResponse:
@@ -216,11 +221,14 @@ def _header_key(status: int) -> str:
 
 
 __all__ = [
+    "DEFAULT_LANGUAGE",
+    "SUPPORTED_LANGUAGES",
     "ContractErrorData",
     "ContractResponse",
     "ContractRoute",
     "contract_ok",
     "current_language",
     "install_contract_handlers",
+    "normalize_language",
     "request_language",
 ]

@@ -100,11 +100,9 @@ export interface SetPasswordBody {
 }
 {{/if}}
 
-/** Auth calls show no success toast{{#if headers}} (this host's interceptor has no such flag){{/if}}; `background`: no global loading. */
+/** Auth calls show no success toast; `background`: no global loading. */
 const quiet = (options?: RequestOptions, background = false): RequestOptions => ({
-{{#unless headers}}
   skipSuccessToast: true,
-{{/unless}}
   ...(background ? { skipLoading: true } : {}),
   ...options
 });

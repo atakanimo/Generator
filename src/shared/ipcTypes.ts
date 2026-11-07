@@ -6,6 +6,7 @@ import type { NormalizedApi, NormalizedModel } from './normalizedModel.js';
 import type { ModelDraft } from './modelDraft.js';
 import type { BackendDatabase, BackendIdType, BackendStack, HostDatabase } from './backendDatabase.js';
 import type { AuthBootstrapOptions, WorkspaceAuth } from './authModules.js';
+import type { ClientPlatform } from './clientPlatform.js';
 
 export type SourceType = 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | 'python-fastapi' | null;
 
@@ -91,6 +92,11 @@ export interface ManifestWorkspacePrefs {
   features?: { deletable?: boolean; updatable?: boolean };
   /** Shared auth layer modules (docs/backend/auth.md); written by the bootstrap, absent on older hosts. */
   auth?: WorkspaceAuth;
+  /**
+   * İstemci uygulamalarının platformu, workspace köküne göre klasör (`apps/admin` → `admin`). Tespit (`package.json`)
+   * ilk çözümde yazılır; elle değiştirilen değer tespitin önüne geçer (`clientPlatform.ts`).
+   */
+  clientPlatforms?: Record<string, ClientPlatform>;
 }
 
 export interface WorkspaceManifestReadResult {

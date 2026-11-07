@@ -6,7 +6,7 @@ export function getCurrentLanguage(): string {
   return getRequestContext()?.language ?? DEFAULT_LANGUAGE;
 }
 
-/** `lang` / `x-lang` / `Accept-Language` değerini desteklenen dile indirger (`en-US` → `en`); bilinmeyen → undefined. */
+/** `Accept-Language` değerini desteklenen dile indirger (`en-US` → `en`); bilinmeyen → undefined. */
 export function normalizeLanguage(value: string | undefined): string | undefined {
   const code = value?.split(',')[0]?.split(/[-_;]/)[0]?.trim().toLowerCase();
   return code && (SUPPORTED_LANGUAGES as readonly string[]).includes(code) ? code : undefined;

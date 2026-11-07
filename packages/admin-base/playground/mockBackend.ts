@@ -42,7 +42,16 @@ const userSubscriptions: Doc[] = Array.from({ length: 37 }, (_, i) => ({
   updatedAt: now.toISOString()
 }));
 
-const tables: Record<string, Doc[]> = { users, subscriptions, userSubscriptions };
+const photo = (color: string) =>
+  `data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='120' height='80'><rect width='120' height='80' fill='${color}'/></svg>`)}`;
+/** Dosyalar "depoda": `file-url` süreli adres yerine data URL döner. `brokenThumb` → küçük resim yüklenemez, orijinale düşülür. */
+const media: Doc[] = [
+  { fileName: 'gelin-masasi.jpg', mediaType: 'photo', color: '#f472b6' },
+  { fileName: 'pasta.jpg', mediaType: 'photo', color: '#a78bfa', brokenThumb: true },
+  { fileName: 'ilk-dans.mp4', mediaType: 'video', color: '#60a5fa' }
+].map((m, i) => ({ id: newId(), ...m, createdAt: now.subtract(i, 'hour').toISOString(), updatedAt: now.toISOString() }));
+
+const tables: Record<string, Doc[]> = { users, subscriptions, userSubscriptions, media };
 /** Populate: `{ alan: [koleksiyon, select alanları] }`. */
 const populate: Record<string, Record<string, [string, string[]]>> = {
   userSubscriptions: { userId: ['users', ['email']], subscriptionId: ['subscriptions', ['name']] }
@@ -118,6 +127,20 @@ function handle(method: string, url: string, body: Record<string, unknown>) {
       currentPeriodEnd: dayjs().add(days, 'day').toISOString(), updatedAt: dayjs().toISOString() });
     return ok(populated(table, doc), `Kullanıcı ${days} gün premium yapıldı`);
   }
+  if (method === 'post' && path[0] === 'actions' && path[1] === 'upload') {
+    const file = body.file;
+    if (!(file instanceof File)) return fail(422, 'Dosya gerekli');
+    const doc = { id: newId(), fileName: file.name, mediaType: file.type.startsWith('image/') ? 'photo' : 'video',
+      color: '#34d399', comment: body.comment ?? null, createdAt: dayjs().toISOString(), updatedAt: dayjs().toISOString() } as Doc;
+    docs.unshift(doc);
+    return ok(doc, `${file.name} yüklendi`);
+  }
+  if (method === 'get' && path[1] === 'file-url') {
+    const doc = find(path[0]);
+    if (!doc) return fail(404, 'Kayıt bulunamadı');
+    const variant = new URLSearchParams(url.split('?')[1] ?? '').get('variant');
+    return ok({ url: variant === 'thumb' && doc.brokenThumb ? 'data:image/png;base64,bozuk' : photo(String(doc.color)) });
+  }
   if (method === 'get' && path.length === 1) {
     const doc = find(path[0]);
     return doc ? ok(populated(table, doc)) : fail(404, 'Kayıt bulunamadı');
@@ -134,8 +157,12 @@ function handle(method: string, url: string, body: Record<string, unknown>) {
 const adapter: AxiosAdapter = async config => {
   await new Promise(resolve => setTimeout(resolve, 250));
   if (config.signal?.aborted) throw new axios.Cancel('canceled');
-  const body = typeof config.data === 'string' ? JSON.parse(config.data || '{}') : (config.data ?? {});
-  const { status, body: data } = handle(String(config.method), String(config.url), body);
+  const body =
+    config.data instanceof FormData
+      ? Object.fromEntries(config.data.entries())
+      : typeof config.data === 'string' ? JSON.parse(config.data || '{}') : (config.data ?? {});
+  const query = config.params ? `?${new URLSearchParams(config.params as Record<string, string>)}` : '';
+  const { status, body: data } = handle(String(config.method), `${config.url}${query}`, body);
   const response: AxiosResponse = { data, status, statusText: String(status), headers: {}, config };
   if (status >= 400) throw new AxiosError(data.errorData?.message ?? 'error', String(status), config, null, response);
   return response;
