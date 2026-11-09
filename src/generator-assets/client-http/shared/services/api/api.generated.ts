@@ -1,29 +1,22 @@
-// Ortak HTTP katmanı (docs/frontend/http-layer.md, api-contract §7): projede değiştirilmez. Platform farkı `./platform.ts`,
-// oturum (token, refresh) `./auth.ts`, projeye özel davranış `./hooks.ts`'te.
-// Tek axios örneği: token, dil, global loading, başarı / hata mesajı, dosya, 401 → refresh. Thunk, slice ve sayfa bunları
-// tekrarlamaz.
+// Tek axios örneği: token, dil, global loading, başarı / hata mesajı, dosya cevabı, 401 → refresh.
 import axios, { type AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
 import i18n from 'i18next';
 import { setCommonLoading } from '@/store/slices/common.slice';
 import type { ErrorData, LocalResponse } from '@/types';
-import { getAccessToken, hasSession, isAuthRequest, refreshSessionOnce } from './auth';
-import { BASE_URL, showErrorMessage, showSuccessMessage } from './platform';
+import { getAccessToken, hasSession, isAuthRequest, refreshSessionOnce } from './auth.generated';
+import { BASE_URL, showErrorMessage, showSuccessMessage } from './platform.generated';
 import { apiHooks } from './hooks';
 
-// İstek bayrakları: axios config alanıdır, header değil; sunucuya gitmez (contract §7.7).
+// İstek bayrakları axios config alanıdır; sunucuya gitmez.
 declare module 'axios' {
   interface AxiosRequestConfig {
-    /** Arka plan / sayfalama isteği: global loading yok. */
     skipLoading?: boolean;
-    /** Başarı mesajı (`uiMessage`) yok. Üretilmiş okumalar varsayılan olarak kapatır. */
     skipSuccessToast?: boolean;
-    /** Hata mesajı yok: hatayı ekran kendisi gösterir (ör. alan altı uyarı). */
     skipErrorToast?: boolean;
   }
 }
 
-/** Sunucu zarfı (api-contract §1). */
-type ApiEnvelope = {
+type ApiBody = {
   isSuccess?: boolean;
   data?: unknown;
   uiMessage?: string | null;
@@ -33,7 +26,7 @@ type ApiEnvelope = {
 
 type RetryConfig = InternalAxiosRequestConfig & { _retried?: boolean; _abort?: AbortController };
 
-/** Store yalnız loading'i dispatch etmek ve state'i `./auth`'a vermek için; döngü olmasın diye sonradan enjekte edilir. */
+/** Döngüsel import olmasın diye store sonradan enjekte edilir. */
 type ApiStore = { getState(): unknown; dispatch(action: never): unknown };
 let store: ApiStore | null = null;
 
@@ -41,16 +34,15 @@ export const injectStore = (appStore: ApiStore) => {
   store = appStore;
 };
 
+/** Uzun süren uçlar (rapor, tarama, toplu iş) kendi `timeout`'unu verir. */
 export const API = axios.create({
   baseURL: BASE_URL,
+  timeout: 60_000,
   headers: { 'Content-Type': 'application/json' }
 });
 
 const dispatch = (action: unknown) => store?.dispatch(action as never);
 
-// ---- loading ve iptal ----
-
-// Global loading yalnız burada açılır / kapanır; uygulama yalnız okur.
 let activeRequests = 0;
 
 function startLoading(config: InternalAxiosRequestConfig) {
@@ -59,10 +51,10 @@ function startLoading(config: InternalAxiosRequestConfig) {
   if (activeRequests === 1) dispatch(setCommonLoading(true));
 }
 
-/** Uçuştaki istekler: oturum biterse hepsi iptal edilir. */
+/** Oturum biterse uçuştaki istekler iptal edilir. */
 const inFlight = new Set<AbortController>();
 
-/** Her isteğe bir controller; çağıranın kendi sinyali (ör. autocomplete) varsa ona da bağlanır. */
+/** Çağıranın kendi sinyali varsa o da bu controller'ı iptal eder. */
 function trackRequest(config: RetryConfig) {
   const controller = new AbortController();
   const callerSignal = config.signal as AbortSignal | undefined;
@@ -78,7 +70,6 @@ function abortAll() {
   inFlight.clear();
 }
 
-/** İstek bitti (başarılı ya da değil): loading düşer, takip biter, header'lar hook'a gider. */
 function settle(config: RetryConfig | undefined, headers?: unknown) {
   if (config && !config.skipLoading && activeRequests > 0) {
     activeRequests -= 1;
@@ -90,10 +81,8 @@ function settle(config: RetryConfig | undefined, headers?: unknown) {
 
 const isCanceled = (error: AxiosError) => axios.isCancel(error as unknown) || Boolean(error.config?.signal?.aborted);
 
-/** Aynı anda gelen 401'ler tek refresh'i bekler. */
 let refreshing: Promise<boolean> | null = null;
 
-/** Aynı anda düşen 401'ler oturum sonu mesajını bir kez gösterir. */
 let sessionEndNotifiedAt = 0;
 function shouldNotifySessionEnd() {
   const now = Date.now();
@@ -102,17 +91,15 @@ function shouldNotifySessionEnd() {
   return true;
 }
 
-// ---- zarf ----
-
 const isBlob = (value: unknown): value is Blob => typeof Blob !== 'undefined' && value instanceof Blob;
 
-/** Dosya istenen uçlarda hata zarfı da Blob gelir. React Native'in Blob'unda `text()` yok (mobil dosya indirmez). */
-async function readEnvelope(body: unknown): Promise<ApiEnvelope | null> {
-  if (!isBlob(body)) return (body as ApiEnvelope | undefined) ?? null;
+/** Dosya istenen uçlarda hata cevabı da Blob gelir. React Native'in Blob'unda `text()` yok (mobil dosya indirmez). */
+async function readErrorBody(body: unknown): Promise<ApiBody | null> {
+  if (!isBlob(body)) return (body as ApiBody | undefined) ?? null;
   const { text } = body as { text?: () => Promise<string> };
   if (typeof text !== 'function') return null;
   try {
-    return JSON.parse(await text.call(body)) as ApiEnvelope;
+    return JSON.parse(await text.call(body)) as ApiBody;
   } catch {
     return null;
   }
@@ -127,27 +114,25 @@ const errorResponse = (errorData: ErrorData, statusCode?: number, traceId?: stri
   ...(traceId && { traceId })
 });
 
-function toErrorResponse(envelope: ApiEnvelope | null, status: number | undefined): LocalResponse<null> {
+function toErrorResponse(payload: ApiBody | null, status: number | undefined): LocalResponse<null> {
   const fallback = status === undefined ? i18n.t('errors.networkError') : i18n.t('errors.general');
   return errorResponse(
     {
-      code: Number(envelope?.errorData?.code ?? status ?? 0),
-      header: envelope?.errorData?.header ?? '',
-      message: envelope?.errorData?.message || envelope?.uiMessage || fallback,
-      field: envelope?.errorData?.field ?? undefined
+      code: Number(payload?.errorData?.code ?? status ?? 0),
+      header: payload?.errorData?.header ?? '',
+      message: payload?.errorData?.message || payload?.uiMessage || fallback,
+      field: payload?.errorData?.field ?? undefined
     },
     status,
-    envelope?.traceId
+    payload?.traceId
   );
 }
 
-/** Hata bir kez, burada gösterilir; hook üstlendiyse ya da ekran istemediyse gösterilmez. */
 function reportError(response: LocalResponse<null>, config?: InternalAxiosRequestConfig) {
   if (apiHooks.onError?.(response, config)) return;
   if (!config?.skipErrorToast && response.errorData) showErrorMessage(response.errorData);
 }
 
-/** Başarı mesajı yalnız yazma isteklerinde: GET / HEAD, `/get-all` ve `/me` hiç basmaz. */
 function shouldShowSuccess(config: InternalAxiosRequestConfig): boolean {
   if (config.skipSuccessToast) return false;
   const method = (config.method ?? 'get').toLowerCase();
@@ -173,16 +158,13 @@ function fileNameFromContentDisposition(header: unknown): string | undefined {
   );
 }
 
-// ---- interceptor'lar ----
-
 const handleRequest = async (config: InternalAxiosRequestConfig) => {
   const blocked = apiHooks.onRequest?.(config);
   if (blocked) return Promise.reject(blocked);
 
   const token = await getAccessToken(store?.getState());
   if (token) config.headers.Authorization = `Bearer ${token}`;
-  // İstek dili yalnız `Accept-Language` (api-contract K6): kullanılan dilin kısa kodu; `tr-TR` → `tr`, desteklenmeyen
-  // cihaz dili → i18next'in düştüğü dil. Çağrı kendi dilini verdiyse (ör. içeriğin dili) ona dokunulmaz.
+  // Çağrı kendi dilini verdiyse ona dokunulmaz.
   const lang = (i18n.resolvedLanguage || i18n.language || '').split('-')[0];
   if (lang && !config.headers.has('Accept-Language')) config.headers.set('Accept-Language', lang);
 
@@ -191,12 +173,12 @@ const handleRequest = async (config: InternalAxiosRequestConfig) => {
   return config;
 };
 
-// Çağıran (servis) `AxiosResponse` değil `LocalResponse` alır.
+// Çağıran `AxiosResponse` değil `LocalResponse` alır.
 const handleResponse = (axiosResponse: AxiosResponse<unknown>) => {
   const config = axiosResponse.config as RetryConfig;
   settle(config, axiosResponse.headers);
 
-  // Dosya cevabında zarf yok (export, QR).
+  // Dosya cevabı sözleşme şeklinde değil.
   if (isBlob(axiosResponse.data)) {
     const file: LocalResponse<Blob> = {
       isSuccess: true,
@@ -209,26 +191,26 @@ const handleResponse = (axiosResponse: AxiosResponse<unknown>) => {
     return file as unknown as AxiosResponse;
   }
 
-  const envelope = axiosResponse.data as ApiEnvelope | null;
-  if (envelope?.isSuccess === false) {
-    const response = toErrorResponse(envelope, axiosResponse.status);
+  const payload = axiosResponse.data as ApiBody | null;
+  if (payload?.isSuccess === false) {
+    const response = toErrorResponse(payload, axiosResponse.status);
     reportError(response, config);
     return Promise.reject(response);
   }
 
   const response: LocalResponse<unknown> = {
     isSuccess: true,
-    data: envelope?.data ?? null,
-    uiMessage: envelope?.uiMessage || '',
+    data: payload?.data ?? null,
+    uiMessage: payload?.uiMessage || '',
     errorData: null,
     statusCode: axiosResponse.status,
-    ...(envelope?.traceId && { traceId: envelope.traceId })
+    ...(payload?.traceId && { traceId: payload.traceId })
   };
   if (response.uiMessage && shouldShowSuccess(config)) showSuccessMessage(response.uiMessage);
   return response as unknown as AxiosResponse;
 };
 
-/** `onRequest`'in durdurduğu istek buraya `LocalResponse` olarak gelir; loading başlamadı, mesajı hook bastı. */
+/** `onRequest`'in durdurduğu istek buraya `LocalResponse` olarak gelir; loading hiç başlamadı. */
 const isLocalResponse = (value: unknown): value is LocalResponse<null> =>
   !axios.isAxiosError(value) && typeof (value as LocalResponse<null> | null)?.isSuccess === 'boolean';
 
@@ -237,15 +219,12 @@ const handleResponseError = async (error: AxiosError | LocalResponse<null>) => {
   const config = error.config as RetryConfig | undefined;
   settle(config, error.response?.headers);
 
-  // İptal edilen istek sessizdir.
   if (isCanceled(error)) return Promise.reject(errorResponse({ header: '', message: '', code: 0 }));
 
   const status = error.response?.status;
-  const response = toErrorResponse(error.response ? await readEnvelope(error.response.data) : null, status);
+  const response = toErrorResponse(error.response ? await readErrorBody(error.response.data) : null, status);
 
-  // Access token'ın süresi doldu: tek refresh (aynı anda gelen 401'ler aynı çağrıyı bekler), istek bir kez tekrar.
-  // Refresh olmazsa oturumu `./auth` kapatır (ağ hatası kapatmaz); o zaman uçuştaki istekler sessizce iptal edilir ve
-  // oturum sonu mesajı bir kez gösterilir.
+  // Aynı anda gelen 401'ler tek refresh'i bekler. Oturum biterse uçuştakiler iptal edilir, mesaj bir kez gösterilir.
   let sessionEnded = false;
   if (status === 401 && config && !isAuthRequest(config.url)) {
     if (!config._retried) {
@@ -264,6 +243,6 @@ const handleResponseError = async (error: AxiosError | LocalResponse<null>) => {
   return Promise.reject(response);
 };
 
-// Tek request interceptor: onRejected'ı hiç çalışmaz (`onRequest` reddi `handleResponseError`'a düşer).
+// `onRequest` reddi `handleResponseError`'a düşer; request interceptor'ın onRejected'ı yok.
 API.interceptors.request.use(handleRequest);
 API.interceptors.response.use(handleResponse, handleResponseError);

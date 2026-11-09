@@ -25,7 +25,6 @@ import { OtpCodes, type OtpPurpose } from './auth.models';
 import { RefreshTokens } from './auth.models';
 import { authHooks } from './auth.hooks';
 
-/** `AuthUser` of the contract (docs/backend/auth.md). */
 export interface AuthUser {
   id: string;
   email: string;
@@ -40,7 +39,6 @@ export interface AuthUser {
 export interface AuthSession {
   accessToken: string;
   refreshToken: string;
-  /** Access token lifetime in seconds. */
   expiresIn: number;
   user: AuthUser;
   isNewUser?: boolean;
@@ -268,7 +266,6 @@ export async function resetPassword(email: string, code: string, newPassword: st
   const user = await Users.findOne({ email }).exec();
   if (!user || isAdmin(user) || !(await consumeOtp(user, 'reset', code))) return badRequest(t('auth.invalidCode'));
   user.passwordHash = await hashPassword(newPassword);
-  // The code reached the inbox: the address is proven.
   user.emailVerified = true;
   await user.save();
   await revokeAllSessions(user._id as Types.ObjectId);

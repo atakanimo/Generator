@@ -9,14 +9,24 @@
  * PY7: project scan (manifest modules + hand-written `modules/<m>/model.py` that can be imported), import of a
  * Pydantic class (`parsePydanticModel` → manifest row → generate) and the extra-field report of its collection.
  */
-import { buildAuthUsersModel, lockAuthUsersModel, normalizeAuthModules, type AuthBootstrapOptions } from '../../shared/authModules.js';
-import { bootstrapPythonAuth } from '../generators/python-fastapi/PythonAuthBootstrap.js';
+import {
+  AUTH_APPLE_TOKEN_FIELD,
+  AUTH_USERS_ENTITY,
+  authUsesMail,
+  buildAuthUsersModel,
+  lockAuthUsersModel,
+  normalizeAuthModules,
+  type AuthBootstrapOptions,
+  type WorkspaceAuth
+} from '../../shared/authModules.js';
+import { addCryptoExtra, addEnvKeys, bootstrapPythonAuth } from '../generators/python-fastapi/PythonAuthBootstrap.js';
+import { pythonAuthNotes, syncPythonAuth } from '../generators/python-fastapi/PythonAuthFiles.js';
 import { buildAuthSeedAdmin } from '../utils/authSeed.js';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import type { NormalizedModel } from '../../shared/normalizedModel.js';
 import type { ModelDraft } from '../../shared/modelDraft.js';
-import type { GenerateBackendResult } from '../../shared/ipcTypes.js';
+import type { AuthModulesResult, GenerateBackendResult } from '../../shared/ipcTypes.js';
 import { onlyHostDatabase } from '../../shared/backendDatabase.js';
 import { bootstrapPythonHost } from '../generators/python-fastapi/PythonHostBootstrap.js';
 import { generatePythonModules } from '../generators/python-fastapi/PythonFastapiGenerator.js';
@@ -72,7 +82,7 @@ export async function bootstrapPythonProject(root: string, app: string, auth: Au
     const authFiles = bootstrapPythonAuth(root, app.trim(), pkg, modules, admin);
     writeWorkspaceManifestUpdate(root, {
       event: 'workspace',
-      workspace: { backendStack: 'python-fastapi', ...onlyHostDatabase('python-fastapi'), auth: { modules } }
+      workspace: { backendStack: 'python-fastapi', ...onlyHostDatabase('python-fastapi'), auth: { modules, appName: app.trim() } }
     });
     const users = writePythonModel(root, { model: buildAuthUsersModel(modules) });
     if (!users.success) return { success: false, error: `Users modeli üretilemedi: ${users.error}` };
@@ -81,6 +91,63 @@ export async function bootstrapPythonProject(root: string, app: string, auth: Au
       .map((f) => toProjectRelativePath(root, f.path));
     log(`[python] bootstrap ${pkg}: ${created.length} file(s)`, 'info');
     return { success: true, package: pkg, files: created };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+function authHost(root: string): { host: PythonHost; auth: WorkspaceAuth } {
+  const host = requireHost(root);
+  const auth = readWorkspaceManifest(host.root)?.workspace?.auth;
+  if (!auth || !existsSync(join(host.root, 'src', host.pkg, 'modules', 'auth'))) {
+    throw new Error("Bu host'ta ortak auth katmanı yok (manifest workspace.auth + modules/auth gerekli).");
+  }
+  return { host, auth };
+}
+
+/** Auth modules + app name of an existing host (manifest `workspace.auth`). */
+export function readPythonAuthSettings(root: string): { success: boolean; auth?: WorkspaceAuth; error?: string } {
+  try {
+    const { auth } = authHost(root);
+    return { success: true, auth: { modules: normalizeAuthModules(auth.modules), appName: auth.appName } };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+/**
+ * Changes the auth modules of an existing host (docs/backend/auth.md "Var olan proje"): without `apply` only lists
+ * the auth files that would change. With `apply`: manifest `workspace.auth`, `Users` locked fields, every module
+ * regenerated (auth G files included), `.env.example` keys and `PyJWT[crypto]` for the modules turned on.
+ */
+export function setPythonAuthModules(root: string, input: { modules: readonly string[]; appName?: string }, apply: boolean): AuthModulesResult {
+  try {
+    const { host, auth } = authHost(root);
+    const appName = input.appName?.trim() || auth.appName;
+    if (!appName) return { success: false, error: 'Uygulama adı gerekli (auth e-postalarının konusunda geçer).' };
+    const modules = normalizeAuthModules(input.modules);
+    const files = syncPythonAuth(host.root, host.pkg, appName, modules, false).map((f) => ({ path: toProjectRelativePath(host.root, f.path), action: f.action }));
+    const notes = [
+      ...pythonAuthNotes(host.root, host.pkg, modules),
+      "İstemciler aynı modülleri 'node scripts/host.mjs client-auth <host> <app klasörü>' ile alır."
+    ];
+    if (!apply) return { success: true, files, notes };
+    writeWorkspaceManifestUpdate(host.root, { event: 'workspace', workspace: { auth: { modules, appName } } });
+    const users = loadPythonModels(host.root).find((m) => m.entityName === AUTH_USERS_ENTITY);
+    if (users) {
+      // Apple's token field is locked only with `apple`; turned off, it leaves the model.
+      const model = modules.includes('apple') ? users : { ...users, fields: users.fields.filter((f) => f.name !== AUTH_APPLE_TOKEN_FIELD) };
+      const written = writePythonModel(host.root, { model });
+      if (!written.success) return { success: false, error: `Users modeli üretilemedi: ${written.error}` };
+    } else {
+      generatePythonModules(host.root, host.pkg, loadPythonModels(host.root));
+    }
+    // Only the modules turned on now: the host may have wired the existing ones to its own keys.
+    const added = modules.filter((m) => !auth.modules.includes(m));
+    addCryptoExtra(host.root, added);
+    addEnvKeys(host.root, added, authUsesMail(modules) && !authUsesMail(auth.modules));
+    log(`[python] auth modules ${host.pkg}: ${modules.join(', ') || '(core)'}`, 'info');
+    return { success: true, files, notes };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }

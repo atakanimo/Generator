@@ -17,7 +17,7 @@ Hepsi K (bir kez yazılır, sonra kullanıcının); `modules/resources.generated
 | --- | --- |
 | `package.json`, `vite.config.ts`, `tsconfig*.json`, `eslint.config.js`, `.prettierrc` | React 19, Vite 7, MUI 7, admin-base (`packages/admin-base` sürümü), `@` takma adı, peer `dedupe`, `/api` proxy |
 | `.env.development`, `.env.example` | `VITE_API_PROXY` (dev), `VITE_API_BASE_URL` (prod), `VITE_APP_ENV` |
-| `src/config/app.ts` | Panel adı, auth uçları, storage anahtarları, ana sayfa |
+| `src/config/app.ts` | Tema anahtarı (`storage.themeMode`), ana sayfa (`homePath`); panel adı i18n'de (`common.name`) |
 | `src/App.tsx` | Redux `Provider`, `ThemeProvider`, `AtaAdminProvider` (rest provider, `t`, tarih dili, `getCurrentUserId`), router, loading, toast |
 | `src/routes/` | `routes.ts`: menü sırası (Dashboard, `createAdminRoutes(resources)`); `ProtectedRoute` |
 | `src/layout/MainLayout.tsx` | `AtaAdminLayout` (ortam etiketi, sürüm, dil / tema, çıkış) |
@@ -42,10 +42,10 @@ Generator'ın kurduğu Express / .NET / Python host'u bu uçları zaten verir ([
 
 - `POST <önek>/auth/login` → `AuthSession` (`{ accessToken, refreshToken, expiresIn, user }`); `user.role !== 'admin'` girişte reddedilir ve o refresh token `logout` ile iptal edilir.
 - `GET <önek>/auth/me` → `AuthUser`: kayıtlı token açılışta bununla doğrulanır.
-- `POST <önek>/auth/refresh` `{ refreshToken }` → yeni çift: `api.ts` 401'de bir kez çağırır (aynı anda gelen 401'ler tek isteği bekler), isteği bir kez tekrarlar; başarısızsa `clearSession`.
+- `POST <önek>/auth/refresh` `{ refreshToken }` → yeni çift: `services/api/api.generated.ts` 401'de bir kez çağırır (aynı anda gelen 401'ler tek isteği bekler), isteği bir kez tekrarlar; başarısızsa `clearSession`.
 - `POST <önek>/auth/logout` `{ refreshToken }`: çıkışta; cevap ne olursa olsun yerel oturum kapanır.
 
-Token'lar "Beni hatırla" seçimine göre `localStorage` ya da `sessionStorage`'da (`APP_CONFIG.storage.token` / `refreshToken`); refresh aynı yere yazar. Yollar `src/config/app.ts`'te. Eski host (`{ token, user }` veren) Faz B'de geçene kadar bu paneli kullanamaz.
+Kurulum HTTP katmanını asset sync ile (`services/api/*.generated.ts`, `hooks.ts`, `types/API/response.generated.ts`) ve auth'u `generateClientAuthFiles` ile (G: `auth.service` / `auth.thunk` / `auth.slice` `.generated`, K uzantıları; admin `canSignIn`) yazar ([../backend/auth.md](../backend/auth.md#i̇stemciler)). Token'lar "Beni hatırla" seçimine göre `localStorage` ya da `sessionStorage`'da (`services/api/auth.generated.ts`, önek paket adı); uçlar `services/auth.service.generated.ts`'te.
 
 ## Kurallar
 

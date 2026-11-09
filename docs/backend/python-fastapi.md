@@ -70,6 +70,10 @@ src/<pkg>/
          crud/  http/  errors/            (asset: ListBody, filtreler, sıralama, sayfalama, CrudRepository, CrudService,
                                            ServiceHooks, to_wire, decimal / ref / patch tipleri, mesajlar, zarf, AppError)
   modules/<collection>/                   (aşağıdaki tablo)
+  core/auth/  modules/auth/ router.py service.py schemas.py seed.py
+                                          (G: `workspace.auth.modules`'e göre her generate'te; auth.md "Host'taki dosyalar")
+  modules/auth/  hooks.py  router_custom.py  service_custom.py (K: projeye özel `/auth` uçları,
+                                           G `router.py` sonunda `map_custom_auth_routes(router)`; auth.md "İstemciler")
   api/   main.py (K: create_app)  deps.py (K: JWT, AdminDep, DbDep)
          routers_generated.py (G: ADMIN_CRUD_ROUTERS)  indexes_generated.py (G: ensure_crud_indexes)
   worker/ main.py (K: register_jobs)  __main__.py

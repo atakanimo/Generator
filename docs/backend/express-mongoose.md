@@ -167,3 +167,8 @@ CRUD mesajları modül başına değil, host'un locale dosyalarında tek bir `cr
 ## Keşif
 
 Model keşfi `src/modules/**/*.model.ts` (yalnızca `src/models` değil). Stack önce tespit edilir; Express + Mongoose core'u başka stack'e kopyalanmaz.
+
+## Açık konular
+
+- `Get*Query = Get*Filters` alias'ı kaldırılacak.
+- Custom blok dışındaki el kodunun regenerate'te sessizce silinmesine genel koruma yok.

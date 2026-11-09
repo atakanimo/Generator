@@ -24,7 +24,7 @@ import { dirname, join, relative } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
-const varlik = '/Users/atakanatabey/Projects/VarlikALL/Varlik360';
+const varlik = '/Users/atakanatabey/Projects/AtaAllWorkspace/Varlik360';
 const regenDir = join(root, 'scripts/verify/out/regen');
 const manifestFixture = join(root, 'scripts/verify/fixtures/varlik360.manifest.v3.json');
 

@@ -29,6 +29,8 @@ import {
   isPythonProject,
   loadPythonModelDraft,
   previewPythonImport,
+  readPythonAuthSettings,
+  setPythonAuthModules,
   writePythonModel
 } from './ipc/pythonBackend.js';
 
@@ -399,6 +401,14 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('project:getAuthDefaults', async () => readAuthDefaults());
+  ipcMain.handle('project:getPythonAuthSettings', async (_, { root }: { root?: string }) =>
+    root?.trim() ? readPythonAuthSettings(root.trim()) : { success: false, error: 'Proje klasörü gerekli.' }
+  );
+  ipcMain.handle(
+    'project:setPythonAuthModules',
+    async (_, { root, modules, appName, apply }: { root?: string; modules?: string[]; appName?: string; apply?: boolean }) =>
+      root?.trim() ? setPythonAuthModules(root.trim(), { modules: modules ?? [], appName }, apply === true) : { success: false, error: 'Proje klasörü gerekli.' }
+  );
 
   ipcMain.handle('project:bootstrapAdmin', async (_, { root, app: appName, stack }: { root?: string; app?: string; stack?: BackendStack }) => {
     const target = root?.trim();

@@ -11,7 +11,13 @@
  *                                                               AUTH_MODULES (comma list, empty = core only)
  *   node scripts/python-host.mjs model <dir> <models.json>     each NormalizedModel (array or one object) → manifest
  *                                                               row + generate (model editor path)
- *   node scripts/python-host.mjs generate <dir>                regenerate every manifest module
+ *   node scripts/python-host.mjs generate <dir>                regenerate every manifest module (+ auth G files)
+ *   node scripts/python-host.mjs auth <dir> [modules] [--app=Name] [--apply]
+ *                                                               auth modules of an existing host (docs/backend/auth.md):
+ *                                                               modules a comma list (`-` = core only, absent = current),
+ *                                                               --app the product name in auth e-mails (stored in
+ *                                                               workspace.auth.appName); without --apply only lists the
+ *                                                               auth files that would change
  *   node scripts/python-host.mjs list <dir>                    generated (manifest) and importable (hand-written) modules
  *   node scripts/python-host.mjs preview <dir> <model.py> [Class] [--report] [--json]
  *                                                               import preview (IPC `python:previewImport`): fields,
@@ -37,6 +43,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const flags = process.argv.slice(2).filter((a) => a.startsWith('--'));
+const flagValue = (name) => flags.find((f) => f.startsWith(`--${name}=`))?.slice(name.length + 3);
 const [command, dirArg, extra, extra2] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 
 function usage(message) {
@@ -44,7 +51,7 @@ function usage(message) {
   console.error(
     'Kullanım: node scripts/python-host.mjs bootstrap <dir> <AppName> | model <dir> <models.json> | generate <dir> | list <dir>' +
       ' | preview <dir> <model.py> [Class] [--report] [--json] | import <dir> <model.py> [Class] | show <dir> <Entity>' +
-      ' | admin-config <dir> <feDir> <Entity[,Entity…]>'
+      ' | admin-config <dir> <feDir> <Entity[,Entity…]> | auth <dir> [modules] [--app=Name] [--apply]'
   );
   process.exit(1);
 }
@@ -116,6 +123,16 @@ if (command === 'bootstrap') {
   const written = result.files.filter((f) => f.action === 'created' || f.action === 'updated');
   console.log(`generate: ${result.modules.length} modül, ${written.length} dosya yazıldı`);
   for (const f of written) console.log(`  ${f.action}  ${f.path.slice(host.root.length + 1)}`);
+} else if (command === 'auth') {
+  const current = gen.readPythonAuthSettings(dir);
+  if (!current.success) usage(`auth: ${current.error}`);
+  const modules = extra === undefined ? current.auth.modules : extra === '-' ? [] : extra.split(',').map((m) => m.trim()).filter(Boolean);
+  const apply = flags.includes('--apply');
+  const res = gen.setPythonAuthModules(dir, { modules, appName: flagValue('app') }, apply);
+  if (!res.success) usage(`auth: ${res.error}`);
+  console.log(`auth: ${modules.join(', ') || '(yalnız çekirdek)'}${apply ? '' : ' (önizleme, --apply ile yazılır)'}`);
+  for (const f of res.files.filter((x) => x.action !== 'unchanged' && x.action !== 'skipped-exists')) console.log(`  ${f.action.padEnd(18)}  ${f.path}`);
+  for (const n of res.notes) console.log(`  not: ${n}`);
 } else if (command === 'list') {
   for (const m of gen.listPythonModels(dir)) console.log(`${m.kind.padEnd(10)}  ${m.fileName}${m.entityName ? `  (${m.entityName})` : ''}`);
 } else if (command === 'preview' || command === 'import') {

@@ -22,7 +22,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const keep = process.argv.includes('--keep');
 const install = process.argv.includes('--install');
 const out = join(root, 'scripts/verify/out/admin-bootstrap');
-const varlik = '/Users/atakanatabey/Projects/VarlikALL/Varlik360';
+const varlik = '/Users/atakanatabey/Projects/AtaAllWorkspace/Varlik360';
 
 let failed = 0;
 function check(name, ok, detail = '') {
@@ -65,8 +65,14 @@ for (const stack of Object.keys(b.ADMIN_BACKEND_DEFAULTS)) {
   check(`${stack}: package name`, r.package === 'orders-api-admin', r.package);
   const leftovers = listFiles(panel).filter((f) => /__App__|__app__|__API_/.test(readFileSync(f, 'utf8')) || /__App__|__app__/.test(f));
   check(`${stack}: no token left`, leftovers.length === 0, leftovers.join(', '));
-  const config = readFileSync(join(panel, 'src/config/app.ts'), 'utf8');
-  check(`${stack}: auth prefix ${apiPrefix}`, config.includes(`'${apiPrefix}/auth/login'`) && config.includes(`'${apiPrefix}/auth/me'`));
+  const authService = readFileSync(join(panel, 'src/services/auth.service.generated.ts'), 'utf8');
+  check(`${stack}: auth prefix ${apiPrefix}`, authService.includes(`${apiPrefix}/auth/login`) && authService.includes(`${apiPrefix}/auth/me`));
+  const oldFiles = ['src/services/api.ts', 'src/services/auth.services.ts', 'src/store/slices/authSlice.ts', 'src/helper/storage.ts'].filter((p) => existsSync(join(panel, p)));
+  check(`${stack}: no old auth / http files`, oldFiles.length === 0, oldFiles.join(', '));
+  const httpFiles = ['api/api.generated.ts', 'api/platform.generated.ts', 'api/auth.generated.ts', 'api/common.generated.ts', 'api/hooks.ts', 'auth.service.ts'].map((f) => `src/services/${f}`)
+    .concat(['src/types/API/response.generated.ts', 'src/store/thunks/auth.thunk.ts', 'src/store/slices/auth.slice.ts']).filter((p) => !existsSync(join(panel, p)));
+  check(`${stack}: http + auth files`, httpFiles.length === 0, httpFiles.join(', '));
+  check(`${stack}: admin canSignIn`, readFileSync(join(panel, 'src/store/thunks/auth.thunk.ts'), 'utf8').includes("user.role === 'admin'"));
   check(`${stack}: dev proxy ${devUrl}`, readFileSync(join(panel, '.env.development'), 'utf8').includes(`VITE_API_PROXY=${devUrl}`));
   const missing = b.stackTreePaths(b.ADMIN_PANEL_INFO, { app: 'OrdersApi', pkg: 'orders-api-admin' }).filter((p) => !existsSync(join(panel, p)));
   check(`${stack}: info tree entries exist`, missing.length === 0, missing.join(', '));
@@ -106,7 +112,8 @@ if (install) {
       auth: { modules: ['register', 'password-reset', 'google', 'apple', 'account-delete'], prefix: '/api', storagePrefix: 'admin' }
     });
     const authFiles = clientAuth.files.filter(f => /\/auth[^/]*\.generated\.ts$/.test(f.path)).length;
-    check('client auth files (redux-web)', authFiles === 5, clientAuth.files.map(f => f.path));
+    // G: service, thunk factory, slice parts (docs/backend/auth.md); refresh / storage are client-http `services/api/auth.ts`.
+    check('client auth files (redux-web)', authFiles === 3, clientAuth.files.map(f => f.path));
     const typecheck = run('npm', ['run', 'typecheck']);
     check('npm run typecheck', typecheck.status === 0, typecheck.status === 0 ? '' : typecheck.stdout.slice(-1500));
     // Hosts with `verbatimModuleSyntax` (StockExchange web): generated files import types with `import type` / `type X`.

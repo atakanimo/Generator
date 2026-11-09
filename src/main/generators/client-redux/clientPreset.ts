@@ -24,7 +24,7 @@ export interface ClientPreset {
 }
 
 // Request flags (`skipLoading`, `skipSuccessToast`) always ride on the axios config: every client shares one
-// interceptor (`services/api`, docs/frontend/http-layer.md), so presets no longer differ here.
+// interceptor (`services/api`, docs/frontend/client-data-layer.md), so presets no longer differ here.
 
 /** Varlik360 `apps/mobile`: React Native, RTK, axios `API` in `@/services/api`. */
 export const REDUX_RN_PRESET: ClientPreset = {

@@ -55,7 +55,7 @@ function ensureEntityIdRouteConstraint(apiDir: string): WrittenFile[] {
   if (!existsSync(path)) return [];
   const cs = readFileSync(path, 'utf8');
   if (cs.includes('EntityIdRouteConstraint')) return [];
-  const anchor = /^([ \t]*)services\.AddExceptionHandler<EnvelopeExceptionHandler>\(\);\r?\n/m.exec(cs);
+  const anchor = /^([ \t]*)services\.AddExceptionHandler<ContractExceptionHandler>\(\);\r?\n/m.exec(cs);
   if (!anchor) throw new Error(`${path}: {id:entityid} kısıtı kaydedilemedi (AddExceptionHandler satırı yok); satırı elle ekleyin.`);
   const line = `${anchor[1]}services.Configure<RouteOptions>(options => options.SetParameterPolicy<EntityIdRouteConstraint>(EntityIdRouteConstraint.Name));\n`;
   const at = anchor.index + anchor[0].length;

@@ -5,8 +5,8 @@ using __App__.Application.Common.Abstractions;
 
 namespace __App__.Api.Endpoints.Auth;
 
-/// <summary>Auth uçları (docs/backend/auth.md "Sözleşme"): <c>/api/auth</c>. Generator bu dosyayı bir kez yazar.</summary>
-public static class AuthEndpoints
+/// <summary>Ortak auth uçları (<c>/api/auth</c>, docs/backend/auth.md). Projeye özel uçlar: AuthEndpoints.Custom.cs.</summary>
+public static partial class AuthEndpoints
 {
     public static RouteGroupBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
@@ -56,9 +56,12 @@ public static class AuthEndpoints
         group.MapDelete("/account", async (ICurrentUser user, AuthService service, CancellationToken ct) =>
             (await service.DeleteAccountAsync(user.Id, ct)).ToHttp()).RequireAuthorization();
         // @endif
+        MapCustom(group);
         return group;
     }
 
     private static ClientInfo Client(HttpContext http) =>
         new(http.Request.Headers.UserAgent.ToString(), http.Connection.RemoteIpAddress?.ToString());
+
+    static partial void MapCustom(RouteGroupBuilder group);
 }

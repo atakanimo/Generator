@@ -83,3 +83,9 @@ npm'de herkese açık: `@atakanimo/ata-admin-base` (`publishConfig.access: publi
 Host'lar paketi npm sürümüyle kullanır; yeni sürümden sonra host'ta sürüm güncellenip lock dosyası yeniden üretilir.
 
 Henüz yok: sayfalar arası "tümünü seç", kaydedilmemiş değişiklik uyarısı, iç içe (iki seviye) populate.
+
+## Açık konular
+
+- `file:` bağımlılığı: paket yayınlanmadan ya da vendorlanmadan host CI build'i çalışmaz; yayından sonra host lockfile'ları yeniden üretilir.
+- İç içe (iki seviye) populate (şema + şablon + config).
+- Tarih seçicileri `MM/DD/YYYY` / İngilizce (`adapterLocale='tr'`); DataGrid kolon menüsü aria metni İngilizce.

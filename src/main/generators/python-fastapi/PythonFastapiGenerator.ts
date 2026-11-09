@@ -2,17 +2,19 @@
  * Python + FastAPI module generator (plan backend-python-fastapi §2, §5 PY5): one NormalizedModel → `modules/<folder>/`
  * files, then the registry G file (`api/routers_generated.py`) from the whole module list.
  *
- * G files (`*_generated.py`) carry the Generator header and are rewritten; K files (`model.py`, `repository.py`,
+ * G files (`*_generated.py`, the auth layer's shared files) carry the Generator header and are rewritten; K files (`model.py`, `repository.py`,
  * `hooks.py`, `service.py`, `__init__.py`, the module test `tests/modules/<folder>/test_admin_crud.py`) are created once. A generate only ensures the core assets (create-only);
  * the skeleton belongs to the bootstrap, so an existing host (StockExchange) gets no new skeleton files.
  */
-import { AUTH_USERS_ENTITY } from '../../../shared/authModules.js';
+import { AUTH_USERS_ENTITY, normalizeAuthModules } from '../../../shared/authModules.js';
 import Handlebars from 'handlebars';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import type { NormalizedModel } from '../../../shared/normalizedModel.js';
 import { getTemplatesDir } from '../../utils/templateHelpers.js';
 import { writeOnce } from '../dotnet-efcore/dotnetFiles.js';
+import { readWorkspaceManifest } from '../../utils/manifestSnapshot.js';
+import { syncPythonAuth } from './PythonAuthFiles.js';
 import { ensurePythonAssets, writePythonRegistries } from './PythonHostBootstrap.js';
 import { PythonModuleContext, buildPythonModuleContexts } from './pythonContext.js';
 import { WrittenFile, writePythonGenerated } from './pythonFiles.js';
@@ -82,6 +84,11 @@ export function generatePythonModules(root: string, pkg: string, models: Normali
   const modules = buildPythonModuleContexts(pkg, models);
   const files: WrittenFile[] = ensurePythonAssets(root, pkg);
   for (const ctx of modules) files.push(...moduleFiles(root, ctx));
+  // Auth G files follow `workspace.auth` (hosts without `appName` get it from `python-host.mjs auth`).
+  const auth = readWorkspaceManifest(root)?.workspace?.auth;
+  if (auth?.appName && existsSync(join(pythonLayout(root, pkg).packageDir, 'modules', 'auth'))) {
+    files.push(...syncPythonAuth(root, pkg, auth.appName, normalizeAuthModules(auth.modules), true));
+  }
   files.push(...writePythonRegistries(root, pkg, modules.map((m) => ({ folder: m.folder, entity: m.entity, hasAdmin: m.hasAdmin }))));
   return { files, modules };
 }

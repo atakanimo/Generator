@@ -1,5 +1,5 @@
 /**
- * İstemci uygulamasının platformunu çözer (docs/frontend/http-layer.md "Platform tespiti"): önce manifest'teki seçim
+ * İstemci uygulamasının platformunu çözer (docs/frontend/client-data-layer.md "HTTP katmanı"): önce manifest'teki seçim
  * (`workspace.clientPlatforms`), yoksa `package.json` tespiti. Tespit edilen değer manifest'e yazılır; elle değiştirmek
  * için `setClientPlatform`.
  */

@@ -4,8 +4,8 @@ using __App__.Application.Common.Errors;
 
 namespace __App__.Api.Common;
 
-/// <summary>Yakalanmamış hata → zarf. Okunamayan / strict olmayan gövde 400, kısıt ihlali 409, gerisi 500. ProblemDetails yok.</summary>
-public sealed class EnvelopeExceptionHandler(ILogger<EnvelopeExceptionHandler> logger, IDbErrorClassifier dbErrors) : IExceptionHandler
+/// <summary>Yakalanmamış hata → sözleşme cevabı. Okunamayan / strict olmayan gövde 400, kısıt ihlali 409, gerisi 500. ProblemDetails yok.</summary>
+public sealed class ContractExceptionHandler(ILogger<ContractExceptionHandler> logger, IDbErrorClassifier dbErrors) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
@@ -16,7 +16,7 @@ public sealed class EnvelopeExceptionHandler(ILogger<EnvelopeExceptionHandler> l
             var message = (exception.InnerException ?? exception) is JsonException { Path: { Length: > 2 } path }
                 ? string.Format(Messages.InvalidValue, path.TrimStart('$', '.'))
                 : Messages.InvalidBody;
-            await httpContext.WriteEnvelopeAsync(Error.BadRequest(message));
+            await httpContext.WriteContractAsync(Error.BadRequest(message));
             return true;
         }
 
@@ -25,12 +25,12 @@ public sealed class EnvelopeExceptionHandler(ILogger<EnvelopeExceptionHandler> l
         {
             logger.LogInformation(exception, "Constraint violation");
             var message = conflict.Kind == DbConflictKind.Duplicate ? string.Format(Messages.Duplicate, conflict.Field) : Messages.InUse;
-            await httpContext.WriteEnvelopeAsync(Error.Conflict(message));
+            await httpContext.WriteContractAsync(Error.Conflict(message));
             return true;
         }
 
         logger.LogError(exception, "Unhandled exception");
-        await httpContext.WriteEnvelopeAsync(Error.Internal());
+        await httpContext.WriteContractAsync(Error.Internal());
         return true;
     }
 }

@@ -4,7 +4,7 @@ import { t } from '@helpers';
 
 /**
  * In-memory fixed window per IP and route (one process). Behind several instances put a shared limiter (Redis,
- * proxy) in front; the contract stays the same: 429 + envelope.
+ * proxy) in front; the contract stays the same: 429 + contract body.
  */
 export function rateLimit(options: { windowMs: number; max: number; key?: string }): RequestHandler {
   const hits = new Map<string, { count: number; resetAt: number }>();

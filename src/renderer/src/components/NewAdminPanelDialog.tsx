@@ -79,7 +79,7 @@ const NewAdminPanelDialog = ({ open, defaultStack, onClose, onCreated }: NewAdmi
           sx={{ mt: 2 }}
           value={selected}
           onChange={(e) => setStack(e.target.value as BackendStack)}
-          helperText={`Auth: ${apiPrefix}/auth/login · me; geliştirmede /api → ${devUrl} (src/config/app.ts, .env.development)`}
+          helperText={`Auth: ${apiPrefix}/auth/login · me; geliştirmede /api → ${devUrl} (src/services/auth.service.generated.ts, .env.development)`}
         >
           {STACKS.map((s) => (
             <MenuItem key={s} value={s}>

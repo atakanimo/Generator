@@ -8,3 +8,8 @@ export { generateDotnetBackend } from '../src/main/ipc/dotnetBackend.ts';
 export { parseBaseUrlFromBackend } from '../src/main/utils/backendAppFile.ts';
 export { moduleNameFromEntity } from '../src/main/utils/namingUtils.ts';
 export { adminDir } from '../src/shared/adminDir.ts';
+export { generateClientAuthFiles, generateClientModules, clientAuthFromManifest } from '../src/main/generators/client-redux/ClientGenerator.ts';
+export { CLIENT_PRESETS } from '../src/main/generators/client-redux/clientPreset.ts';
+export { resolveClientPlatformAt } from '../src/main/utils/clientPlatform.ts';
+export { loadDotnetModels } from '../src/main/ipc/dotnetBackend.ts';
+export { findDotnetHost } from '../src/main/parsers/dotnet/dotnetHost.ts';

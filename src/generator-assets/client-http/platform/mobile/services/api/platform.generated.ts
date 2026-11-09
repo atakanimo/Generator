@@ -1,5 +1,5 @@
-// Mobil platform adaptörü (docs/frontend/http-layer.md). Bütün mobillerde birebir aynıdır; projede değiştirilmez.
-// Ortak `api.ts` yalnız bunları platformdan alır.
+// Mobil platform adaptörü: API adresi, mesajlar ve token saklama.
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { InfoAlert } from '@/components/Core/Alert';
 import type { ErrorData } from '@/types';
 import { API_URL } from '@env';
@@ -17,7 +17,7 @@ const isReloginRequiredText = (value: string) => /reloginrequired/i.test(value);
 let lastAlertKey = '';
 let lastAlertAt = 0;
 
-/** Hata uyarısı; aynısı 4 sn içinde bir kez. */
+/** Aynı uyarı 4 sn içinde bir kez. */
 export const showErrorMessage = ({ header, message }: ErrorData) => {
   const isReloginRequired = isReloginRequiredText(header) || isReloginRequiredText(message);
   const title = isReloginRequired ? i18next.t('auth.reloginRequiredTitle') : header;
@@ -28,4 +28,12 @@ export const showErrorMessage = ({ header, message }: ErrorData) => {
   lastAlertKey = key;
   lastAlertAt = now;
   InfoAlert({ title, message: body });
+};
+
+/** Telefon oturumu hep saklar: `persistent` yok sayılır. */
+export const tokenStore = {
+  get: (key: string): Promise<string | null> => AsyncStorage.getItem(key),
+  set: (key: string, value: string, _persistent: boolean): Promise<void> => AsyncStorage.setItem(key, value),
+  remove: (key: string): Promise<void> => AsyncStorage.removeItem(key),
+  isPersistent: async (_key: string): Promise<boolean> => true
 };

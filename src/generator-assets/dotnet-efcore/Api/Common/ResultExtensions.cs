@@ -5,21 +5,21 @@ namespace __App__.Api.Common;
 
 public static class ResultExtensions
 {
-    public static IResult ToHttp<T>(this Result<T> result) => new EnvelopeHttpResult<T>(result);
+    public static IResult ToHttp<T>(this Result<T> result) => new ContractHttpResult<T>(result);
 
-    public static IResult ToHttp(this Result result) => new PlainEnvelopeResult(result);
+    public static IResult ToHttp(this Result result) => new PlainContractResult(result);
 
-    public static IResult Fail<T>(Error error) => new EnvelopeHttpResult<T>(Result.Fail<T>(error));
+    public static IResult Fail<T>(Error error) => new ContractHttpResult<T>(Result.Fail<T>(error));
 
-    /// <summary>Pipeline'ın kendi ürettiği hatalar (401, 404 rota, 400 gövde) için zarf yazar.</summary>
-    public static Task WriteEnvelopeAsync(this HttpContext context, Error error)
+    /// <summary>Pipeline'ın kendi ürettiği hatalar (401, 404 rota, 400 gövde) için sözleşme cevabı yazar.</summary>
+    public static Task WriteContractAsync(this HttpContext context, Error error)
     {
         context.Response.StatusCode = error.Code;
         return context.Response.WriteAsJsonAsync(
             new ApiResponse<object>(false, null, null, new ErrorData(error.Header, error.Message, error.Code), TraceId.Current(context)));
     }
 
-    private sealed class PlainEnvelopeResult(Result result) : IResult
+    private sealed class PlainContractResult(Result result) : IResult
     {
         public Task ExecuteAsync(HttpContext httpContext)
         {
@@ -38,7 +38,7 @@ public static class ResultExtensions
         }
     }
 
-    private sealed class EnvelopeHttpResult<T>(Result<T> result) : IResult
+    private sealed class ContractHttpResult<T>(Result<T> result) : IResult
     {
         public Task ExecuteAsync(HttpContext httpContext)
         {

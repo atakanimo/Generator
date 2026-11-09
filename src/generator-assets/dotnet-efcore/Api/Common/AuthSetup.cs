@@ -33,9 +33,9 @@ public static class AuthSetup
                 OnChallenge = context =>
                 {
                     context.HandleResponse();
-                    return context.HttpContext.WriteEnvelopeAsync(Error.Unauthorized());
+                    return context.HttpContext.WriteContractAsync(Error.Unauthorized());
                 },
-                OnForbidden = context => context.HttpContext.WriteEnvelopeAsync(Error.Forbidden()),
+                OnForbidden = context => context.HttpContext.WriteContractAsync(Error.Forbidden()),
             };
         });
         services.AddAuthorizationBuilder()

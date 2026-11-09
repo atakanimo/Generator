@@ -60,7 +60,7 @@ public static class AuthApiSetup
                 }
 
                 context.HandleResponse();
-                return context.HttpContext.WriteEnvelopeAsync(AuthErrors.Suspended());
+                return context.HttpContext.WriteContractAsync(AuthErrors.Suspended());
             };
             options.Events = events;
         });
@@ -68,7 +68,7 @@ public static class AuthApiSetup
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            options.OnRejected = (context, _) => new ValueTask(context.HttpContext.WriteEnvelopeAsync(AuthErrors.TooManyRequests()));
+            options.OnRejected = (context, _) => new ValueTask(context.HttpContext.WriteContractAsync(AuthErrors.TooManyRequests()));
             options.AddPolicy(RateLimitPolicy, http => RateLimitPartition.GetFixedWindowLimiter(
                 $"{http.Connection.RemoteIpAddress}|{http.Request.Path}",
                 _ => new FixedWindowRateLimiterOptions

@@ -52,7 +52,6 @@ public sealed record AppleBody(string? IdentityToken, string? AuthorizationCode,
 public sealed record SetPasswordBody(string? NewPassword);
 // @endif
 
-/// <summary>İsteği yapan istemci (refresh token kaydına yazılır).</summary>
 public sealed record ClientInfo(string? UserAgent, string? Ip);
 
 /// <summary>Ortamdan okunan süreler ve sınırlar (<c>Jwt__AccessTtlMinutes</c>, <c>Jwt__RefreshTtlDays</c>, <c>Auth__RateLimitPerMinute</c>).</summary>

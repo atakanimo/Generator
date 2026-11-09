@@ -1,24 +1,18 @@
-// Oturum köprüsü: elle yazılmış refresh'i olan admin (docs/frontend/http-layer.md "apiAuth"). Token'lar storage helper'ında
-// (`APP_CONFIG.storage.token` / `.refreshToken`), oturum `auth.slice`ta (`sessionRefreshed`, `tokenAdopted`, `clearSession`).
-// Auth ortaklaşınca `auth-bridge/generated` ile değiştirilir.
+// Oturum köprüsü: access token'ı ve 401'deki refresh'i api.ts'e verir.
 import axios from 'axios';
 import type { ApiAuth } from '@/types';
 import { getTokenFromStorage } from '@/helper';
 import { APP_CONFIG } from '@/config/app';
-import { BASE_URL } from './platform';
+import { BASE_URL } from './platform.generated';
 
 type AuthState = { auth?: { token?: string | null } };
 
 const tokenOf = (state: unknown) => (state as AuthState | undefined)?.auth?.token ?? null;
 
 const apiAuth: ApiAuth = {
-  // Store'daki; yoksa storage helper'ı.
   getAccessToken: state => tokenOf(state) || getTokenFromStorage(APP_CONFIG.storage.token),
   hasSession: state => Boolean(tokenOf(state)),
-  /**
-   * Refresh token ile yeni oturum (docs/backend/auth.md). Token storage'dan okunur: başka sekme yenilediyse güncel olan
-   * oradadır. Interceptor'sız axios (döngü olmasın). Ağ hatasında oturum kalır.
-   */
+  // Token storage'dan okunur (başka sekme yenilemiş olabilir); interceptor'sız axios, ağ hatasında oturum kalır.
   refreshSessionOnce: async dispatch => {
     const { sessionRefreshed, tokenAdopted, clearSession } = await import('@/store/slices/auth.slice');
     const sent = getTokenFromStorage(APP_CONFIG.storage.refreshToken);

@@ -179,10 +179,9 @@ def _request_context(request: Request) -> Iterator[None]:
 
 
 def install_contract_handlers(app: FastAPI) -> None:
-    """Router dışında kalan hataları da sözleşme zarfıyla döndürür: tanımsız yol (404), desteklenmeyen method (405),
+    """Router dışında kalan hataları da sözleşme cevabıyla döndürür: tanımsız yol (404), desteklenmeyen method (405),
     `ContractRoute` kullanmayan uçlardaki doğrulama (400) ve beklenmeyen hata (500). `ContractRoute` uçları kendi
-    hatalarını zaten çevirir. Projenin eski uçları başka bir zarf kullanıyorsa (StockExchange `LocalResponse`, K6)
-    çağrılmaz; yeni host'larda `create_app()` çağırır.
+    hatalarını zaten çevirir. `create_app()` çağırır.
     """
 
     async def http_error(request: Request, exc: StarletteHTTPException) -> Response:

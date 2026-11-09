@@ -231,7 +231,7 @@ buildAndTest('flow');
 // 5. Admin FE config from the .NET host (what `project:generateFrontend` does): endpoint from *AdminEndpoints.cs,
 // relations, then tsc against @atakanimo/ata-admin-base types (inside Varlik360 apps/admin so imports resolve).
 {
-  const varlikAdmin = '/Users/atakanatabey/Projects/VarlikALL/Varlik360/apps/admin';
+  const varlikAdmin = '/Users/atakanatabey/Projects/AtaAllWorkspace/Varlik360/apps/admin';
   const fe = join(varlikAdmin, '.gen-dotnet-admin-check');
   rmSync(fe, { recursive: true, force: true });
   const flowModels = gen.loadDotnetModels(gen.findDotnetHost(out)).map(m => m.model);

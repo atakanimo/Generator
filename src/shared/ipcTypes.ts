@@ -5,7 +5,7 @@
 import type { NormalizedApi, NormalizedModel } from './normalizedModel.js';
 import type { ModelDraft } from './modelDraft.js';
 import type { BackendDatabase, BackendIdType, BackendStack, HostDatabase } from './backendDatabase.js';
-import type { AuthBootstrapOptions, WorkspaceAuth } from './authModules.js';
+import type { AuthBootstrapOptions, AuthModule, WorkspaceAuth } from './authModules.js';
 import type { ClientPlatform } from './clientPlatform.js';
 
 export type SourceType = 'nodejs-mongoose' | 'dotnet-ef' | 'nodejs-typeorm' | 'python-fastapi' | null;
@@ -245,6 +245,14 @@ export interface PythonImportResult {
   error?: string;
 }
 
+/** Auth modules of an existing host (`project:setPythonAuthModules`): auth files (host-relative) and their action. */
+export interface AuthModulesResult {
+  success: boolean;
+  files?: Array<{ path: string; action: string }>;
+  notes?: string[];
+  error?: string;
+}
+
 /** New-host bootstrap (`project:bootstrapDotnet` / `bootstrapExpress` / `bootstrapPython` / `bootstrapAdmin`): created files, project-relative. */
 export interface BootstrapProjectResult {
   success: boolean;
@@ -313,6 +321,10 @@ export interface ElectronAPI {
     bootstrapExpress: (root: string, app: string, auth: AuthBootstrapOptions) => Promise<BootstrapProjectResult>;
     /** Auth modules + first admin last used on this machine (docs/backend/auth.md "İlk admin"). */
     getAuthDefaults: () => Promise<AuthBootstrapOptions>;
+    /** Python host's `workspace.auth` (modules + app name in auth e-mails). */
+    getPythonAuthSettings: (root: string) => Promise<{ success: boolean; auth?: WorkspaceAuth; error?: string }>;
+    /** Python host: change the auth modules; without `apply` only the files that would change. */
+    setPythonAuthModules: (root: string, modules: AuthModule[], appName: string, apply: boolean) => Promise<AuthModulesResult>;
     /** New `@atakanimo/ata-admin-base` admin panel in `root`, wired to `stack`'s API prefix / dev port (`shared/adminPanel.ts`). */
     bootstrapAdmin: (root: string, app: string, stack: BackendStack) => Promise<BootstrapProjectResult>;
     /** PY7: parse a hand-written Pydantic module (`modules/<m>/model.py`) + extra-field report of its collection. */

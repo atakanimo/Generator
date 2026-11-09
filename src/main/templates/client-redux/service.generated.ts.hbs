@@ -2,9 +2,9 @@
 // `{{entity}}` normal API ({{endpoint}}). Do not edit: change the model in the Generator and regenerate;
 // custom endpoints go in `{{camel}}.service.ts`.
 {{#if hasOps}}
-import { API } from '{{imports.api}}';
+import { API } from '{{imports.api}}/api.generated';
 import type { LocalResponse } from '{{imports.localResponse}}';
-import { {{commonImports}} } from './common.generated';
+import { {{commonImports}} } from './api/common.generated';
 {{/if}}
 
 export interface {{names.row}} {

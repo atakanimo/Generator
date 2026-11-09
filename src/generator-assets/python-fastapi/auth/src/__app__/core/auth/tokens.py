@@ -20,7 +20,7 @@ def refresh_token_ttl() -> timedelta:
     return timedelta(days=max(1, settings.JWT_REFRESH_TTL_DAYS))
 
 
-def sign_access_token(user_id: str, role: str) -> str:
+def sign_access_token(user_id: str, role: str, ttl: timedelta | None = None) -> str:
     """`sub`, `role`, `jti`, `iat`, `exp` (+ ayarlıysa `iss` / `aud`)."""
     now = datetime.now(UTC)
     claims: dict[str, object] = {
@@ -28,7 +28,7 @@ def sign_access_token(user_id: str, role: str) -> str:
         "role": role,
         "jti": str(uuid.uuid4()),
         "iat": now,
-        "exp": now + timedelta(seconds=access_token_ttl_seconds()),
+        "exp": now + (ttl if ttl is not None else timedelta(seconds=access_token_ttl_seconds())),
     }
     if settings.JWT_ISSUER:
         claims["iss"] = settings.JWT_ISSUER

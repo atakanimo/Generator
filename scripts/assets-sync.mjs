@@ -3,7 +3,7 @@
  * Var olan host'un core asset'lerini Generator'daki güncel hâliyle karşılaştırır. Asset'ler
  * create-only yazıldığı için Generator düzeltmeleri eski host'lara kendiliğinden gitmez; bu komut farkı gösterir ve
  * yalnız onaylanan dosyaları yazar. Stack host'tan bulunur (.NET, Python, Express; istemci uygulaması: ortak HTTP katmanı,
- * docs/frontend/http-layer.md). Skeleton dosyaları kapsam dışı. Projeye ait dosyalar (istemcide `api/auth.ts`,
+ * docs/frontend/client-data-layer.md). Skeleton dosyaları kapsam dışı. Projeye ait dosyalar (istemcide `api/auth.ts`,
  * `api/hooks.ts`) yalnız yoksa yazılır; varsa `proje` olarak listelenir, dokunulmaz.
  *
  *   node scripts/assets-sync.mjs <dir>                       özet: eksik / farklı / aynı (yazmaz)

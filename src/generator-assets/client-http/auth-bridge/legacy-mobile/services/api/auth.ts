@@ -1,5 +1,4 @@
-// Oturum köprüsü: üretilen auth'a geçmemiş mobil (docs/frontend/http-layer.md "apiAuth"). Geçiş dönemi örneği; proje
-// kendi auth'una göre uyarlar. Auth ortaklaşınca `auth-bridge/generated` ile değiştirilir.
+// Oturum köprüsü: access token'ı ve 401 davranışını api.ts'e verir.
 import type { ApiAuth } from '@/types';
 import { resetAuthState } from '@/store/slices/auth.slice';
 

@@ -9,6 +9,8 @@ export { readWorkspaceManifest } from '../../src/main/utils/manifestSnapshot.ts'
 export { generatePythonModules, renderPythonGeneratedFiles, renderPythonOwnedFiles } from '../../src/main/generators/python-fastapi/PythonFastapiGenerator.ts';
 export { buildPythonModuleContexts, pythonModuleNames } from '../../src/main/generators/python-fastapi/pythonContext.ts';
 export { findPythonHost, generatePythonBackend, loadPythonModelDraft, loadPythonModels, writePythonModel } from '../../src/main/ipc/pythonBackend.ts';
+// Auth modules of an existing host (`scripts/python-host.mjs auth`), what IPC `project:setPythonAuthModules` calls.
+export { readPythonAuthSettings, setPythonAuthModules } from '../../src/main/ipc/pythonBackend.ts';
 // PY7 (`python-import.mjs`): Pydantic import + extra-field report + what the app calls (scan, preview, import).
 export { listPydanticClasses, parsePydanticModel } from '../../src/main/parsers/python/pydanticModel.ts';
 export { collectionReport, reportShape, resolveMongoConfig, summarizeReport } from '../../src/main/parsers/python/mongoReport.ts';

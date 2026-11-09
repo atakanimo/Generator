@@ -315,4 +315,6 @@ export function lockAuthUsersModel(model: NormalizedModel, modules: readonly Aut
 /** Manifest `workspace.auth` (absent on hosts made before the shared auth layer). */
 export interface WorkspaceAuth {
   modules: AuthModule[];
+  /** Product name in auth e-mails (Python `core/auth/messages.py`); the bootstrap's app name. */
+  appName?: string;
 }

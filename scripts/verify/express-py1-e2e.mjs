@@ -24,7 +24,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
-const varlik = process.env.VARLIK360 ?? '/Users/atakanatabey/Projects/VarlikALL/Varlik360';
+const varlik = process.env.VARLIK360 ?? '/Users/atakanatabey/Projects/AtaAllWorkspace/Varlik360';
 const out = join(root, 'scripts/verify/out/express-py1');
 const assets = join(root, 'src/generator-assets/express-mongoose');
 const keep = process.argv.includes('--keep');

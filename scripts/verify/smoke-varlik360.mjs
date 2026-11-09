@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '../..');
-const varlikModules = '/Users/atakanatabey/Projects/VarlikALL/Varlik360/src/modules';
+const varlikModules = '/Users/atakanatabey/Projects/AtaAllWorkspace/Varlik360/src/modules';
 
 const GOLDEN = [
   'app-version-configs',

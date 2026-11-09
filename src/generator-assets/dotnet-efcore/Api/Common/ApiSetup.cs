@@ -12,7 +12,7 @@ public static class ApiSetup
     {
         services.AddContractJson();
         services.AddContractAuth(configuration);
-        services.AddExceptionHandler<EnvelopeExceptionHandler>();
+        services.AddExceptionHandler<ContractExceptionHandler>();
         services.Configure<RouteOptions>(options => options.SetParameterPolicy<EntityIdRouteConstraint>(EntityIdRouteConstraint.Name));
         services.AddOpenApi();
 
@@ -35,8 +35,8 @@ public static class ApiSetup
         app.UseExceptionHandler(_ => { });
         app.UseStatusCodePages(context => context.HttpContext.Response.StatusCode switch
         {
-            StatusCodes.Status404NotFound => context.HttpContext.WriteEnvelopeAsync(Error.NotFound()),
-            var code => context.HttpContext.WriteEnvelopeAsync(new Error(code, Messages.BadRequestHeader, Messages.InvalidBody)),
+            StatusCodes.Status404NotFound => context.HttpContext.WriteContractAsync(Error.NotFound()),
+            var code => context.HttpContext.WriteContractAsync(new Error(code, Messages.BadRequestHeader, Messages.InvalidBody)),
         });
         app.UseCors();
         app.UseAuthentication();

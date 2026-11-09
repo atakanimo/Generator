@@ -23,7 +23,7 @@
  *     (ISO string date) rows; unreachable server, missing configuration and a remote server are reported, not thrown.
  *
  * Run:  node scripts/verify/python-import.mjs [--no-docker] [--no-stockexchange]
- *       STOCKEXCHANGE_ROOT overrides ~/Projects/VarlikALL/StockExchange.
+ *       STOCKEXCHANGE_ROOT overrides ~/Projects/AtaAllWorkspace/AlphaTerminal.
  */
 import { build } from 'esbuild';
 import { spawnSync } from 'child_process';
@@ -37,7 +37,7 @@ import { AUTH_TEST_ADMIN } from './auth-scenarios.mjs';
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const withDocker = !process.argv.includes('--no-docker');
 const withStockExchange = !process.argv.includes('--no-stockexchange');
-const stockExchange = process.env.STOCKEXCHANGE_ROOT ?? join(homedir(), 'Projects/VarlikALL/StockExchange');
+const stockExchange = process.env.STOCKEXCHANGE_ROOT ?? join(homedir(), 'Projects/AtaAllWorkspace/AlphaTerminal');
 const outDir = join(root, 'scripts/verify/out/python-import');
 const fixtures = join(root, 'scripts/verify/fixtures/python');
 const mongoContainer = 'gen-python-import-mongo';

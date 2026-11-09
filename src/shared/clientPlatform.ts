@@ -1,5 +1,5 @@
 /**
- * Bir istemci uygulamasının platformu (docs/frontend/http-layer.md "Platform tespiti"): admin, web ya da mobil.
+ * Bir istemci uygulamasının platformu (docs/frontend/client-data-layer.md "HTTP katmanı"): admin, web ya da mobil.
  * `package.json` bağımlılıklarından anlaşılır; manifest'e yazılan seçim (`workspace.clientPlatforms`) her zaman önce gelir.
  */
 export type ClientPlatform = 'admin' | 'web' | 'mobile';

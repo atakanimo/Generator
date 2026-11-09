@@ -1,7 +1,8 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
-import type { AuthBootstrapOptions } from '@shared/authModules';
+import type { AuthBootstrapOptions, AuthModule, WorkspaceAuth } from '@shared/authModules';
 import type { NormalizedModel } from '@shared/normalizedModel';
 import type {
+  AuthModulesResult,
   BackendSelectedFiles,
   BootstrapProjectResult,
   GenerateBackendResult,
@@ -490,6 +491,26 @@ export const loadAuthDefaults = createAsyncThunk('project/loadAuthDefaults', asy
   const call = window.electronAPI?.project?.getAuthDefaults;
   return call ? call() : null;
 });
+
+/** Python host's `workspace.auth` (`project:getPythonAuthSettings`). */
+export const loadPythonAuthSettings = createAsyncThunk(
+  'project/loadPythonAuthSettings',
+  async (root: string): Promise<{ success: boolean; auth?: WorkspaceAuth; error?: string }> => {
+    const call = window.electronAPI?.project?.getPythonAuthSettings;
+    if (!call) return { success: false, error: 'Auth ayarları API yok' };
+    return call(root);
+  }
+);
+
+/** Python host: preview (`apply: false`) or change the auth modules (`project:setPythonAuthModules`). */
+export const savePythonAuthModules = createAsyncThunk(
+  'project/savePythonAuthModules',
+  async ({ root, modules, appName, apply }: { root: string; modules: AuthModule[]; appName: string; apply: boolean }): Promise<AuthModulesResult> => {
+    const call = window.electronAPI?.project?.setPythonAuthModules;
+    if (!call) return { success: false, error: 'Auth modülleri API yok' };
+    return call(root, modules, appName, apply);
+  }
+);
 
 /** New admin panel (`project:bootstrapAdmin`); same contract as `bootstrapBackendProject`. */
 export const bootstrapAdminPanel = createAsyncThunk(

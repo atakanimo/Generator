@@ -3,7 +3,9 @@
  * SharedFrame admins share: theme, left menu (`createAdminRoutes(resources)`), login, Redux store (theme, auth,
  * loading), axios interceptor, i18n (tr / en), hooks. Modules come later from `AdminConfigGenerator`.
  *
- * Skeleton (`_skeleton/`, K: created once, never overwritten), tokens:
+ * Skeleton (`_skeleton/`, K: created once, never overwritten), then the shared auth layer (`generateClientAuthFiles`,
+ * admin: core flows + `canSignIn`) and the shared HTTP layer (client-http asset sync, `services/api/*.generated.ts`).
+ * Tokens:
  * `__App__` = panel name as given, `__app__` = npm package name, `__API_PREFIX__` / `__API_DEV_URL__` = backend defaults
  * of the chosen stack (`ADMIN_BACKEND_DEFAULTS`).
  */
@@ -13,6 +15,9 @@ import { getGeneratorAssetsDir } from '../../utils/templateHelpers.js';
 import { WrittenFile, listFiles, writeOnce } from '../dotnet-efcore/dotnetFiles.js';
 import { toExpressPackageName } from '../express-mongoose/ExpressHostBootstrap.js';
 import type { AdminBackendDefaults } from '../../../shared/adminPanel.js';
+import { generateClientAuthFiles } from '../client-redux/ClientGenerator.js';
+import { REDUX_WEB_PRESET } from '../client-redux/clientPreset.js';
+import { applyAssets, diffAssets, planHostAssets } from '../assetSync.js';
 
 /** `OrdersAdmin` → `orders-admin`, `OrdersApi` → `orders-api-admin`; `null` when the name cannot be an npm name. */
 export function toAdminPackageName(app: string): string | null {
@@ -25,7 +30,7 @@ export function adminSkeletonDir(): string {
   return join(getGeneratorAssetsDir('admin-base'), '_skeleton');
 }
 
-/** Skeleton files (create-only), tokens replaced in paths and contents. */
+/** Skeleton files (create-only, tokens replaced in paths and contents), auth G/K files and HTTP layer assets. */
 export function bootstrapAdminHost(root: string, app: string, pkg: string, backend: AdminBackendDefaults): { files: WrittenFile[] } {
   const tokens: Array<[string, string]> = [
     ['__App__', app],
@@ -36,5 +41,13 @@ export function bootstrapAdminHost(root: string, app: string, pkg: string, backe
   const apply = (text: string) => tokens.reduce((out, [token, value]) => out.split(token).join(value), text);
   const skeleton = adminSkeletonDir();
   const files = listFiles(skeleton).map((file) => writeOnce(join(root, apply(relative(skeleton, file))), apply(readFileSync(file, 'utf8'))));
+  // Auth before assets: the `generated` auth bridge is chosen when `auth.thunk.generated.ts` exists.
+  const auth = generateClientAuthFiles(root, REDUX_WEB_PRESET, { modules: [], prefix: backend.apiPrefix, admin: true, storagePrefix: pkg });
+  files.push(...auth.files);
+  const plan = planHostAssets(root);
+  if (plan?.stack !== 'client-http') throw new Error('Admin paneli client-http host olarak tanınmadı (package.json).');
+  const diffs = diffAssets(plan);
+  const written = new Set(applyAssets(diffs, diffs.map((d) => d.rel)));
+  files.push(...diffs.filter((d) => written.has(d.rel)).map((d) => ({ path: d.target, action: 'created' as const })));
   return { files };
 }

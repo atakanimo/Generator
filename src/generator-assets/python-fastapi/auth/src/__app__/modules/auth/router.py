@@ -9,6 +9,7 @@ from __app__.core.auth.messages import auth_text
 from __app__.core.auth.rate_limit import auth_rate_limit, client_ip
 from __app__.core.http.contract import ContractResponse, ContractRoute, contract_ok
 from __app__.modules.auth import schemas, service
+from __app__.modules.auth.router_custom import map_custom_auth_routes
 
 router = APIRouter(prefix="/auth", tags=["auth"], route_class=ContractRoute)
 
@@ -20,6 +21,13 @@ def _client(request: Request) -> dict[str, str | None]:
     }
 
 
+def _signed_in(request: Request, session: schemas.AuthSession) -> schemas.AuthSession:
+    """Oturumu açan kullanıcıyı isteğe bağlar: denetim / log katmanı `request.state.auth_user_id` ile aktörü okur."""
+    request.state.auth_user_id = session.user.id
+    request.state.auth_role = session.user.role
+    return session
+
+
 @router.post(
     "/login",
     response_model=ContractResponse[schemas.AuthSession],
@@ -29,7 +37,8 @@ async def login(
     body: schemas.LoginBody, request: Request, db: DbDep
 ) -> ContractResponse[schemas.AuthSession]:
     return contract_ok(
-        await service.login(db, body.email, body.password, _client(request)), auth_text("loggedIn")
+        _signed_in(request, await service.login(db, body.email, body.password, _client(request))),
+        auth_text("loggedIn"),
     )
 
 
@@ -92,7 +101,8 @@ async def verify_email(
     body: schemas.VerifyEmailBody, request: Request, db: DbDep
 ) -> ContractResponse[schemas.AuthSession]:
     return contract_ok(
-        await service.verify_email(db, body.email, body.code, _client(request)), auth_text("emailVerified")
+        _signed_in(request, await service.verify_email(db, body.email, body.code, _client(request))),
+        auth_text("emailVerified"),
     )
 
 
@@ -143,7 +153,8 @@ async def google(
     body: schemas.GoogleBody, request: Request, db: DbDep
 ) -> ContractResponse[schemas.AuthSession]:
     return contract_ok(
-        await service.login_with_google(db, body.idToken, _client(request)), auth_text("loggedIn")
+        _signed_in(request, await service.login_with_google(db, body.idToken, _client(request))),
+        auth_text("loggedIn"),
     )
 
 
@@ -162,7 +173,7 @@ async def apple(
     session = await service.login_with_apple(
         db, body.identityToken, _client(request), body.fullName, body.authorizationCode
     )
-    return contract_ok(session, auth_text("loggedIn"))
+    return contract_ok(_signed_in(request, session), auth_text("loggedIn"))
 
 
 # @endif
@@ -190,3 +201,6 @@ async def delete_account(user: UserDep, db: DbDep) -> ContractResponse[None]:
 
 
 # @endif
+
+
+map_custom_auth_routes(router)

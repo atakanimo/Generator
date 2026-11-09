@@ -16,7 +16,7 @@
  *     registry untouched; a second generate writes nothing.
  *
  * Run:  node scripts/verify/regen-python.mjs [--no-docker] [--no-stockexchange]
- *       STOCKEXCHANGE_ROOT overrides ~/Projects/VarlikALL/StockExchange.
+ *       STOCKEXCHANGE_ROOT overrides ~/Projects/AtaAllWorkspace/AlphaTerminal.
  */
 import { build } from 'esbuild';
 import { spawn, spawnSync } from 'child_process';
@@ -30,7 +30,7 @@ import { AUTH_ALL_MODULES, AUTH_TEST_ADMIN } from './auth-scenarios.mjs';
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const withDocker = !process.argv.includes('--no-docker');
 const withStockExchange = !process.argv.includes('--no-stockexchange');
-const stockExchange = process.env.STOCKEXCHANGE_ROOT ?? join(homedir(), 'Projects/VarlikALL/StockExchange');
+const stockExchange = process.env.STOCKEXCHANGE_ROOT ?? join(homedir(), 'Projects/AtaAllWorkspace/AlphaTerminal');
 const outDir = join(root, 'scripts/verify/out/regen-python');
 const fixtures = join(root, 'scripts/verify/fixtures/python');
 const appName = 'SampleHost';

@@ -11,8 +11,8 @@ import { GetCommonState, GetThemeState, store } from '@/store';
 import { createAppTheme } from '@/theme';
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import AppRoutes from '@/routes';
-import { injectStore, API } from '@/services/api';
-import { me } from '@/store/slices/authSlice';
+import { injectStore, API } from '@/services/api/api.generated';
+import { restoreSession } from '@/store/thunks/auth.thunk.generated';
 import { resources } from '@/modules/resources.generated';
 import { LoadingOverlay } from '@/components';
 
@@ -32,7 +32,7 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     // Kayıtlı oturum (access ya da yalnız refresh token) `me` ile doğrulanır; süresi dolmuşsa interceptor yeniler.
-    if (store.getState().auth.checking) dispatch(me());
+    void dispatch(restoreSession());
   }, [dispatch]);
 
   return (

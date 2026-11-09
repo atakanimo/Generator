@@ -4,8 +4,8 @@ import { after, before, test } from 'node:test';
 import type { Server } from 'node:http';
 import { createApp } from '@/app';
 
-/** Sözleşme zarfı (docs/api-contract.md). */
-interface Envelope {
+/** Sözleşme cevabı (docs/api-contract.md). */
+interface ContractBody {
   isSuccess: boolean;
   traceId?: string;
   data: { status?: string; mongoConnected?: boolean } | null;
@@ -26,11 +26,11 @@ after(() => {
   server.close();
 });
 
-test('health: sözleşme zarfı, X-Request-Id yansıtılır', async () => {
+test('health: sözleşme cevabı, X-Request-Id yansıtılır', async () => {
   const res = await fetch(`${base}/api/health`, { headers: { 'x-request-id': 'req-1' } });
   assert.equal(res.status, 200);
   assert.equal(res.headers.get('x-request-id'), 'req-1');
-  const body = (await res.json()) as Envelope;
+  const body = (await res.json()) as ContractBody;
   assert.equal(body.isSuccess, true);
   assert.equal(body.traceId, 'req-1');
   assert.equal(body.data?.status, 'ok');
@@ -40,7 +40,7 @@ test('health: sözleşme zarfı, X-Request-Id yansıtılır', async () => {
 test('tanımsız yol 404, istek dilinde', async () => {
   const res = await fetch(`${base}/api/missing`, { headers: { lang: 'en' } });
   assert.equal(res.status, 404);
-  const body = (await res.json()) as Envelope;
+  const body = (await res.json()) as ContractBody;
   assert.equal(body.isSuccess, false);
   assert.equal(body.errorData?.code, 404);
   assert.equal(body.errorData?.header, 'Not Found');
@@ -49,6 +49,6 @@ test('tanımsız yol 404, istek dilinde', async () => {
 test('bozuk JSON gövdesi 400', async () => {
   const res = await fetch(`${base}/api/health`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{' });
   assert.equal(res.status, 400);
-  const body = (await res.json()) as Envelope;
+  const body = (await res.json()) as ContractBody;
   assert.equal(body.errorData?.code, 400);
 });

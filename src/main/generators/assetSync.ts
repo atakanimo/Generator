@@ -3,21 +3,23 @@
  * düzeltmeler var olan host'a gitmez. Bu modül host'un asset'lerini Generator'daki güncel hâliyle karşılaştırır ve
  * yalnız seçilen dosyaları yazar. Skeleton (Program.cs, appsettings, pyproject …) kapsam dışı: kullanıcı onları değiştirir.
  *
- * BE stack'leri: Express (`EXPRESS_CORE_BOOTSTRAP_FILES` → `src/core`), Python (`core/` → `<pkg>/core`), .NET (ortak +
+ * BE stack'leri: Express (`EXPRESS_CORE_BOOTSTRAP_FILES` → `src/core`), Python (`core/` → `<pkg>/core`; auth `.Custom` eşleri yalnız yoksa, auth G'leri generate'te), .NET (ortak +
  * sağlayıcı + id katmanı → `<Layer>/…`, bootstrap ile aynı katman sırası). İstemci (admin / web / mobil): ortak HTTP
- * katmanı (`client-http`, docs/frontend/http-layer.md); `api/auth.ts` ve `api/hooks.ts` projeye ait, yalnız yoksa yazılır.
+ * katmanı (`client-http`, `services/api/*.generated.ts`); `api/hooks.ts` ve eski köprülerin `api/auth.ts`'i projeye ait.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { dirname, join, relative } from 'path';
 import { findDotnetHost } from '../parsers/dotnet/dotnetHost.js';
 import { resolveDotnetHostDatabase } from '../ipc/dotnetBackend.js';
 import { findPythonHost } from '../ipc/pythonBackend.js';
+import { readWorkspaceManifest } from '../utils/manifestSnapshot.js';
 import { getGeneratorAssetsDir } from '../utils/templateHelpers.js';
+import { isGeneratorOwnedSource, withOnceHeader, withSharedHeader, withoutGeneratorHeader } from '../utils/generatedFileOwnership.js';
 import { applyAppTokens, dotnetAssetsDir, listFiles } from './dotnet-efcore/dotnetFiles.js';
 import { DOTNET_LAYERS, dotnetLayout } from './dotnet-efcore/dotnetLayout.js';
 import { dotnetDbProvider } from './dotnet-efcore/providers/index.js';
 import { EXPRESS_CORE_BOOTSTRAP_FILES } from './express-mongoose/expressCoreAssets.js';
-import { pythonAssetsDir } from './python-fastapi/pythonFiles.js';
+import { applyPythonTokens, pythonAssetsDir } from './python-fastapi/pythonFiles.js';
 import { pythonLayout } from './python-fastapi/pythonLayout.js';
 import { resolveClientPlatformAt } from '../utils/clientPlatform.js';
 import { CLIENT_HTTP_ADAPTER, type ClientPlatform } from '../../shared/clientPlatform.js';
@@ -34,6 +36,8 @@ export interface AssetEntry {
   content: string;
   /** Projeye ait başlangıç dosyası: yalnız yoksa yazılır, sonra proje değiştirir. */
   createOnly?: boolean;
+  /** Bu dosyanın eski yeri: yazılınca Generator başlıklıysa silinir. */
+  replaces?: string;
 }
 
 export interface AssetDiff extends AssetEntry {
@@ -82,14 +86,33 @@ function dotnetPlan(root: string): AssetPlan | null {
       for (const [target, entry] of treeEntries(root, dir, layout.projectDir(layer), render)) entries.set(target, entry);
     }
   }
-  return { stack: 'dotnet-efcore', root, entries: [...entries.values()].sort((a, b) => a.rel.localeCompare(b.rel)) };
+  const notes: string[] = [];
+  if (existsSync(join(layout.projectDir('Api'), 'Common', 'EnvelopeExceptionHandler.cs'))) {
+    notes.push('Api/Common/EnvelopeExceptionHandler.cs eski, kaldırın: yerini ContractExceptionHandler.cs aldı (WriteEnvelopeAsync → WriteContractAsync).');
+  }
+  return { stack: 'dotnet-efcore', root, entries: [...entries.values()].sort((a, b) => a.rel.localeCompare(b.rel)), notes };
 }
 
 function pythonPlan(root: string): AssetPlan | null {
   const host = findPythonHost(root);
   if (!host) return null;
-  const entries = treeEntries(root, join(pythonAssetsDir(), 'core'), pythonLayout(root, host.pkg).coreDir, (text) => text);
-  return { stack: 'python-fastapi', root, entries: [...entries.values()].sort((a, b) => a.rel.localeCompare(b.rel)) };
+  const layout = pythonLayout(root, host.pkg);
+  const entries = treeEntries(root, join(pythonAssetsDir(), 'core'), layout.coreDir, (text) => text);
+  const notes: string[] = [];
+  // Auth `.Custom` eşleri yalnız yoksa yazılır; auth G dosyalarını generate yazar (`workspace.auth.appName` gerekir).
+  const authDir = join(layout.packageDir, 'modules', 'auth');
+  if (existsSync(authDir)) {
+    const assets = join(pythonAssetsDir(), 'auth', 'src', '__app__', 'modules', 'auth');
+    for (const name of ['router_custom.py', 'service_custom.py']) {
+      const target = join(authDir, name);
+      const content = applyPythonTokens(readFileSync(join(assets, name), 'utf8'), host.pkg);
+      entries.set(target, { rel: relative(root, target).replace(/\\/g, '/'), target, content, createOnly: true });
+    }
+    if (!readWorkspaceManifest(root)?.workspace?.auth?.appName) {
+      notes.push(`Auth dosyaları henüz G değil: 'node scripts/python-host.mjs auth ${root} --app "<Uygulama adı>" --apply' çalıştırılmalı.`);
+    }
+  }
+  return { stack: 'python-fastapi', root, entries: [...entries.values()].sort((a, b) => a.rel.localeCompare(b.rel)), notes };
 }
 
 function expressPlan(root: string): AssetPlan | null {
@@ -104,11 +127,12 @@ function expressPlan(root: string): AssetPlan | null {
 }
 
 /**
- * Oturum köprüsü (`api/auth.ts`) başlangıcı: üretilen auth varsa `generated`, yoksa platformun geçiş dönemi köprüsü.
+ * Oturum köprüsü (`api/auth.ts`): üretilen auth varsa (`store/thunks/auth.thunk.generated.ts`) ortak `generated`, yoksa
+ * platformun geçiş dönemi köprüsü (yalnız yoksa yazılır).
  * Elle refresh'i olan admin (`admin-refresh`) seçilmez: o, dosyası zaten olan projelerde kalır.
  */
 function authBridgeFor(root: string, platform: ClientPlatform): string | null {
-  if (existsSync(join(root, 'src/services/authRefresh.generated.ts'))) return 'generated';
+  if (existsSync(join(root, 'src/store/thunks/auth.thunk.generated.ts'))) return 'generated';
   if (platform === 'admin') return 'legacy-admin';
   if (platform === 'mobile') return 'legacy-mobile';
   return null;
@@ -121,26 +145,46 @@ function clientHttpPlan(root: string): AssetPlan | null {
   if (!platform) return null;
   const assets = getGeneratorAssetsDir('client-http');
   const notes: string[] = [];
-  const entry = (source: string, target: string, createOnly = false): AssetEntry => ({
+  const entry = (source: string, target: string, extra: Partial<AssetEntry> = {}): AssetEntry => ({
     rel: target,
     target: join(root, target),
     content: readFileSync(join(assets, source), 'utf8'),
-    ...(createOnly && { createOnly })
+    ...extra,
+    ...(extra.replaces && { replaces: join(root, extra.replaces) })
   });
   const entries = [
-    entry('shared/services/api/index.ts', 'src/services/api/index.ts'),
-    entry(`platform/${CLIENT_HTTP_ADAPTER[platform]}/services/api/platform.ts`, 'src/services/api/platform.ts'),
-    entry('shared/types/API/response.ts', 'src/types/API/response.ts'),
-    entry('shared/services/api/hooks.ts', 'src/services/api/hooks.ts', true)
+    entry('shared/services/api/api.generated.ts', 'src/services/api/api.generated.ts', { replaces: 'src/services/api/index.ts' }),
+    entry(`platform/${CLIENT_HTTP_ADAPTER[platform]}/services/api/platform.generated.ts`, 'src/services/api/platform.generated.ts', { replaces: 'src/services/api/platform.ts' }),
+    entry('shared/types/API/response.generated.ts', 'src/types/API/response.generated.ts', { replaces: 'src/types/API/response.ts' }),
+    entry('shared/services/api/hooks.ts', 'src/services/api/hooks.ts', { createOnly: true })
   ];
   const bridge = authBridgeFor(root, platform);
-  if (bridge) entries.push(entry(`auth-bridge/${bridge}/services/api/auth.ts`, 'src/services/api/auth.ts', true));
-  else if (!existsSync(join(root, 'src/services/api/auth.ts'))) {
-    notes.push('src/services/api/auth.ts yok ve üretilen auth bulunamadı: köprüyü elle yazın (docs/frontend/http-layer.md "apiAuth").');
+  // Üretilen auth'un köprüsü ortaktır; geçiş köprüsü projenin `auth.ts`'idir, `auth.generated.ts` onu yeniden export eder.
+  if (bridge === 'generated') {
+    entries.push(entry('auth-bridge/generated/services/api/auth.generated.ts', 'src/services/api/auth.generated.ts', { replaces: 'src/services/api/auth.ts' }));
+  } else {
+    if (bridge) entries.push(entry(`auth-bridge/${bridge}/services/api/auth.ts`, 'src/services/api/auth.ts', { createOnly: true }));
+    if (bridge || existsSync(join(root, 'src/services/api/auth.ts'))) {
+      entries.push(entry('auth-bridge/legacy-shim/services/api/auth.generated.ts', 'src/services/api/auth.generated.ts'));
+    } else {
+      notes.push('src/services/api/auth.ts yok ve üretilen auth bulunamadı: köprüyü elle yazın (docs/frontend/client-data-layer.md "HTTP katmanı").');
+    }
+  }
+  if (existsSync(join(root, 'src/services/api/index.ts'))) {
+    notes.push("services/api dosyaları .generated adlarına taşındı: importlar '@/services/api' → '@/services/api/api.generated', '@/services/api/auth' → '@/services/api/auth.generated', types/index.ts './API/response' → './API/response.generated'.");
   }
   // Eski düz dosyalar: `services/api.ts` kalırsa `@/services/api` klasör yerine onu çözer.
   for (const old of ['api', 'apiAuth', 'apiHooks', 'apiPlatform']) {
     if (existsSync(join(root, `src/services/${old}.ts`))) notes.push(`src/services/${old}.ts eski yer: içeriği services/api/ altına taşınıp silinmeli.`);
+  }
+  // Tek response sözleşmesi (docs/api-contract.md): arada zarf katmanı ve ayrı thunk sarmalayıcı kalmaz.
+  const retiredLayers: Record<string, string> = {
+    'src/services/api/envelope.ts': "servisler doğrudan 'API' + 'requestFlags' kullanır, sayfa LocalResponse okur",
+    'src/helper/parseLocalResponse.ts': 'cevap zaten LocalResponse; ayrıştırma katmanı gerekmez',
+    'src/store/thunk.ts': "thunk'lar 'responseThunk' / 'asFailure' (services/api/common.generated.ts) kullanır"
+  };
+  for (const [rel, instead] of Object.entries(retiredLayers)) {
+    if (existsSync(join(root, rel))) notes.push(`${rel} eski, kaldırın: ${instead}.`);
   }
   return { stack: 'client-http', root, platform, entries, notes };
 }
@@ -150,7 +194,10 @@ function clientHttpPlan(root: string): AssetPlan | null {
  * ikisi de `package.json`'lı; istemci React bağımlılığından tanınır, Express host'unda yoktur.
  */
 export function planHostAssets(root: string): AssetPlan | null {
-  return dotnetPlan(root) ?? pythonPlan(root) ?? clientHttpPlan(root) ?? expressPlan(root);
+  const plan = dotnetPlan(root) ?? pythonPlan(root) ?? clientHttpPlan(root) ?? expressPlan(root);
+  if (!plan) return null;
+  const entries = plan.entries.map((e) => ({ ...e, content: e.createOnly ? withOnceHeader(e.target, e.content) : withSharedHeader(e.target, e.content) }));
+  return { ...plan, entries };
 }
 
 export function diffAssets(plan: AssetPlan): AssetDiff[] {
@@ -158,7 +205,7 @@ export function diffAssets(plan: AssetPlan): AssetDiff[] {
     if (!existsSync(entry.target)) return { ...entry, status: 'missing' };
     if (entry.createOnly) return { ...entry, status: 'owned' };
     const current = readFileSync(entry.target, 'utf8');
-    return { ...entry, current, status: current === entry.content ? 'same' : 'differs' };
+    return { ...entry, current, status: withoutGeneratorHeader(current) === withoutGeneratorHeader(entry.content) ? 'same' : 'differs' };
   });
 }
 
@@ -170,6 +217,7 @@ export function applyAssets(diffs: AssetDiff[], rels: Iterable<string>): string[
     if (!wanted.has(diff.rel) || diff.status === 'same' || diff.status === 'owned') continue;
     mkdirSync(dirname(diff.target), { recursive: true });
     writeFileSync(diff.target, diff.content, 'utf8');
+    if (diff.replaces && existsSync(diff.replaces) && isGeneratorOwnedSource(readFileSync(diff.replaces, 'utf8'))) rmSync(diff.replaces);
     written.push(diff.rel);
   }
   return written;

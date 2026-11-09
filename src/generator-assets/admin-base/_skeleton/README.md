@@ -17,8 +17,8 @@ Production'da `VITE_API_BASE_URL` backend köküdür (boşsa panelle aynı origi
 ## Backend beklentisi
 
 - Generator'ın ürettiği admin uçları (`modules/<m>` config'lerindeki `endpoint`).
-- Auth (`src/config/app.ts`): `POST __API_PREFIX__/auth/login` → `{ token, user }`, `GET __API_PREFIX__/auth/me` → `user`;
-  `user.role === 'admin'` değilse giriş reddedilir. Generator bu uçları üretmez.
+- Ortak auth uçları (`__API_PREFIX__/auth/login`, `refresh`, `me`, `logout`); `user.role === 'admin'` değilse giriş
+  reddedilir (`store/thunks/auth.thunk.ts` → `canSignIn`).
 
 ## Dosyalar
 
@@ -27,10 +27,13 @@ Production'da `VITE_API_BASE_URL` backend köküdür (boşsa panelle aynı origi
 | `src/modules/<m>/<m>.generated.config.ts` | Generator, her generate'te yeniden yazılır |
 | `src/modules/<m>/<m>.generated.ts` | Generator bir kez yazar, sonra sizin (`extendResource`: aksiyon, hücre, ikon) |
 | `src/modules/resources.generated.ts` | Generator; bütün modüller |
-| Diğer her şey (`App.tsx`, `routes`, `layout`, `store`, `theme`, `i18n`, `services`, `pages`) | Bir kez oluşturuldu, sizin |
+| `src/services/api/*.generated.ts`, `src/types/API/response.generated.ts` | Generator, ortak HTTP katmanı (asset sync) |
+| `src/services/auth.service.generated.ts`, `store/thunks/auth.thunk.generated.ts`, `store/slices/auth.slice.generated.ts` | Generator, ortak auth; uzantıları `auth.service.ts`, `auth.thunk.ts`, `auth.slice.ts` sizin |
+| `src/services/api/hooks.ts` | Bir kez oluşturuldu, sizin (projeye özel HTTP davranışı) |
+| Diğer her şey (`App.tsx`, `routes`, `layout`, `store`, `theme`, `i18n`, `pages`) | Bir kez oluşturuldu, sizin |
 
 Yeni modül için host'ta değişiklik gerekmez: menü ve route `createAdminRoutes(resources)`'tan gelir. Menü başlığı
 `i18n/locales/<dil>.ts` → `admin.<m>.title` (yoksa config etiketi). Elle yazılan sayfalar `routes/routes.ts`'e eklenir.
 
 Kurallar: sayfalarda `try/catch` ve `.then` yok; veri `thunk` → `await dispatch(thunk()).unwrap()` ile gelir, toast /
-loading interceptor'dadır (`services/api.ts`).
+loading interceptor'dadır (`services/api/api.generated.ts`). Importlar `.generated` dosyalardandır.

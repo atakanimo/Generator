@@ -4,7 +4,7 @@
 import type { ActionReducerMapBuilder, PayloadAction } from '@reduxjs/toolkit';
 import type { {{sliceTypeImports}} } from '{{imports.services}}/{{camel}}.service.generated';
 {{#if hasSavedType}}
-import { {{populateHelpers}} } from '{{imports.services}}/common.generated';
+import { {{populateHelpers}} } from '{{imports.services}}/api/common.generated';
 {{/if}}
 import type { {{entity}}Thunks } from '../thunks/{{camel}}.thunk.generated';
 

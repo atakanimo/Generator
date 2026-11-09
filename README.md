@@ -23,7 +23,7 @@ The model file is the source of types. Labels, filters, relations, access, and A
 
 A file without the Generator header belongs to the user and is left untouched. Code written outside a custom block in a generated file is removed on the next generate. Business rules go in a hook or a custom block.
 
-Hosts in use today: SharedFrame, StockExchange, Varlik360, CeyizDefterim. Details: [docs/AtaProjectCommon.md](docs/AtaProjectCommon.md).
+Hosts in use today: SharedFrame, StockExchange, Varlik360, CeyizDefterim. Rules: `src/generator-assets/cursor-rules/` (synced with `scripts/rules-sync.mjs`).
 
 ## Stacks
 

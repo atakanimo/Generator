@@ -1,0 +1,95 @@
+---
+description: Proje geneli — mimari, tek cevap sözleşmesi, hata, test, isimlendirme, doküman, git, log; proje haritası en altta
+alwaysApply: true
+---
+
+# Genel kurallar
+
+Kök bir Generator hostudur (`.generator/manifest.json`). Yeni kod doğru kökün altına yazılır; proje haritası en alttaki "Bu projeye özel" bölümündedir. Ayrıntı: `AtaProjectCommon.mdc`, `backend.mdc`, `frontend.common.mdc`, `frontend.admin.mdc`, `frontend.web.mdc`, `frontend.mobile.mdc`.
+
+Kural dosyaları bütün projelerde ortaktır. Kaynak Generator `src/generator-assets/cursor-rules/`; projede yalnız her dosyanın en altındaki "Bu projeye özel" bölümü düzenlenir. Ortak kural değişikliği Generator'daki dosyada yapılır ve `node /Users/atakanatabey/Projects/AtaAllWorkspace/Generator/scripts/rules-sync.mjs --apply` ile projelere dağıtılır.
+
+## Architecture & Design
+
+- Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility layers, fallbacks, or migrations.
+- Choose the simplest implementation that fully meets the current requirements. Avoid speculative abstractions, configuration, and indirection.
+- Grow the system in layers. Start from the smallest version that works end to end, and add each new capability on top of a product that already works. Never trade a working product for unfinished complexity.
+- Keep components modular and concerns clearly separated.
+- Prefer decisions that stay coherent with the current architecture. Avoid temporary shortcuts that force a rewrite of working paths.
+- Eski bir yapı Generator'ı eğmeyi gerektiriyorsa Generator'a özellik eklemek yerine eski kod yeniden yazılır.
+
+## Dependencies
+
+- Prefer established, well-maintained libraries when they reduce overall complexity or improve reliability. Do not reimplement common functionality without a clear reason.
+- Lean on the dependencies already in the project before writing your own implementation or adding packages. Do not assume a library lacks a capability without checking its documentation and types.
+- Pin dependency versions explicitly. Never use `latest` or floating ranges in production configs.
+
+## Tek cevap sözleşmesi
+
+Bütün HTTP cevapları aynı şekildedir (Generator `docs/api-contract.md`); başarı ve hata aynı alanları taşır:
+
+```json
+{
+  "isSuccess": false,
+  "data": null,
+  "uiMessage": "",
+  "errorData": { "header": "", "message": "Kullanıcıya gösterilen mesaj", "code": 400 },
+  "traceId": "…"
+}
+```
+
+- Başarıda `isSuccess` true, `data` dolu, `errorData` null. `uiMessage` boşsa toast yok.
+- Liste sayfalaması `data` içindedir: `PaginatedList` (`items`, `total`, `hasMore`, `currentPage`, `currentLimit`).
+- Zarf / envelope katmanı, `meta`, `PageMeta`, `timestamp`, ikinci bir cevap şekli ya da istemcide cevabı başka şekle çeviren ara katman yoktur. İstemci aynı şekle `LocalResponse` der.
+- Dosya (PDF, CSV, görsel), düz metin ve HTML ham döner.
+- Dili yalnız `Accept-Language` header'ı seçer; `lang` / `x-lang` / `?lang=` yok.
+
+## Error Handling
+
+- Never silently swallow errors. Every error must be either handled or propagated — never discarded. Boş `catch` / `except: pass` yok. Bilinen boş sonuç ancak log ve tanımlı sözleşme ile döner.
+- Errors should carry enough context to diagnose the problem without reading the source. Wrap errors with "what was being attempted" context.
+- Separate user-facing error messages from internal error details. Users get clear guidance; logs get stack traces and context.
+
+## Testing
+
+- Test davranışı ölçer; implementasyon detayını değil.
+- Sınırları yaz: boş girdi, `null`, sıfır, geçersiz tip. Mutlu yol tek başına yetmez.
+- Her test bir şeyi doğrular ve tek nedenle kırılır.
+- Coverage yüzdesi hedefi yok. Kritik yolun testi vardır.
+- Uçtan uca senaryolar `tests/e2e/test-scenarios.md`'dedir (API, admin, web / mobil, arka plan işleri) ve Playwright testi olarak aynı klasörde yazılır (`tests/e2e/`: kendi `package.json`, `playwright.config.ts`, bölüm başına `*.spec.ts`, ortak yardımcılar `support/`). Test adı senaryo numarasıyla başlar; `-g <no>` ile tek senaryo koşar.
+- Davranışı değiştiren iş senaryo tablosunu da günceller (yeni / değişen senaryo + testi). Değişiklikten sonra yalnız ilgili bölüm koşulur; tam koşu kullanıcıya sorulmadan yapılmaz.
+- E2E testi uygulama kodunu değiştirmez; kırık test raporlanır, kod ayrı işte düzeltilir. Dış servis (Google, Apple, gerçek ödeme) gerektiren senaryo `test.skip` + nedenle işaretlenir. Sır repoya yazılmaz (`tests/e2e/.env.example`).
+
+## Code Hygiene
+
+- Ölü kodu sil. Yorum satırına alma. Geçmiş git'te durur.
+- Issue'suz `TODO` / `FIXME` bırakma.
+- Satır içi `eslint-disable` yorumu yazılmaz, Generator da üretmez. Bir kural kapatılacaksa uygulamanın eslint config'inde kapatılır.
+- Yanlış soyutlama yerine tekrarı tut. Aynı kalıp üç kez görülmeden ortaklaştırma.
+- Fonksiyon tek iş yapar.
+- Yorum yalnız kodun söyleyemediği nedeni yazar: iş kuralının gerekçesi, dış sistemin tuhaflığı, bilinçli bir tercih. Dosyanın amacı, fonksiyonun / tipin / alanın ne yaptığı, parametre tarifi, doküman linki ve sahiplik notu yorum olarak yazılmaz (dosya başı amaç yorumu ve özet JSDoc / `///` yok). Generator damgası (ilk satır) istisnadır.
+
+## Naming
+
+- Tanımlayıcılar İngilizce ve niyeti söyler. Boolean soru gibi okunur: `isLoading`, `hasError`.
+- Kısaltma yalnız yaygın olanlarda: `API`, `URL`, `HTTP`, `ID`.
+- Yorum, dokunduğun dosyanın diliyle yazılır. Türkçe yorum normaldir; satır içi yorum nedeni yazar.
+- Kullanıcıya görünen metin i18n anahtarındadır (`tr` ve `en` aynı ağaç). Koda gömülmez.
+
+## Documentation
+
+- Yeni spek ağacı uydurma. Projenin doküman indeksi "Bu projeye özel" bölümünde yazılıdır.
+- Ne yaptığını anlatan yorum yerine kodu sadeleştir; isim yetmiyorsa ismi değiştir.
+
+## Git
+
+- Commit mesajı kısa ve emir kipidir. Bir commit tek mantıksal değişikliktir.
+- Hook atlama ve force push yok.
+
+## Observability
+
+- Log sınırda: istek, dış çağrı, hata. Sıkı döngünün içine log yazma.
+- Yapısal log. Logda iz bağlamı vardır (`traceId` / `requestId`). Kullanıcı metni ile stack trace aynı alana yazılmaz.
+
+## Bu projeye özel
+<!-- rules-sync: bu satırın altı projeye aittir -->

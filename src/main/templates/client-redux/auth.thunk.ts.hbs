@@ -1,0 +1,16 @@
+// Auth hook'ları ve projeye özel auth thunk'ları. Generated dosyadan yalnız tip import edin;
+// ortak thunk'lar `thunks`'a `base` olarak gelir.
+import type { AuthExtension } from './auth.thunk.generated';
+
+export const authExtension = {
+  hooks: {
+{{#if admin}}
+    canSignIn: user => (user.role === 'admin' ? null : 'auth.adminOnly')
+{{else}}
+    // canSignIn: user => null,
+{{/if}}
+    // onSession: (session, dispatch) => { … },
+    // onSignedOut: dispatch => { … }
+  },
+  thunks: () => ({})
+} satisfies AuthExtension;

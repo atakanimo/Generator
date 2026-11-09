@@ -1,5 +1,4 @@
-// Oturum köprüsü: üretilen auth'a geçmemiş admin (docs/frontend/http-layer.md "apiAuth"). Geçiş dönemi örneği; proje
-// kendi auth'una göre uyarlar. Auth ortaklaşınca `auth-bridge/generated` ile değiştirilir.
+// Oturum köprüsü: access token'ı ve 401 davranışını api.ts'e verir.
 import type { ApiAuth } from '@/types';
 import { getTokenFromStorage } from '@/helper';
 import { APP_CONFIG } from '@/config/app';
@@ -9,7 +8,6 @@ type AuthState = { auth?: { token?: string | null } };
 const tokenOf = (state: unknown) => (state as AuthState | undefined)?.auth?.token ?? null;
 
 const apiAuth: ApiAuth = {
-  // Store'daki; yoksa storage helper'ı.
   getAccessToken: state => tokenOf(state) || getTokenFromStorage(APP_CONFIG.storage.token),
   hasSession: state => Boolean(tokenOf(state)),
   // Refresh yok: 401 oturumu kapatır.

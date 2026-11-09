@@ -1,6 +1,6 @@
 # Kod yazma kuralları
 
-Generator'da ve ürettiği projelerde geçerli kurallar. Stack'e özel ayrıntılar `backend/*.md` dosyalarında.
+Generator deposunun kendi kod kuralları. Host projelerin kuralları `src/generator-assets/cursor-rules/`'tadır; stack'e özel üretim ayrıntıları `backend/*.md`.
 
 ## Model
 

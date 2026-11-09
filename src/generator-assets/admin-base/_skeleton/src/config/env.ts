@@ -1,3 +1,4 @@
+// Ortam: `VITE_APP_ENV` (prod / test), yoksa Vite modu.
 export type AppEnv = 'prod' | 'test';
 
 export const getAppEnv = (): AppEnv => {

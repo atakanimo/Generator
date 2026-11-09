@@ -9,6 +9,7 @@ import { findAdminMountPath } from '../utils/backendAppFile.js';
 import { dirname, join, resolve } from 'path';
 import { resolveAdminOperations, type NormalizedModel } from '../../shared/normalizedModel.js';
 import { safeWriteFile } from '../utils/fileUtils.js';
+import { withOnceHeader } from '../utils/generatedFileOwnership.js';
 import { log } from '../utils/logger.js';
 import { moduleNameFromEntity } from '../utils/namingUtils.js';
 import { toAdminResourceConfig, type AdminFieldConfig, type AdminResourceConfig, type SkippedField } from './adminResourceConfig.js';
@@ -205,7 +206,7 @@ export function generateAdminConfig(options: AdminConfigGenerateOptions): AdminC
     const extensionFile = join(moduleDir, `${config.name}.generated.ts`);
     let extension: string | undefined;
     if (!existsSync(extensionFile)) {
-      const ext = safeWriteFile(extensionFile, renderExtensionFile(camel, config.name, hasDetailView(model) && hostSupportsDetail(frontendRoot)), { ensureDirectory: true, createBackup: false });
+      const ext = safeWriteFile(extensionFile, withOnceHeader(extensionFile, renderExtensionFile(camel, config.name, hasDetailView(model) && hostSupportsDetail(frontendRoot)), now), { ensureDirectory: true, createBackup: false });
       if (!ext.success) return { success: false, error: ext.error };
       extension = extensionFile;
     }

@@ -1,6 +1,6 @@
 import { useTheme as useMuiTheme } from '@mui/material/styles';
 import { useAppDispatch, useAppSelector } from './redux';
-import { toggleTheme } from '@/store/slices/themeSlice';
+import { toggleTheme } from '@/store/slices/theme.slice';
 import { useMediaQuery } from '@mui/material';
 
 export const DRAWER_WIDTH = 304;

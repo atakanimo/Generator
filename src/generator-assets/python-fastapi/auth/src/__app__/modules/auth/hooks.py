@@ -16,11 +16,5 @@ async def on_session(db: Any, user: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
-# @if account-delete
-
-
 async def on_account_delete(db: Any, user: dict[str, Any]) -> None:
-    """`DELETE /auth/account`: kullanıcı satırı silinmeden önce kendi verisi silinir."""
-
-
-# @endif
+    """`DELETE /auth/account` (account-delete modülü): kullanıcı satırı silinmeden önce kendi verisi silinir."""

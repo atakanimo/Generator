@@ -36,6 +36,7 @@ import AddModelModal from '../components/AddModelModal';
 import BackendStackInfoButton from '../components/BackendStackInfo';
 import NewProjectDialog from '../components/NewProjectDialog';
 import NewAdminPanelDialog from '../components/NewAdminPanelDialog';
+import AuthModulesDialog from '../components/AuthModulesDialog';
 import { ADMIN_BACKEND_DEFAULTS, ADMIN_PANEL_INFO } from '@shared/adminPanel';
 import type { BackendStack } from '@shared/backendDatabase';
 import { AdminPanelSettings } from '@mui/icons-material';
@@ -84,6 +85,7 @@ const ProjectSelectPage = () => {
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
   const [newProject, setNewProject] = useState<BackendStackInfo | null>(null);
   const [newAdminOpen, setNewAdminOpen] = useState(false);
+  const [authModulesOpen, setAuthModulesOpen] = useState(false);
 
   useEffect(() => {
     const last = readLastProjectPath();
@@ -98,6 +100,15 @@ const ProjectSelectPage = () => {
     writeLastProjectPath(root);
     dispatch(setProjectPath(root));
     dispatch(scanProjectFiles({ path: root }));
+    setSnackbarMessage(message);
+    setSnackbarSeverity('success');
+    setSnackbarOpen(true);
+  };
+
+  /** Auth modules of the open Python host were changed; the project is rescanned (Users model may change). */
+  const handleAuthModulesSaved = (message: string) => {
+    setAuthModulesOpen(false);
+    if (projectPath) dispatch(scanProjectFiles({ path: projectPath }));
     setSnackbarMessage(message);
     setSnackbarSeverity('success');
     setSnackbarOpen(true);
@@ -319,6 +330,11 @@ const ProjectSelectPage = () => {
 
         {/* Action Area */}
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+          {sourceType === 'python-fastapi' && projectPath && (
+            <Button variant='outlined' size='large' onClick={() => setAuthModulesOpen(true)} startIcon={<AdminPanelSettings />}>
+              Auth modülleri
+            </Button>
+          )}
           <Button
             variant='outlined'
             size='large'
@@ -462,6 +478,10 @@ const ProjectSelectPage = () => {
       />
 
       {projectPath && <PythonImportDialog projectPath={projectPath} onClosed={handlePythonImportClosed} />}
+
+      {projectPath && (
+        <AuthModulesDialog open={authModulesOpen} projectPath={projectPath} onClose={() => setAuthModulesOpen(false)} onSaved={handleAuthModulesSaved} />
+      )}
 
       <NewProjectDialog info={newProject} onClose={() => setNewProject(null)} onCreated={handleProjectCreated} />
       <NewAdminPanelDialog

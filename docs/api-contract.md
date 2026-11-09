@@ -151,7 +151,7 @@ type PaginatedList<T> = { items: T[]; total: number; hasMore: boolean; currentPa
 ## 7. FE HTTP katmanı: host interceptor görevleri
 
 Axios interceptor **host** projededir, pakette değil. Admin, web ve mobil için ortak `api.ts`'ler ve tek `LocalResponse`
-tipi: `docs/frontend/http-layer.md`. Paketin beklediği:
+tipi: host kuralı `src/generator-assets/cursor-rules/frontend.common.mdc` "HTTP katmanı", üretim [frontend/client-data-layer.md](frontend/client-data-layer.md#http-katmanı-client-http). Paketin beklediği:
 
 1. Başarı → `LocalResponse` ile resolve (`data` = zarfın `data`'sı).
 2. Hata → `LocalResponse` ile reject (`errorData` dolu).

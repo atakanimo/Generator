@@ -10,11 +10,8 @@ using __App__.Domain.Users;
 
 namespace __App__.Application.Auth;
 
-/// <summary>
-/// Ortak auth (docs/backend/auth.md): Express ve Python host'larıyla aynı uçlar, kurallar ve cevaplar. Rol ve durum
-/// kullanıcının kaydından okunur; refresh token'lar döner (rotation) ve DB'de yalnız hash'leri tutulur.
-/// </summary>
-public sealed class AuthService(
+/// <summary>Ortak auth akışları (docs/backend/auth.md); projeye özel akışlar AuthService.Custom.cs'te.</summary>
+public sealed partial class AuthService(
     IAppDbContext db,
     IPasswordHasher hasher,
     ITokenIssuer tokens,
@@ -139,7 +136,6 @@ public sealed class AuthService(
             : Result.Ok(ToAuthUser(user) with { Extra = await hooks.OnSessionAsync(user, ct) });
     }
 
-    /// <summary>Şifre değişince bütün refresh token'lar iptal edilir.</summary>
     public async Task<Result> ChangePasswordAsync(EntityId? userId, ChangePasswordBody body, CancellationToken ct)
     {
         var user = await FindByIdAsync(userId, ct);
@@ -234,7 +230,7 @@ public sealed class AuthService(
     // @endif
     // @if register|password-reset
 
-    /// <summary>Kodu yeniden gönderir; kullanıcı yoksa da aynı cevap.</summary>
+    /// <summary>Kullanıcı yoksa da aynı cevap.</summary>
     public async Task<Result> SendOtpAsync(SendOtpBody body, CancellationToken ct)
     {
         if (body.Purpose is null || !OtpPurposes.Contains(body.Purpose))
@@ -411,7 +407,6 @@ public sealed class AuthService(
         }
     }
 
-    /// <summary>Yeni access + refresh token.</summary>
     private async Task<AuthSession> IssueSessionAsync(User user, ClientInfo client, bool? isNewUser, CancellationToken ct)
     {
         var refreshToken = Base64Url(RandomNumberGenerator.GetBytes(32));
@@ -433,7 +428,6 @@ public sealed class AuthService(
     private static string Base64Url(byte[] bytes) => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
     // @if register|password-reset
 
-    /// <summary>Aynı amaçla açık kalan kodlar kapanır; yeni kod hash'lenip yazılır ve e-postayla gider.</summary>
     private async Task SendOtpAsync(User user, string purpose, CancellationToken ct)
     {
         var now = time.GetUtcNow();
@@ -450,7 +444,6 @@ public sealed class AuthService(
         await mail.SendAsync(user.Email, subject, string.Format(CultureInfo.CurrentCulture, AuthMessages.CodeText, code, OtpMinutes), ct);
     }
 
-    /// <summary>Son açık kod: süresi geçmişse ya da 5 yanlış denemeden sonra kabul edilmez.</summary>
     private async Task<bool> ConsumeOtpAsync(User user, string purpose, string? code, CancellationToken ct)
     {
         var userId = user.Id;

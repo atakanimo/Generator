@@ -11,7 +11,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
-const varlik = '/Users/atakanatabey/Projects/VarlikALL/Varlik360';
+const varlik = '/Users/atakanatabey/Projects/AtaAllWorkspace/Varlik360';
 const fixtureWorkspace = join(root, 'scripts/verify/out/admin-config/workspace');
 
 const args = process.argv.slice(2);

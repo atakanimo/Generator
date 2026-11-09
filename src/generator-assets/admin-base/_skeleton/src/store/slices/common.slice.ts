@@ -1,3 +1,4 @@
+// Global loading durumu.
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import type { RootState } from '@/store';
 
@@ -9,7 +10,7 @@ const initialState: CommonState = {
   isLoading: false
 };
 
-/** Global loading: `services/api.ts` interceptor'ı açar / kapatır (`skipLoading` istekleri hariç). */
+/** Global loading: `services/api/api.generated.ts` açar / kapatır (`skipLoading` istekleri hariç). */
 const commonSlice = createSlice({
   name: 'common',
   initialState,

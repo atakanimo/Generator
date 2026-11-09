@@ -3,17 +3,17 @@
  * web client. No UI.
  *
  * Per module and layer `<x>.<layer>.generated.ts` (Generator header, rewritten) + `<x>.<layer>.ts` (created once,
- * user-owned: re-exports / composes the generated file and holds custom code), and one `common.generated.ts` per
+ * user-owned: re-exports / composes the generated file and holds custom code), and one `api/common.generated.ts` per
  * client. Screens keep importing `<x>.service` / `<x>.thunk` / `<x>.slice`. The root reducer is never edited: a new
  * slice comes with a note naming the lines to add.
  */
 import Handlebars from 'handlebars';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import type { NormalizedModel } from '../../../shared/normalizedModel.js';
 import { findNormalMountPath } from '../../utils/backendAppFile.js';
 import { findDotnetHost } from '../../parsers/dotnet/dotnetHost.js';
-import { isGeneratorOwnedSource } from '../../utils/generatedFileOwnership.js';
+import { isGeneratorOwnedSource, withOnceHeader } from '../../utils/generatedFileOwnership.js';
 import { moduleNameFromEntity } from '../../utils/namingUtils.js';
 import { getTemplatesDir } from '../../utils/templateHelpers.js';
 import { buildClientModuleContext, type ClientModuleContext } from './clientContext.js';
@@ -58,6 +58,8 @@ export interface ClientAuthOptions {
   prefix: string;
   /** Storage key prefix of the tokens (app name). */
   storagePrefix?: string;
+  /** Admin panel: core flows only and `canSignIn` admin-only in the created `auth.thunk.ts` (docs/backend/auth.md). */
+  admin?: boolean;
 }
 
 export type ClientLayer = 'service' | 'thunk' | 'slice';
@@ -112,7 +114,7 @@ function writeGenerated(path: string, content: string): ClientWrittenFile {
 /** K file: created when missing, never overwritten. */
 function writeOnce(path: string, content: string): ClientWrittenFile {
   if (existsSync(path)) return { path, action: 'skipped-exists' };
-  write(path, content);
+  write(path, withOnceHeader(path, content));
   return { path, action: 'created' };
 }
 
@@ -174,7 +176,7 @@ export function generateClientModules(options: ClientGenerateOptions): ClientGen
   const files: ClientWrittenFile[] = [];
   const modules: ClientModuleContext[] = [];
 
-  files.push(writeGenerated(join(servicesDir, 'common.generated.ts'), render('common.generated.ts', { header })));
+  files.push(writeCommon(clientRoot, preset, header, notes));
 
   for (const model of models) {
     const moduleName = moduleNameFromEntity(model.entityName);
@@ -226,6 +228,15 @@ export function generateClientModules(options: ClientGenerateOptions): ClientGen
   return { files, modules, warnings, notes };
 }
 
+/** Only the auth layer of one client (`scripts/host.mjs client-auth`). */
+export function generateClientAuthFiles(clientRoot: string, preset: ClientPreset, auth: ClientAuthOptions, now = new Date()) {
+  const notes: string[] = [];
+  const header = `${HEADER} - ${formatDate(now)}`;
+  // Admin'in auth service'i dışında generated modülü yok; `RequestOptions` / `requestFlags` yine gerekir.
+  const files = [writeCommon(clientRoot, preset, header, notes), ...generateClientAuth(clientRoot, preset, auth, header, notes)];
+  return { files, notes };
+}
+
 /** `workspace.auth` of the backend manifest → what the client generates; `null` for a host without the auth layer. */
 export function clientAuthFromManifest(backendRoot: string): ClientAuthOptions | null {
   const workspace = readWorkspaceManifest(backendRoot)?.workspace;
@@ -233,40 +244,94 @@ export function clientAuthFromManifest(backendRoot: string): ClientAuthOptions |
   return { modules: normalizeAuthModules(workspace.auth.modules), prefix: workspace.backendStack === 'python-fastapi' ? '/api/v1' : '/api' };
 }
 
-/** G files of the shared auth layer; UI stays in the host (login / register screens). */
-function generateClientAuth(clientRoot: string, preset: ClientPreset, auth: ClientAuthOptions, header: string, notes: string[]): ClientWrittenFile[] {
-  const has = (m: AuthModule) => auth.modules.includes(m);
+/** Auth files replaced by `services/api/auth.generated.ts` + `platform.generated.ts` (client-http); removed when still Generator-owned. */
+/** `services/api/common.generated.ts`; eski yerdeki (`services/common.generated.ts`) Generator dosyası silinir. */
+function writeCommon(clientRoot: string, preset: ClientPreset, header: string, notes: string[]): ClientWrittenFile {
+  const servicesDir = join(clientRoot, preset.dirs.services);
+  const old = join(servicesDir, 'common.generated.ts');
+  if (existsSync(old) && isGeneratorOwnedSource(readFileSync(old, 'utf8'))) {
+    rmSync(old);
+    notes.push(`common.generated.ts services/api/ altına taşındı: elle yazılmış dosyalarda './common.generated' → './api/common.generated'.`);
+  }
+  return writeGenerated(join(servicesDir, 'api', 'common.generated.ts'), render('common.generated.ts', { header, localResponse: preset.imports.localResponse }));
+}
+
+const RETIRED_AUTH_FILES = ['authStorage.generated.ts', 'authRefresh.generated.ts'];
+
+/**
+ * Shared auth layer (docs/backend/auth.md): G files (service, thunks, slice) are rewritten every time and pull in their K
+ * extensions (`auth.service.ts`, `auth.thunk.ts` hooks + custom thunks, `auth.slice.ts` extra state), which are created
+ * once. The host imports only the G files. UI stays in the host.
+ * Token storage and refresh live in `services/api/auth.generated.ts` (client-http asset, `auth-bridge/generated`).
+ */
+/** Token öneki bir kez yazılınca sabittir: klasör adı değişse de oturum ve tema anahtarları kaymaz. */
+function existingStoragePrefix(servicesDir: string): string | null {
+  const file = join(servicesDir, 'auth.service.generated.ts');
+  if (!existsSync(file)) return null;
+  return /AUTH_STORAGE_PREFIX = '([a-z0-9_]+)'/.exec(readFileSync(file, 'utf8'))?.[1] ?? null;
+}
+
+export function generateClientAuth(clientRoot: string, preset: ClientPreset, auth: ClientAuthOptions, header: string, notes: string[]): ClientWrittenFile[] {
+  const modules = auth.admin ? [] : auth.modules;
+  const has = (m: AuthModule) => modules.includes(m);
   const purposes = [...(has('register') ? ["'verify'"] : []), ...(has('password-reset') ? ["'reset'"] : [])];
-  const data = {
-    header,
-    imports: preset.imports,
-    thunksImport: `${preset.imports.rootState}/thunks`,
-    asyncStorage: preset.tokenStorage === 'async-storage',
-    storagePrefix: (auth.storagePrefix ?? 'app').toLowerCase().replace(/[^a-z0-9]+/g, '_'),
-    prefix: auth.prefix.replace(/\/+$/, ''),
-    moduleList: auth.modules.length ? auth.modules.join(', ') : 'core only',
+  const flags = {
     register: has('register'),
     passwordReset: has('password-reset'),
     otp: purposes.length > 0,
-    otpPurposes: purposes.join(' | '),
     google: has('google'),
     apple: has('apple'),
     // A Google / Apple account has no password until it creates one (`set-password`).
     social: has('google') || has('apple'),
     accountDelete: has('account-delete')
   };
+  const thunkNames = [
+    'login', 'restoreSession', 'logout', 'changePassword', 'changePasswordAndLogin',
+    ...(flags.register ? ['register', 'verifyEmail'] : []),
+    ...(flags.otp ? ['sendOtp'] : []),
+    ...(flags.passwordReset ? ['forgotPassword', 'resetPassword', 'resetPasswordAndLogin'] : []),
+    ...(flags.google ? ['loginWithGoogle'] : []),
+    ...(flags.apple ? ['loginWithApple'] : []),
+    ...(flags.social ? ['setPassword'] : []),
+    ...(flags.accountDelete ? ['deleteAccount'] : [])
+  ].join(', ');
+  const data = {
+    header,
+    imports: preset.imports,
+    thunksImport: `${preset.imports.rootState}/thunks`,
+    storagePrefix: existingStoragePrefix(join(clientRoot, preset.dirs.services)) ?? (auth.storagePrefix ?? 'app').toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+    prefix: auth.prefix.replace(/\/+$/, ''),
+    moduleList: modules.length ? modules.join(', ') : 'core only',
+    otpPurposes: purposes.join(' | '),
+    admin: auth.admin === true,
+    thunkNames,
+    ...flags
+  };
   const servicesDir = join(clientRoot, preset.dirs.services);
+  const thunksDir = join(clientRoot, preset.dirs.thunks);
+  const slicesDir = join(clientRoot, preset.dirs.slices);
   const files = [
     writeGenerated(join(servicesDir, 'auth.service.generated.ts'), render('auth.service.generated.ts', data)),
-    writeGenerated(join(servicesDir, 'authStorage.generated.ts'), render('authStorage.generated.ts', data)),
-    writeGenerated(join(servicesDir, 'authRefresh.generated.ts'), render('authRefresh.generated.ts', data)),
-    writeGenerated(join(clientRoot, preset.dirs.thunks, 'auth.thunk.generated.ts'), render('auth.thunk.generated.ts', data)),
-    writeGenerated(join(clientRoot, preset.dirs.slices, 'auth.slice.generated.ts'), render('auth.slice.generated.ts', data))
+    writeOnce(join(servicesDir, 'auth.service.ts'), render('auth.service.ts', data)),
+    writeGenerated(join(thunksDir, 'auth.thunk.generated.ts'), render('auth.thunk.generated.ts', data)),
+    writeOnce(join(thunksDir, 'auth.thunk.ts'), render('auth.thunk.ts', data)),
+    writeGenerated(join(slicesDir, 'auth.slice.generated.ts'), render('auth.slice.generated.ts', data)),
+    writeOnce(join(slicesDir, 'auth.slice.ts'), render('auth.slice.ts', data))
   ];
+  for (const name of RETIRED_AUTH_FILES) {
+    const path = join(servicesDir, name);
+    if (!existsSync(path)) continue;
+    if (isGeneratorOwnedSource(readFileSync(path, 'utf8'))) {
+      rmSync(path);
+      notes.push(`Auth: ${name} silindi (token saklama ve refresh artık services/api/auth.generated.ts'te; assets-sync ile yazılır).`);
+    } else {
+      notes.push(`Auth: ${name} başlıksız, silinmedi: içeriği services/api/auth.ts'e taşınmalı.`);
+    }
+  }
   if (files.some((f) => f.action === 'created')) {
     notes.push(
-      `Auth: root reducer'a auth: authReducer (${preset.imports.rootState}/slices/auth.slice.generated), store kurulunca bindAuthStore(store); ` +
-        `api.ts interceptor'ı 401'de (isAuthRequest değilse) refreshSessionOnce() → true ise isteği bir kez tekrarlar; Authorization = state.auth.accessToken`
+      `Auth: root reducer'a auth: authReducer (${preset.imports.rootState}/slices/auth.slice.generated); import'lar hep .generated'dan (özel thunk'lar authThunks.<ad>, actions authActions.<ad>); ` +
+        `services/api/auth.generated.ts = client-http auth-bridge/generated (node scripts/assets-sync.mjs <uygulama> --apply-all)`
     );
   }
   return files;

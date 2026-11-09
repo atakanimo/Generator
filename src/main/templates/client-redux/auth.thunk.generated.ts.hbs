@@ -1,154 +1,147 @@
 {{header}}
-// Auth thunks (docs/backend/auth.md): always fulfilled with the `LocalResponse` (pages branch on `isSuccess` after
-// `unwrap()`); a session answer is stored (`authStorage`) before the slice sees it. Do not edit.
-import { createAsyncThunk } from '@reduxjs/toolkit';
+// Auth thunk'ları: ortak olanlar + `auth.thunk.ts`'teki hook'lar ve özel thunk'lar.
+// Hepsi fulfilled `LocalResponse` döner.
+import type { Dispatch } from '@reduxjs/toolkit';
 import type { LocalResponse } from '{{imports.localResponse}}';
 import * as service from '{{imports.services}}/auth.service.generated';
 import type { AuthSession, AuthUser, ChangePasswordBody, LoginBody{{#if register}}, RegisterBody, VerifyEmailBody{{/if}}{{#if otp}}, SendOtpBody{{/if}}{{#if passwordReset}}, ResetPasswordBody{{/if}}{{#if apple}}, AppleBody{{/if}}{{#if social}}, SetPasswordBody{{/if}} } from '{{imports.services}}/auth.service.generated';
-import { authStorage } from '{{imports.services}}/authStorage.generated';
-import { refreshSessionOnce, adoptStoredAccessToken } from '{{imports.services}}/authRefresh.generated';
+import { asFailure, responseThunk } from '{{imports.services}}/api/common.generated';
+import { authStorage, refreshSession } from '{{imports.api}}/auth.generated';
+import { authExtension } from './auth.thunk';
 
-/** The interceptor rejects with a `LocalResponse`; anything else becomes one. */
-const failed = <T>(error: unknown): LocalResponse<T> =>
-  error && typeof error === 'object' && 'isSuccess' in error
-    ? (error as LocalResponse<T>)
-    : ({ isSuccess: false, data: null, uiMessage: '', errorData: { header: '', message: String(error), code: 0 } } as unknown as LocalResponse<T>);
+export type AuthResult<T> = LocalResponse<T> & { deniedKey?: string };
 
-async function keepSession(response: LocalResponse<AuthSession>, remember?: boolean): Promise<LocalResponse<AuthSession>> {
-  if (response.isSuccess && response.data) await authStorage.save(response.data.accessToken, response.data.refreshToken, remember);
-  return response;
+export interface AuthThunkHooks {
+  canSignIn?: (user: AuthUser) => string | null;
+  onSession?: (session: AuthSession, dispatch: Dispatch) => void;
+  onSignedOut?: (dispatch: Dispatch) => void;
 }
 
-/** `remember` (web): `localStorage` instead of `sessionStorage`; the phone always keeps the session. */
-export const login = createAsyncThunk('auth/login', async ({ remember, ...body }: LoginBody & { remember?: boolean }) => {
-  try {
-    return await keepSession(await service.login(body), remember);
-  } catch (error) {
-    return failed<AuthSession>(error);
-  }
-});
+const ended = <T>(deniedKey?: string): AuthResult<T> =>
+  ({ isSuccess: false, data: null, uiMessage: '', errorData: null, ...(deniedKey ? { deniedKey } : {}) }) as unknown as AuthResult<T>;
 
-/** Cold start: a stored session is checked once with `me` (an expired access token refreshes in the interceptor). */
-export const restoreSession = createAsyncThunk('auth/restoreSession', async () => {
-  const { accessToken, refreshToken } = await authStorage.read();
-  // Only a refresh token left (e.g. the access token was dropped): renew first.
-  const usable = accessToken || (refreshToken && (await refreshSessionOnce()));
-  if (!usable) return { isSuccess: false, data: null, uiMessage: '', errorData: null } as unknown as LocalResponse<AuthUser> & { accessToken: string | null };
-  if (accessToken) adoptStoredAccessToken(accessToken);
-  try {
-    return { ...(await service.me()), accessToken: (await authStorage.read()).accessToken };
-  } catch (error) {
-    return { ...failed<AuthUser>(error), accessToken: null };
-  }
-});
-
-export const logout = createAsyncThunk('auth/logout', async () => {
-  const { refreshToken } = await authStorage.read();
-  try {
-    if (refreshToken) await service.logout(refreshToken);
-  } catch {
-    // The local sign-out happens anyway.
-  }
-  await authStorage.clear();
-  return { isSuccess: true, data: null, uiMessage: '', errorData: null } as LocalResponse<null>;
-});
-
-/** The server revokes every session of the user: the slice signs out, sign in again with the new password. */
-export const changePassword = createAsyncThunk('auth/changePassword', async (body: ChangePasswordBody) => {
-  try {
-    const response = await service.changePassword(body);
-    if (response.isSuccess) await authStorage.clear();
+export function createAuthThunks({ canSignIn, onSession, onSignedOut }: AuthThunkHooks = {}) {
+  async function keepSession(response: AuthResult<AuthSession>, dispatch: Dispatch, remember?: boolean): Promise<AuthResult<AuthSession>> {
+    if (!response.isSuccess || !response.data) return response;
+    const deniedKey = canSignIn?.(response.data.user) ?? null;
+    if (deniedKey) {
+      service.logout(response.data.refreshToken).catch(() => undefined);
+      return ended(deniedKey);
+    }
+    await authStorage.save(response.data.accessToken, response.data.refreshToken, remember);
+    onSession?.(response.data, dispatch);
     return response;
-  } catch (error) {
-    return failed<null>(error);
   }
-});
+
+  async function signOut(dispatch: Dispatch): Promise<void> {
+    await authStorage.clear();
+    onSignedOut?.(dispatch);
+  }
+
+  const login = responseThunk('auth/login', async ({ remember, ...body }: LoginBody & { remember?: boolean }, { dispatch }) =>
+    keepSession(await service.login(body), dispatch, remember)
+  );
+
+  const restoreSession = responseThunk('auth/restoreSession', async (_: void, { dispatch }): Promise<AuthResult<AuthUser> & { accessToken: string | null }> => {
+    const { accessToken, refreshToken } = await authStorage.read();
+    const usable = accessToken || (refreshToken && (await refreshSession(dispatch)));
+    if (!usable) return { ...ended<AuthUser>(), accessToken: null };
+    try {
+      const response = await service.me();
+      const deniedKey = response.isSuccess && response.data ? (canSignIn?.(response.data) ?? null) : null;
+      if (deniedKey) {
+        await signOut(dispatch);
+        return { ...ended<AuthUser>(deniedKey), accessToken: null };
+      }
+      return { ...response, accessToken: (await authStorage.read()).accessToken };
+    } catch (error) {
+      return { ...asFailure<AuthUser>(error), accessToken: null };
+    }
+  });
+
+  const logout = responseThunk('auth/logout', async (_: void, { dispatch }) => {
+    const { refreshToken } = await authStorage.read();
+    if (refreshToken) await service.logout(refreshToken).catch(() => undefined);
+    await signOut(dispatch);
+    return { isSuccess: true, data: null, uiMessage: '', errorData: null } as AuthResult<null>;
+  });
+
+  // Sunucu şifre değişince bütün oturumları kapatır.
+  const changePassword = responseThunk('auth/changePassword', async (body: ChangePasswordBody, { dispatch }) => {
+    const response: AuthResult<null> = await service.changePassword(body);
+    if (response.isSuccess) await signOut(dispatch);
+    return response;
+  });
+
+  const changePasswordAndLogin = responseThunk(
+    'auth/changePasswordAndLogin',
+    async ({ email, remember = true, ...body }: ChangePasswordBody & { email: string; remember?: boolean }, { dispatch }) => {
+      const response = await dispatch(changePassword(body)).unwrap();
+      if (response.isSuccess) await dispatch(login({ email, password: body.newPassword, remember }));
+      return response;
+    }
+  );
 {{#if register}}
 
-export const register = createAsyncThunk('auth/register', async (body: RegisterBody) => {
-  try {
-    return await service.register(body);
-  } catch (error) {
-    return failed<null>(error);
-  }
-});
+  const register = responseThunk('auth/register', async (body: RegisterBody): Promise<AuthResult<null>> => service.register(body));
 
-export const verifyEmail = createAsyncThunk('auth/verifyEmail', async (body: VerifyEmailBody) => {
-  try {
-    return await keepSession(await service.verifyEmail(body));
-  } catch (error) {
-    return failed<AuthSession>(error);
-  }
-});
+  const verifyEmail = responseThunk('auth/verifyEmail', async (body: VerifyEmailBody, { dispatch }) => keepSession(await service.verifyEmail(body), dispatch));
 {{/if}}
 {{#if otp}}
 
-export const sendOtp = createAsyncThunk('auth/sendOtp', async (body: SendOtpBody) => {
-  try {
-    return await service.sendOtp(body);
-  } catch (error) {
-    return failed<null>(error);
-  }
-});
+  const sendOtp = responseThunk('auth/sendOtp', async (body: SendOtpBody): Promise<AuthResult<null>> => service.sendOtp(body));
 {{/if}}
 {{#if passwordReset}}
 
-export const forgotPassword = createAsyncThunk('auth/forgotPassword', async (email: string) => {
-  try {
-    return await service.forgotPassword(email);
-  } catch (error) {
-    return failed<null>(error);
-  }
-});
+  const forgotPassword = responseThunk('auth/forgotPassword', async (email: string): Promise<AuthResult<null>> => service.forgotPassword(email));
 
-export const resetPassword = createAsyncThunk('auth/resetPassword', async (body: ResetPasswordBody) => {
-  try {
-    return await service.resetPassword(body);
-  } catch (error) {
-    return failed<null>(error);
-  }
-});
+  const resetPassword = responseThunk('auth/resetPassword', async (body: ResetPasswordBody): Promise<AuthResult<null>> => service.resetPassword(body));
+
+  const resetPasswordAndLogin = responseThunk(
+    'auth/resetPasswordAndLogin',
+    async ({ remember = true, ...body }: ResetPasswordBody & { remember?: boolean }, { dispatch }) => {
+      const response = await dispatch(resetPassword(body)).unwrap();
+      if (response.isSuccess) await dispatch(login({ email: body.email, password: body.newPassword, remember }));
+      return response;
+    }
+  );
 {{/if}}
 {{#if google}}
 
-export const loginWithGoogle = createAsyncThunk('auth/loginWithGoogle', async (idToken: string) => {
-  try {
-    return await keepSession(await service.loginWithGoogle(idToken));
-  } catch (error) {
-    return failed<AuthSession>(error);
-  }
-});
+  const loginWithGoogle = responseThunk('auth/loginWithGoogle', async (idToken: string, { dispatch }) => keepSession(await service.loginWithGoogle(idToken), dispatch));
 {{/if}}
 {{#if apple}}
 
-export const loginWithApple = createAsyncThunk('auth/loginWithApple', async (body: AppleBody) => {
-  try {
-    return await keepSession(await service.loginWithApple(body));
-  } catch (error) {
-    return failed<AuthSession>(error);
-  }
-});
+  const loginWithApple = responseThunk('auth/loginWithApple', async (body: AppleBody, { dispatch }) => keepSession(await service.loginWithApple(body), dispatch));
 {{/if}}
 {{#if social}}
 
-/** The session stays; the slice marks `user.hasPassword`. */
-export const setPassword = createAsyncThunk('auth/setPassword', async (body: SetPasswordBody) => {
-  try {
-    return await service.setPassword(body);
-  } catch (error) {
-    return failed<null>(error);
-  }
-});
+  const setPassword = responseThunk('auth/setPassword', async (body: SetPasswordBody): Promise<AuthResult<null>> => service.setPassword(body));
 {{/if}}
 {{#if accountDelete}}
 
-export const deleteAccount = createAsyncThunk('auth/deleteAccount', async () => {
-  try {
-    const response = await service.deleteAccount();
-    if (response.isSuccess) await authStorage.clear();
+  const deleteAccount = responseThunk('auth/deleteAccount', async (_: void, { dispatch }) => {
+    const response: AuthResult<null> = await service.deleteAccount();
+    if (response.isSuccess) await signOut(dispatch);
     return response;
-  } catch (error) {
-    return failed<null>(error);
-  }
-});
+  });
 {{/if}}
+
+  return { {{thunkNames}} };
+}
+
+export type AuthBaseThunks = ReturnType<typeof createAuthThunks>;
+
+export interface AuthExtension {
+  hooks: AuthThunkHooks;
+  thunks: (base: AuthBaseThunks) => object;
+}
+
+const base = createAuthThunks(authExtension.hooks);
+
+// Parametresiz yazılmış `thunks` de çağrılabilsin diye arayüz tipiyle çağrılır; dönüş tipi K'dakidir.
+const custom = (authExtension.thunks as AuthExtension['thunks'])(base) as ReturnType<typeof authExtension.thunks>;
+
+export const authThunks = { ...base, ...custom };
+export type AuthThunks = typeof authThunks;
+export const { {{thunkNames}} } = base;

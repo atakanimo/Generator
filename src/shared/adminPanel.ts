@@ -43,7 +43,7 @@ export const ADMIN_PANEL_INFO: ProjectInfo = {
     { label: 'State', value: 'Redux Toolkit (tema, auth, loading); kaynak verisi TanStack Query (paket)' },
     { label: 'Navigasyon', value: 'react-router 7, menü = createAdminRoutes(resources) + elle sayfalar' },
     { label: 'Localization', value: 'i18next (tr / en) + adminBaseTexts' },
-    { label: 'HTTP', value: 'axios interceptor: token, loading, toast (react-toastify), 401 → çıkış' }
+    { label: 'HTTP', value: 'Ortak HTTP katmanı (services/api/*.generated.ts): token, loading, toast, 401 → refresh' }
   ],
   tree: [
     { depth: 0, name: 'package.json', owner: 'K', bootstrap: true },
@@ -53,13 +53,14 @@ export const ADMIN_PANEL_INFO: ProjectInfo = {
     { depth: 0, name: '.env.example', owner: 'K', bootstrap: true },
     { depth: 0, name: 'src/' },
     { depth: 1, name: 'App.tsx', owner: 'K', note: 'Provider, tema, AtaAdminProvider, router', bootstrap: true },
-    { depth: 1, name: 'config/app.ts', owner: 'K', note: 'ad, auth uçları, storage anahtarları', bootstrap: true },
+    { depth: 1, name: 'config/app.ts', owner: 'K', note: 'tema anahtarı, ana sayfa', bootstrap: true },
     { depth: 1, name: 'routes/', owner: 'K', note: 'routes.ts: sol menü sırası, ProtectedRoute', bootstrap: true },
     { depth: 1, name: 'layout/MainLayout.tsx', owner: 'K', note: 'AtaAdminLayout', bootstrap: true },
     { depth: 1, name: 'pages/', owner: 'K', note: 'Login, Dashboard', bootstrap: true },
-    { depth: 1, name: 'store/', owner: 'K', note: 'theme, auth, common slice', bootstrap: true },
+    { depth: 1, name: 'store/', owner: 'K', note: 'theme, common slice; auth.slice / auth.thunk (.generated = G)', bootstrap: true },
     { depth: 1, name: 'hooks/', owner: 'K', note: 'redux, useTheme, useCustomTranslation', bootstrap: true },
-    { depth: 1, name: 'services/', owner: 'K', note: 'api.ts interceptor, auth', bootstrap: true },
+    { depth: 1, name: 'services/api/', owner: 'G', note: 'ortak HTTP katmanı (asset sync); hooks.ts K', bootstrap: true },
+    { depth: 1, name: 'services/auth.service.generated.ts', owner: 'G', note: 'ortak auth uçları; auth.service.ts K', bootstrap: true },
     { depth: 1, name: 'theme/', owner: 'K', note: 'palet, tipografi (light / dark)', bootstrap: true },
     { depth: 1, name: 'i18n/', owner: 'K', note: 'locales/tr · en', bootstrap: true },
     { depth: 1, name: 'components/', owner: 'K', note: 'Toast, LoadingOverlay…', bootstrap: true },

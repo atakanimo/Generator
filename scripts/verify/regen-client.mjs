@@ -19,7 +19,7 @@ import { dirname, join, relative } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
-const varlik = '/Users/atakanatabey/Projects/VarlikALL/Varlik360';
+const varlik = '/Users/atakanatabey/Projects/AtaAllWorkspace/Varlik360';
 const mobile = join(varlik, 'apps/mobile');
 const copy = join(mobile, '.gen-client-check');
 const review = join(root, 'scripts/verify/out/client');
@@ -80,19 +80,45 @@ const run = () => {
   const common = { clientRoot: copy, preset: b.REDUX_RN_PRESET, allModels, backendRoot: varlik, baseUrl: '/api', now };
   const parts = [
     // Shared auth layer (docs/backend/auth.md), every module: the AsyncStorage variant must compile in the mobile app.
-    b.generateClientModules({ ...common, models: models.filter(m => !NO_SLICE.has(m.entityName)), auth: { modules: AUTH_MODULES, prefix: '/api', storagePrefix: 'varlik' } }),
+    // Auth: the mobile is not on the shared auth yet (docs/backend/auth.md); its layer is checked below in its own folder.
+    b.generateClientModules({ ...common, models: models.filter(m => !NO_SLICE.has(m.entityName)), auth: false }),
     b.generateClientModules({ ...common, models: models.filter(m => NO_SLICE.has(m.entityName)), layers: { slice: false }, auth: false })
   ];
   return { files: parts.flatMap(p => p.files), modules: parts.flatMap(p => p.modules), warnings: parts.flatMap(p => p.warnings), notes: parts.flatMap(p => p.notes) };
 };
 const first = run();
 for (const w of first.warnings) console.log(`  warn: ${w}`);
-const AUTH_FILES = ['services/auth.service', 'services/authStorage', 'services/authRefresh', 'thunks/auth.thunk', 'slices/auth.slice'];
-for (const f of AUTH_FILES) {
-  const [layer, name] = f.split('/');
-  check(existsSync(join(copy, b.REDUX_RN_PRESET.dirs[layer], `${name}.generated.ts`)), `auth: ${name}.generated.ts missing`);
+// Shared auth layer (every module) in an empty client: G files every time, K pairs once, idempotent (docs/backend/auth.md).
+{
+  const authRoot = join(copy, '..', '.gen-client-auth');
+  rmSync(authRoot, { recursive: true, force: true });
+  const options = { modules: AUTH_MODULES, prefix: '/api', storagePrefix: 'varlik' };
+  const once = b.generateClientAuthFiles(authRoot, b.REDUX_RN_PRESET, options, now);
+  const AUTH_FILES = ['services/auth.service', 'thunks/auth.thunk', 'slices/auth.slice'];
+  for (const f of AUTH_FILES) {
+    const [layer, name] = f.split('/');
+    for (const file of [`${name}.generated.ts`, `${name}.ts`]) check(existsSync(join(authRoot, b.REDUX_RN_PRESET.dirs[layer], file)), `auth: ${file} missing`);
+  }
+  const thunk = readFileSync(join(authRoot, b.REDUX_RN_PRESET.dirs.thunks, 'auth.thunk.generated.ts'), 'utf8');
+  check(/export function createAuthThunks/.test(thunk) && /loginWithApple/.test(thunk) && /deleteAccount/.test(thunk), 'auth: thunk factory without every module');
+  // G, K uzantısını içine alır; K generated'dan yalnız tip alır (docs/backend/auth.md).
+  check(/from '\.\/auth\.thunk'/.test(thunk) && /export const authThunks/.test(thunk), 'auth: G thunk does not wrap auth.thunk.ts');
+  const kFiles = ['services/auth.service.ts', 'thunks/auth.thunk.ts', 'slices/auth.slice.ts'].map(f => {
+    const [layer, name] = f.split('/');
+    return readFileSync(join(authRoot, b.REDUX_RN_PRESET.dirs[layer], name), 'utf8');
+  });
+  check(kFiles.every(k => !/^import (?!type)[^\n]*\.generated'/m.test(k)), 'auth: K file imports values from a generated file');
+  check(!existsSync(join(authRoot, 'src/services/authStorage.generated.ts')), 'auth: retired authStorage.generated.ts written');
+  check(existsSync(join(authRoot, b.REDUX_RN_PRESET.dirs.services, 'api/common.generated.ts')), 'auth: services/api/common.generated.ts missing');
+  check(!existsSync(join(authRoot, b.REDUX_RN_PRESET.dirs.services, 'common.generated.ts')), 'auth: old services/common.generated.ts written');
+  const twice = b.generateClientAuthFiles(authRoot, b.REDUX_RN_PRESET, options, now);
+  check(twice.files.every(f => f.action === 'unchanged' || f.action === 'skipped-exists'), 'auth: second run wrote files');
+  const admin = b.generateClientAuthFiles(join(authRoot, 'admin'), b.REDUX_WEB_PRESET, { ...options, admin: true }, now);
+  const adminThunk = readFileSync(join(authRoot, 'admin', b.REDUX_WEB_PRESET.dirs.thunks, 'auth.thunk.ts'), 'utf8');
+  check(/auth\.adminOnly/.test(adminThunk) && !/loginWithGoogle/.test(adminThunk), 'auth: admin thunk is not core + admin-only');
+  check(admin.files.length === 7, `auth: admin files ${admin.files.length}`);
+  rmSync(authRoot, { recursive: true, force: true });
 }
-check(/AsyncStorage/.test(readFileSync(join(servicesDir, 'authStorage.generated.ts'), 'utf8')), 'auth: mobile token storage is not AsyncStorage');
 
 // Operations = normal API surface; nothing else is generated.
 for (const ctx of first.modules) {
@@ -106,7 +132,7 @@ for (const ctx of first.modules) {
   if (ctx.hasOps) {
     const thunks = readFileSync(thunkFile, 'utf8');
     const names = { list: `fetch${ctx.entity}List`, getOne: `fetch${ctx.entity}ById`, create: `create${ctx.entity}`, update: `update${ctx.entity}`, delete: `delete${ctx.entity}` };
-    for (const [op, name] of Object.entries(names)) check(new RegExp(`const ${name} = createAsyncThunk`).test(thunks) === expected.includes(op), `${ctx.entity}: thunk ${name}`);
+    for (const [op, name] of Object.entries(names)) check(new RegExp(`const ${name} = responseThunk`).test(thunks) === expected.includes(op), `${ctx.entity}: thunk ${name}`);
   }
 }
 
@@ -201,7 +227,7 @@ await build({
   entryPoints: [join(copy, 'src/__clientRuntimeCheck.ts')], bundle: true, platform: 'node', format: 'esm', outfile: runtimeOut, logLevel: 'silent',
   nodePaths: [join(mobile, 'node_modules'), join(varlik, 'node_modules')],
   plugins: [{ name: 'host-stubs', setup(api) {
-    api.onResolve({ filter: /^@\/services\/api$/ }, () => ({ path: 'api', namespace: 'stub' }));
+    api.onResolve({ filter: /^@\/services\/api\/api\.generated$/ }, () => ({ path: 'api', namespace: 'stub' }));
     api.onResolve({ filter: /^@\/types$/ }, () => ({ path: 'types', namespace: 'stub' }));
     api.onResolve({ filter: /^@\// }, a => ({ path: join(copy, 'src', a.path.slice(2)) + '.ts' }));
     api.onLoad({ filter: /^api$/, namespace: 'stub' }, () => ({ contents: 'export const API = async cfg => globalThis.__clientFakeApi(cfg);', loader: 'js' }));

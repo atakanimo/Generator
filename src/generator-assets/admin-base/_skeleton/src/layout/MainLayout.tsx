@@ -1,4 +1,4 @@
-// Admin shell: @atakanimo/ata-admin-base `AtaAdminLayout` (Varlik360, SharedFrame and StockExchange admin ile aynı).
+// Admin kabuğu: @atakanimo/ata-admin-base `AtaAdminLayout` (sol menü, üst bar, çıkış, tema / dil).
 import React from 'react';
 import { AdminPanelSettings } from '@mui/icons-material';
 import { Typography } from '@mui/material';
@@ -6,8 +6,8 @@ import { useTranslation } from 'react-i18next';
 import { AtaAdminLayout } from '@atakanimo/ata-admin-base';
 import { useAppDispatch, useAppSelector } from '@/hooks';
 import { GetAuthState, GetThemeState } from '@/store';
-import { setDrawerOpen, toggleTheme } from '@/store/slices/themeSlice';
-import { logout } from '@/store/slices/authSlice';
+import { setDrawerOpen, toggleTheme } from '@/store/slices/theme.slice';
+import { logout } from '@/store/thunks/auth.thunk.generated';
 import { ProtectedRoutes, routeTitle } from '@/routes/routes';
 import { getAppEnv } from '@/config/env';
 import { toggleLanguage } from '@/i18n';

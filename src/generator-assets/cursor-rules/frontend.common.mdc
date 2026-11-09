@@ -1,0 +1,154 @@
+---
+description: Admin, web ve mobil ortak — klasör ağacı, dosya adları, HTTP katmanı (services/api), istemci auth (G sarar K)
+globs:
+  - apps/admin/**/*.{ts,tsx}
+  - apps/web/**/*.{ts,tsx}
+  - apps/mobile/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Frontend — ortak (admin, web, mobil)
+
+Admin, web ve mobilde aynı olan kurallar. Uygulamaya özel kısım `frontend.admin.mdc`, `frontend.web.mdc`, `frontend.mobile.mdc`. Generator'ın bir çıktısı olan yerde (admin iskeleti, veri katmanı, `services/api/`, auth) Generator'ın adı ve yeri geçerlidir.
+
+## Klasör ağacı
+
+```
+src/
+  App.tsx                 # kök bileşen (provider'lar, router)
+  main.tsx                # web/admin giriş (mobilde kökteki index.js)
+  index.css               # web/admin tek global stil
+  assets/                 # images/ icons/ fonts/
+  components/
+    index.ts              # barrel
+    Core/<Ad>/index.tsx   # alan bilgisi taşımayan temel UI: Button, Text, Input, Toast, Loader, Modal…
+    <alan>/<Ad>.tsx       # birden çok sayfanın kullandığı alan bileşeni
+  config/
+    app.ts                # uygulama sabitleri: ad, storage anahtarları, ana sayfa
+    env.ts                # ortam değişkenleri ve sürüm
+    <konu>.ts             # konu sabitleri
+  helper/                 # index.ts + React'sız saf fonksiyonlar (storage, date, format, validation, download…)
+  hooks/                  # index.ts (useAppDispatch, useAppSelector, useCustomTranslation, useTheme) + use<Ad>.ts
+  i18n/                   # index.ts + locales/tr.ts (tip kaynağı), en.ts
+  layout/<Ad>Layout.tsx
+  routes/
+    routes.ts             # route / menü listesi
+    index.tsx             # router (web/admin) ya da kök navigator (mobil)
+    guards/               # ProtectedRoute, RequireAuth, RequirePlan, RequireAdmin
+    <Ad>Stack/            # yalnız mobil: AuthStack/, MainStack/
+  services/
+    api/                  # HTTP katmanı (aşağıda)
+    <kaynak>.service.ts (+ .service.generated.ts)
+  store/
+    index.ts              # store, RootState, AppDispatch
+    slices/<kaynak>.slice.ts (+ .slice.generated.ts)
+    thunks/<kaynak>.thunk.ts (+ .thunk.generated.ts)
+  theme/                  # index.ts, palette.ts, typography.ts
+  types/                  # index.ts (barrel `@/types`), API/ (response.generated.ts, <kaynak>.ts), navigation.ts (mobil)
+  pages/ | screens/       # serbest alan
+  modules/                # yalnız admin: Generator'ın entity config'leri
+```
+
+## Klasör kuralları
+
+- Klasör adları her uygulamada aynıdır: `i18n/` (kökte `locales/` değil), `theme/` (`styles/` değil), `layout/` (`layouts/` değil), `config/` (`constants/` değil), `helper/` (`utils/`, `lib/`, `validation/` değil), `components/Core/` (`components/ui/` değil), `routes/guards/` (`routes/components/` değil).
+- Ortam ve sürüm `config/env.ts`; saf yardımcı `helper/`; form şeması `helper/validation.ts`. Sabit bileşen ya da helper içine gömülmez; `config/app.ts` ya da `config/<konu>.ts`'e girer.
+- `src/` kökünde yalnız `App.tsx`, `main.tsx`, `index.css`, `vite-env.d.ts`. `.d.ts` bildirimleri `types/` altındadır.
+- `components`, `helper`, `hooks`, `types`, `config` birer `index.ts` barrel'ı taşır. Dışarıdan import barrel'dan (`@/hooks`, `@/helper`, `@/components`); klasör içinde göreli yol. Store'un tek girişi `@/store`. `../../../` zinciri yok.
+- Hook `hooks/` altındadır; yalnız tek sayfanın kullandığı hook o sayfanın klasöründe kalabilir.
+- Bileşen: temel UI `components/Core/<Ad>/index.tsx` (alt parçası aynı klasörde), paylaşılan alan bileşeni `components/<alan>/<Ad>.tsx`, tek sayfaya ait bileşen sayfa klasöründe. Kök `components/` altında tek başına `.tsx` yok.
+- `helper/` React'sızdır: JSX, hook ve Redux yok. Bir dosya bir konu.
+- API tipleri `types/API/` altındadır (OpenAPI çıktısı `types/API/openapi.generated.ts`); `src/api/` yok. Prop tipi bileşen dosyasında kalır.
+- Store: slice'lar `store/slices/`, thunk'lar `store/thunks/`; slice içinde thunk tanımlanmaz. Thunk yardımcıları (`responseThunk`, `asFailure`, `keepPopulated`) `services/api/common.generated.ts`'ten gelir, projeye kopyalanmaz. Başlangıç verisi slice içinde ya da `store/slices/<kaynak>.initial.ts`.
+- Admin'de `store/thunks/` yalnız auth içindir; slice'lar yalnız `auth`, `common`, `theme`. CRUD admin-base'den, CRUD dışı uç `services/<x>.service.ts` + TanStack Query.
+- Route: liste (admin'de menü sırası) `routes/routes.ts`, router `routes/index.tsx`, guard `routes/guards/`. Generator'ın route çıktısı `routes/routes.generated.ts`. Menü tanımı layout'a değil `routes/routes.ts`'e girer.
+- Tema: `theme/index.ts` tema nesnesi, `palette.ts` renkler, `typography.ts` yazı ölçekleri; uygulamaya özel CSS `theme/<ad>.css`, `index.css`'ten import edilir.
+- i18n: `i18n/index.ts` kurulum; çeviriler `i18n/locales/<dil>.ts` (`tr.ts` tip kaynağı, diğerleri `typeof tr`). JSON locale yok. Bileşende `useCustomTranslation`.
+- Sayfa: web / admin `pages/<Ad>/index.tsx`, mobil `screens/<Grup>/<Ad>/index.tsx` (`Auth`, `Main`, `Common`, `Onboarding`). Sayfaya özel bileşen, hook ve yardımcı aynı klasörde. `pages/XxxPage.tsx` gibi düz dosya yok.
+- Şablondan kalan dosya (`assets/react.svg`, `vite.svg`, kullanılmayan `App.css`) ve `.DS_Store` repoda durmaz.
+
+## Dosya adları
+
+| Tür | Biçim | Örnek |
+| --- | --- | --- |
+| Bileşen dosyası | PascalCase `.tsx` | `EventCard.tsx` |
+| Bileşen klasörü | PascalCase + `index.tsx` | `Core/Button/index.tsx` |
+| Sayfa / ekran klasörü | PascalCase, `Page` / `Screen` soneki yok | `pages/EventDetails/index.tsx` |
+| Hook | `use` + PascalCase `.ts` (JSX dönüyorsa `.tsx`) | `useEventQrKit.ts` |
+| Helper, config, tip | camelCase `.ts` | `storage.ts` |
+| Servis / slice / thunk | `<kaynak>.service.ts`, `<kaynak>.slice.ts`, `<kaynak>.thunk.ts` | `events.thunk.ts` |
+| Generator çıktısı | `<ad>.generated.ts` | `events.slice.generated.ts` |
+| Test | kaynakla aynı ad + `.test.ts(x)`, kaynağın yanında | `storage.test.ts` |
+| Diğer klasörler | camelCase ya da küçük harf | `qrkit/`, `slices/` |
+
+- `<kaynak>` backend kaynağının camelCase çoğul adıdır; servis, slice ve thunk'ta aynıdır (`eventTypes.*`). camelCase türevleri (`authSlice.ts`, `*.services.ts`, `*Thunks.ts`) yok.
+- `helper/` dosyalarında sonek yok (`storage.ts`; `asyncStorage.helper.ts` değil). Kısaltma tek kelime gibi yazılır (`ApiSetup`, `QrKit`); `types/API` istisnadır.
+- Aynı işin adı her projede aynıdır: saklama `helper/storage.ts`, tarih `helper/date.ts`, biçimleme `helper/format.ts`, indirme `helper/download.ts`, form şeması `helper/validation.ts`, ortam `config/env.ts`, renk `theme/palette.ts`, yazı ölçeği `theme/typography.ts`, çeviri `hooks/useTranslation.ts` (`useCustomTranslation`).
+- Bileşen, sayfa ve ekran `export default`; barrel'da adlandırılmış olarak yeniden açılır. Hook, helper, servis ve tip adlandırılmış export.
+- Generator'ın yazdığı dosya `.generated.ts` sonekini taşır ve elle düzenlenmez. Elle yazılan eşi aynı adla, soneksiz durur.
+
+## HTTP katmanı (`services/api/`)
+
+Admin, web ve mobilde aynıdır. `hooks.ts` dışındaki her dosya Generator'ındır (asset sync yazar), elle düzenlenmez: değişiklik Generator'da yapılır, `node <Generator>/scripts/assets-sync.mjs <uygulama> --apply-all` ile gelir.
+
+| Dosya | İçerik |
+| --- | --- |
+| `api.generated.ts` | Tek axios örneği `API`: token, dil, loading, mesajlar, 401 → refresh |
+| `platform.generated.ts` | Tarayıcı (admin, web) ya da mobil adaptörü; `tokenStore` (tarayıcıda "Beni hatırla" → `localStorage`, değilse `sessionStorage`) |
+| `auth.generated.ts` | Oturum köprüsü: `authStorage` (`<önek>.access_token` / `refresh_token`), tek seferlik refresh |
+| `common.generated.ts` | `PaginatedList`, `RequestOptions`, `requestFlags`, `keepPopulated(All)`, `asFailure`, `responseThunk` |
+| `hooks.ts` (K) | Projeye özel HTTP davranışı: `apiHooks = { onRequest, onResponseHeaders, onError }` |
+| `types/API/response.generated.ts` | `LocalResponse`, `ErrorData`, `ApiHooks`, `ApiAuth` |
+
+- İkinci `axios.create`, `request.ts` gibi ikinci istek yardımcısı ya da ayrı token yardımcısı yok. Token'ı yalnız bu katman okur ve yazar. Store döngüsü `injectStore(store)` ile çözülür.
+- Uygulama `@/store/slices/common.slice`'ta `setCommonLoading(boolean)` sağlar; global loading'i yalnız `api.generated.ts` açar / kapatır (sayaç), uygulama yalnız okur.
+- Dil: her istekte yalnız `Accept-Language` (i18next'in kullandığı kısa kod). `lang` / `x-lang` / `?lang=` yok.
+- Başarı toast'ı: dolu `uiMessage`, GET / HEAD, `/get-all`, `/me` ve `skipSuccessToast` hariç; mobil adaptör başarı mesajı göstermez. Hata mesajı bir kez, interceptor'da; `skipErrorToast` ya da `apiHooks.onError` → `true` ise yok.
+- 2xx ama `isSuccess: false` hata olarak reddedilir. İptal sessizdir. Dosya cevabı (`responseType: 'blob'`) `LocalResponse<Blob>` + `fileName`.
+- 401: auth ucu değilse tek seferlik refresh, istek bir kez tekrar; oturum bittiyse uçuştaki bütün istekler iptal, mesaj bir kez. Ağ hatasında oturum kalır.
+- `skipLoading`, `skipSuccessToast`, `skipErrorToast` axios config bayrağıdır (header değil); servis `requestFlags(options)` ile yazar.
+- Varsayılan zaman aşımı 60 sn; uzun süren uç kendi isteğinde `timeout` verir.
+
+```ts
+interface ErrorData { header: string; message: string; code: number; field?: string }
+interface LocalResponse<T> {
+  isSuccess: boolean; data: T; uiMessage: string; errorData: ErrorData | null;
+  statusCode?: number; traceId?: string; fileName?: string;
+}
+```
+
+Sunucu cevabı zaten bu şekildedir; arada çeviren katman (zarf açma, `meta` → sayfalama) yazılmaz. Düzleştirilmiş alan (`uiError`, `uiErrorCode`) yok: `errorData.message`, `.code`, `.field`.
+
+## Auth (G sarar K)
+
+Auth Generator'dandır: `node <Generator>/scripts/host.mjs client-auth <host> <uygulama>`. G her generate'te yeniden yazılır; K bir kez yazılır ve projenindir.
+
+| Dosya | Sahip | İçerik |
+| --- | --- | --- |
+| `services/auth.service.generated.ts` | G | Tipler (`AuthUser`, `AuthSession`, gövdeler), `AUTH_ENDPOINTS`, uç fonksiyonları; sonunda `export * from './auth.service'` |
+| `services/auth.service.ts` | K | Projeye özel auth uçları |
+| `store/thunks/auth.thunk.generated.ts` | G | Ortak thunk'lar + `authThunks` (ortak + özel) |
+| `store/thunks/auth.thunk.ts` | K | `authExtension = { hooks: { canSignIn?, onSession?, onSignedOut? }, thunks: base => ({ … }) } satisfies AuthExtension` |
+| `store/slices/auth.slice.generated.ts` | G | `authReducer`, `authActions`, `GetAuthState`, `authSelectors`, `sessionChanged`, `tokenAdopted`, `clearSession`, `AuthState` |
+| `store/slices/auth.slice.ts` | K | `authSliceExtension = { initialState, reducers, extraReducers: (builder, thunks) => …, selectors } satisfies AuthSliceExtension` |
+
+- Projede herkes yalnız `.generated` dosyalarından import eder. K'yı yalnız kendi G'si import eder; K, G'den yalnız tip alır.
+- Ayrı `account.*` katmanı, ayrı oturum slice'ı ya da selector yok. Projeye özel auth (KVKK onayı, profil alanı, plan bilgisi) auth'un K dosyalarına girer. Oturum durumu `GetAuthState` (`user`, `isAuthenticated`, `checking`, K'nın ek alanları).
+- Ortak thunk'lar: `login`, `restoreSession`, `logout`, `changePassword`, `changePasswordAndLogin` + modüllere göre `register`, `verifyEmail`, `sendOtp`, `forgotPassword`, `resetPassword`, `resetPasswordAndLogin`, `loginWithGoogle`, `loginWithApple`, `setPassword`, `deleteAccount`. Hepsi fulfilled `LocalResponse` döner.
+- Özel thunk `responseThunk` ile yazılır; ortak thunk'lar `thunks(base)` ile gelir. Ortak thunk için `addMatcher(isAnyOf(...))` (case'i G'de var), özel thunk için `addCase`.
+- Ek state oturum kapanınca `initialState`'e döner; bunu G yapar.
+- Admin: yalnız temel akışlar; `canSignIn` yalnız `admin` rolünü kabul eder; token öneki `<proje>admin`. Auth Redux'ta kalır, TanStack'e taşınmaz.
+- UI üretilmez: ekranlar ve route guard'lar projenindir.
+
+```ts
+import { login, authThunks } from '@/store/thunks/auth.thunk.generated';
+import { authActions, GetAuthState } from '@/store/slices/auth.slice.generated';
+
+const { acceptDocumentAsync } = authThunks; // özel thunk
+const { user, checking } = useAppSelector(GetAuthState);
+```
+
+Root reducer: `auth: authReducer` (`./slices/auth.slice.generated`).
+
+## Bu projeye özel
+<!-- rules-sync: bu satırın altı projeye aittir -->

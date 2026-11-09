@@ -5,16 +5,14 @@ import { AtaResponse } from '@core/response/response.helper';
 import { adminAuthMiddleware, authMiddleware } from '@middlewares';
 import * as authService from './auth.service';
 import * as S from './auth.schema';
-
-// <custom-imports>
-// </custom-imports>
+import { mapCustomAuthRoutes } from './auth.routes.custom';
 
 /** `/api/auth` (docs/backend/auth.md "Sözleşme"). Created once by the Generator: edit freely. */
 const router: Router = express.Router();
 
 const client = (req: Request): authService.ClientInfo => ({ userAgent: req.get('user-agent') ?? undefined, ip: req.ip });
 
-/** Express 4 does not catch a rejected handler: hand the error to `errorHandler` (500 envelope). */
+/** Express 4 does not catch a rejected handler: hand the error to `errorHandler` (500 contract body). */
 const h =
   (fn: (req: Request, res: Response) => Promise<void>) =>
   (req: Request, res: Response, next: NextFunction): void => {
@@ -93,7 +91,6 @@ router.delete('/account', authMiddleware, h(async (req, res) => {
 }));
 // @endif
 
-// <custom-routes>
-// </custom-routes>
+mapCustomAuthRoutes(router);
 
 export default router;

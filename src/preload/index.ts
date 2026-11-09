@@ -10,7 +10,7 @@ import type {
 import type { NormalizedModel } from '../shared/normalizedModel.js';
 import type { ModelDraft } from '../shared/modelDraft.js';
 import type { BackendStack, HostDatabase } from '../shared/backendDatabase.js';
-import type { AuthBootstrapOptions } from '../shared/authModules.js';
+import type { AuthBootstrapOptions, AuthModule } from '../shared/authModules.js';
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
@@ -91,6 +91,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     bootstrapPython: (root: string, app: string, auth: AuthBootstrapOptions) => ipcRenderer.invoke('project:bootstrapPython', { root, app, auth }),
     bootstrapExpress: (root: string, app: string, auth: AuthBootstrapOptions) => ipcRenderer.invoke('project:bootstrapExpress', { root, app, auth }),
     getAuthDefaults: () => ipcRenderer.invoke('project:getAuthDefaults'),
+    getPythonAuthSettings: (root: string) => ipcRenderer.invoke('project:getPythonAuthSettings', { root }),
+    setPythonAuthModules: (root: string, modules: AuthModule[], appName: string, apply: boolean) =>
+      ipcRenderer.invoke('project:setPythonAuthModules', { root, modules, appName, apply }),
     bootstrapAdmin: (root: string, app: string, stack: BackendStack) => ipcRenderer.invoke('project:bootstrapAdmin', { root, app, stack }),
     previewPythonImport: (projectPath: string, filePath: string, options?: { className?: string; report?: boolean; allowRemote?: boolean }) =>
       ipcRenderer.invoke('project:previewPythonImport', { projectPath, filePath, options }),
