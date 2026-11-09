@@ -1,6 +1,4 @@
 {{header}}
-// Auth thunk'ları: ortak olanlar + `auth.thunk.ts`'teki hook'lar ve özel thunk'lar.
-// Hepsi fulfilled `LocalResponse` döner.
 import type { Dispatch } from '@reduxjs/toolkit';
 import type { LocalResponse } from '{{imports.localResponse}}';
 import * as service from '{{imports.services}}/auth.service.generated';
@@ -66,7 +64,6 @@ export function createAuthThunks({ canSignIn, onSession, onSignedOut }: AuthThun
     return { isSuccess: true, data: null, uiMessage: '', errorData: null } as AuthResult<null>;
   });
 
-  // Sunucu şifre değişince bütün oturumları kapatır.
   const changePassword = responseThunk('auth/changePassword', async (body: ChangePasswordBody, { dispatch }) => {
     const response: AuthResult<null> = await service.changePassword(body);
     if (response.isSuccess) await signOut(dispatch);
@@ -139,7 +136,6 @@ export interface AuthExtension {
 
 const base = createAuthThunks(authExtension.hooks);
 
-// Parametresiz yazılmış `thunks` de çağrılabilsin diye arayüz tipiyle çağrılır; dönüş tipi K'dakidir.
 const custom = (authExtension.thunks as AuthExtension['thunks'])(base) as ReturnType<typeof authExtension.thunks>;
 
 export const authThunks = { ...base, ...custom };

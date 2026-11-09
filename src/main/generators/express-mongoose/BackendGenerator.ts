@@ -800,7 +800,8 @@ export class BackendGenerator extends BaseGenerator {
     try {
       const readResult = safeReadFile(appFile);
       if (!readResult.success || !readResult.content) throw new Error(`Failed to read ${appFile}`);
-      const lines = readResult.content.split('\n');
+      const eol = readResult.content.includes('\r\n') ? '\r\n' : '\n';
+      const lines = readResult.content.split(eol);
       const lastMount = this.findLastAppUseIndex(lines);
       if (lastMount === -1) throw new Error('No app.use(...) router mount to add the route after');
       const routeFile = `${moduleName}/${moduleName}.routes${kind === 'admin' ? '.admin' : ''}`;
@@ -808,7 +809,7 @@ export class BackendGenerator extends BaseGenerator {
       const indent = /^\s*/.exec(lines[lastMount])?.[0] ?? '';
       lines.splice(lastMount + 1, 0, `${indent}app.use('${mountPath}', ${variable});`);
       lines.splice(this.findLastImportIndex(lines) + 1, 0, `import ${variable} from '${prefix}${routeFile}';`);
-      safeWriteFile(appFile, lines.join('\n'), { createBackup: false });
+      safeWriteFile(appFile, lines.join(eol), { createBackup: false });
       this.logInfo('Route mounted', { moduleName, kind, mountPath, appFile });
     } catch (error) {
       this.logError('Failed to mount route', { appFile, moduleName, kind, error: error instanceof Error ? error.message : 'Unknown error' });

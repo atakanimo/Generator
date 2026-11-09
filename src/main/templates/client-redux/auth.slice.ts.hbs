@@ -1,4 +1,3 @@
-// Auth slice'ının projeye özel kısmı. Generated dosyadan yalnız tip import edin.
 import type { AuthSliceExtension } from './auth.slice.generated';
 
 export type AuthExtraState = object;
@@ -6,7 +5,6 @@ export type AuthExtraState = object;
 export const authSliceExtension = {
   initialState: {} as AuthExtraState,
   reducers: {},
-  // Ortak thunk'lar için `addMatcher(isAnyOf(thunks.login.fulfilled, …))`, özeller için `addCase` (önce case'ler).
   extraReducers: () => {},
   selectors: {}
 } satisfies AuthSliceExtension;

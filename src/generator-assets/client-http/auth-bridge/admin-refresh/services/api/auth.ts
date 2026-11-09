@@ -1,4 +1,3 @@
-// Oturum köprüsü: access token'ı ve 401'deki refresh'i api.ts'e verir.
 import axios from 'axios';
 import type { ApiAuth } from '@/types';
 import { getTokenFromStorage } from '@/helper';
@@ -12,7 +11,6 @@ const tokenOf = (state: unknown) => (state as AuthState | undefined)?.auth?.toke
 const apiAuth: ApiAuth = {
   getAccessToken: state => tokenOf(state) || getTokenFromStorage(APP_CONFIG.storage.token),
   hasSession: state => Boolean(tokenOf(state)),
-  // Token storage'dan okunur (başka sekme yenilemiş olabilir); interceptor'sız axios, ağ hatasında oturum kalır.
   refreshSessionOnce: async dispatch => {
     const { sessionRefreshed, tokenAdopted, clearSession } = await import('@/store/slices/auth.slice');
     const sent = getTokenFromStorage(APP_CONFIG.storage.refreshToken);
@@ -25,7 +23,6 @@ const apiAuth: ApiAuth = {
       dispatch(sessionRefreshed(res.data.data) as never);
       return true;
     } catch (error) {
-      // Başka sekme aynı anda yeniledi: onun token'ları storage'da.
       const stored = getTokenFromStorage(APP_CONFIG.storage.refreshToken);
       const access = getTokenFromStorage(APP_CONFIG.storage.token);
       if (stored && access && stored !== sent) {

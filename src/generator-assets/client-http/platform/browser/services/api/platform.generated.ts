@@ -1,5 +1,4 @@
-// Tarayıcı platform adaptörü: API adresi, mesajlar ve token saklama.
-import { showError, showSuccess } from '@/components';
+import { showError, showSuccess } from '@/components/Core/Toast';
 import type { ErrorData } from '@/types';
 
 export const BASE_URL: string | undefined = import.meta.env.VITE_API_BASE_URL || undefined;
@@ -12,12 +11,10 @@ const safe = <T>(fn: () => T, fallback: T): T => {
   try {
     return fn();
   } catch {
-    // Gizli pencere / engelli storage: oturum yalnız bellekte.
     return fallback;
   }
 };
 
-/** `persistent` → `localStorage` ("Beni hatırla"), değilse `sessionStorage`. */
 export const tokenStore = {
   get: async (key: string): Promise<string | null> => safe(() => localStorage.getItem(key) ?? sessionStorage.getItem(key), null),
   set: async (key: string, value: string, persistent: boolean): Promise<void> =>

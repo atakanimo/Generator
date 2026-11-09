@@ -1,6 +1,4 @@
 {{header}}
-// Auth slice: oturum (kullanıcı, access token, açılış kontrolü) + `auth.slice.ts`'teki ek state,
-// reducer, case ve selector'ler.
 import { createSlice, type ActionReducerMapBuilder, type PayloadAction } from '@reduxjs/toolkit';
 import type { AuthUser } from '{{imports.services}}/auth.service.generated';
 import { authThunks, type AuthThunks } from '{{thunksImport}}/auth.thunk.generated';

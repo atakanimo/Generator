@@ -1,5 +1,4 @@
 {{header}}
-// Generated servis, thunk ve slice'ların ortak tipleri ve yardımcıları.
 import { createAsyncThunk, type GetThunkAPI } from '@reduxjs/toolkit';
 import type { LocalResponse } from '{{localResponse}}';
 
@@ -24,27 +23,23 @@ export type RequestOptions = {
   headers?: Record<string, string>;
 };
 
-/** `read` (list / getOne): başarı mesajı varsayılan olarak kapalı. */
 export const requestFlags = (options?: RequestOptions, read = false) => ({
   ...(options?.skipLoading ? { skipLoading: true } : {}),
   ...((options?.skipSuccessToast ?? read) ? { skipSuccessToast: true } : {}),
   ...(options?.headers ? { headers: options.headers } : {})
 });
 
-/** Create / update sonrası ilişki: id değişmediyse populate edilmiş nesne kalır, değiştiyse sonraki okumaya kadar `{ id }`. */
 export const keepPopulated = (prev: { id: string } | null | undefined, id: string | null | undefined) =>
   id == null ? id : prev?.id === id ? prev : { id };
 
 export const keepPopulatedAll = (prev: Array<{ id: string }> | null | undefined, ids: string[] | null | undefined) =>
   ids == null ? ids : ids.map(id => prev?.find(p => p.id === id) ?? { id });
 
-/** Reddedilen istek (`LocalResponse`) olduğu gibi, başka hata `isSuccess: false` cevaba çevrilir. */
 export const asFailure = <T>(error: unknown): LocalResponse<T> =>
   error && typeof error === 'object' && 'isSuccess' in error
     ? (error as LocalResponse<T>)
     : ({ isSuccess: false, data: null, uiMessage: '', errorData: { header: '', message: String(error), code: 0 } } as unknown as LocalResponse<T>);
 
-/** Hata da fulfilled döner: sayfa `unwrap()` sonrası yalnız `isSuccess`'e bakar. */
 export const responseThunk = <R, A = void>(type: string, run: (arg: A, api: GetThunkAPI<object>) => Promise<R>) =>
   createAsyncThunk<R, A>(type, async (arg, api) => {
     try {

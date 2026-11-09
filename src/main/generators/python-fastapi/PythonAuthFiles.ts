@@ -23,7 +23,7 @@ export const PYTHON_AUTH_OWNED: readonly string[] = ['modules/auth/hooks.py', 'm
  */
 export function tidyPython(text: string, pkg: string): string {
   const firstParty = (line: string) => line.startsWith(`from ${pkg}.`) || line.startsWith(`from ${pkg} `) || line.startsWith(`import ${pkg}`);
-  const lines = text.split('\n');
+  const lines = text.split(/\r?\n/);
   const out: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];

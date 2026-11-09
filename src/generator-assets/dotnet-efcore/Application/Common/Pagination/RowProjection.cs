@@ -3,10 +3,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace __App__.Application.Common.Pagination;
 
-/// <summary>
-/// Satır projeksiyonu (<c>Row</c> / <c>WriteRow</c>): veritabanında <c>Select</c>. Veritabanı sağlayıcısının asset katmanı
-/// bu dosyayı aynı imzalarla değiştirebilir (MongoDB: satır bellekte kurulur).
-/// </summary>
 public static class RowProjection
 {
     public static Task<PaginatedList<TRow>> ToRowPageAsync<T, TRow>(

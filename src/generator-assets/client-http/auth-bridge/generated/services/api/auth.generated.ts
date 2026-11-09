@@ -1,10 +1,9 @@
-// Oturum köprüsü: token saklama ve 401'de tek seferlik refresh.
 import type { ApiAuth, ApiDispatch } from '@/types';
 import * as service from '../auth.service.generated';
 import { tokenStore } from './platform.generated';
 
-const ACCESS_KEY = `${service.AUTH_STORAGE_PREFIX}.access_token`;
-const REFRESH_KEY = `${service.AUTH_STORAGE_PREFIX}.refresh_token`;
+const accessKey = () => `${service.AUTH_STORAGE_PREFIX}.access_token`;
+const refreshKey = () => `${service.AUTH_STORAGE_PREFIX}.refresh_token`;
 
 export interface StoredTokens {
   accessToken: string | null;
@@ -12,28 +11,25 @@ export interface StoredTokens {
 }
 
 export const authStorage = {
-  read: async (): Promise<StoredTokens> => ({ accessToken: await tokenStore.get(ACCESS_KEY), refreshToken: await tokenStore.get(REFRESH_KEY) }),
-  /** `remember` verilmezse (refresh) token'lar bulundukları yerde kalır. */
+  read: async (): Promise<StoredTokens> => ({ accessToken: await tokenStore.get(accessKey()), refreshToken: await tokenStore.get(refreshKey()) }),
   save: async (accessToken: string, refreshToken: string, remember?: boolean): Promise<void> => {
-    const persistent = remember ?? (await tokenStore.isPersistent(REFRESH_KEY));
-    await tokenStore.set(ACCESS_KEY, accessToken, persistent);
-    await tokenStore.set(REFRESH_KEY, refreshToken, persistent);
+    const persistent = remember ?? (await tokenStore.isPersistent(refreshKey()));
+    await tokenStore.set(accessKey(), accessToken, persistent);
+    await tokenStore.set(refreshKey(), refreshToken, persistent);
   },
   clear: async (): Promise<void> => {
-    await tokenStore.remove(ACCESS_KEY);
-    await tokenStore.remove(REFRESH_KEY);
+    await tokenStore.remove(accessKey());
+    await tokenStore.remove(refreshKey());
   }
 };
 
-/** Bunların 401'inde refresh denenmez. */
-const NO_REFRESH: string[] = [service.AUTH_ENDPOINTS.login, service.AUTH_ENDPOINTS.refresh, service.AUTH_ENDPOINTS.logout];
+const noRefresh = (): string[] => [service.AUTH_ENDPOINTS.login, service.AUTH_ENDPOINTS.refresh, service.AUTH_ENDPOINTS.logout];
 
 export const isAuthRequest = (url: string | undefined): boolean => {
   const path = (url ?? '').split('?')[0];
-  return NO_REFRESH.some(endpoint => path.endsWith(endpoint));
+  return noRefresh().some(endpoint => path.endsWith(endpoint));
 };
 
-// Yalnız sunucu reddi oturumu kapatır; ağ hatası kapatmaz.
 const sessionRefused = (error: unknown) => {
   const code = (error as { errorData?: { code?: number } } | null)?.errorData?.code;
   return code === 401 || code === 403;
@@ -50,7 +46,6 @@ async function run(dispatch: ApiDispatch): Promise<boolean> {
     dispatch(sessionChanged({ accessToken: response.data.accessToken, user: response.data.user }) as never);
     return true;
   } catch (error) {
-    // Başka sekme önce yeniledi: onun token'ları storage'da.
     const stored = await authStorage.read();
     if (stored.accessToken && stored.refreshToken && stored.refreshToken !== sent) {
       dispatch(tokenAdopted(stored.accessToken) as never);
@@ -66,7 +61,6 @@ async function run(dispatch: ApiDispatch): Promise<boolean> {
 
 let pending: Promise<boolean> | null = null;
 
-/** Aynı anda gelen 401'ler tek isteği bekler. */
 export function refreshSession(dispatch: ApiDispatch): Promise<boolean> {
   pending ??= run(dispatch).finally(() => {
     pending = null;

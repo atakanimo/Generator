@@ -2,7 +2,6 @@ using System.Text.Json.Serialization;
 
 namespace __App__.Application.Common.Pagination;
 
-/// <summary><c>POST get-all</c> gövdesi. Filtreler yalnızca <see cref="Filters"/> içinden okunur.</summary>
 public sealed class ListBody<TFilters> where TFilters : class
 {
     public TFilters? Filters { get; init; }

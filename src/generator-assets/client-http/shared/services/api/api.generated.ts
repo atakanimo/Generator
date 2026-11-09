@@ -1,4 +1,3 @@
-// Tek axios örneği: token, dil, global loading, başarı / hata mesajı, dosya cevabı, 401 → refresh.
 import axios, { type AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
 import i18n from 'i18next';
 import { setCommonLoading } from '@/store/slices/common.slice';
@@ -7,7 +6,6 @@ import { getAccessToken, hasSession, isAuthRequest, refreshSessionOnce } from '.
 import { BASE_URL, showErrorMessage, showSuccessMessage } from './platform.generated';
 import { apiHooks } from './hooks';
 
-// İstek bayrakları axios config alanıdır; sunucuya gitmez.
 declare module 'axios' {
   interface AxiosRequestConfig {
     skipLoading?: boolean;
@@ -26,7 +24,6 @@ type ApiBody = {
 
 type RetryConfig = InternalAxiosRequestConfig & { _retried?: boolean; _abort?: AbortController };
 
-/** Döngüsel import olmasın diye store sonradan enjekte edilir. */
 type ApiStore = { getState(): unknown; dispatch(action: never): unknown };
 let store: ApiStore | null = null;
 
@@ -34,7 +31,6 @@ export const injectStore = (appStore: ApiStore) => {
   store = appStore;
 };
 
-/** Uzun süren uçlar (rapor, tarama, toplu iş) kendi `timeout`'unu verir. */
 export const API = axios.create({
   baseURL: BASE_URL,
   timeout: 60_000,
@@ -51,10 +47,8 @@ function startLoading(config: InternalAxiosRequestConfig) {
   if (activeRequests === 1) dispatch(setCommonLoading(true));
 }
 
-/** Oturum biterse uçuştaki istekler iptal edilir. */
 const inFlight = new Set<AbortController>();
 
-/** Çağıranın kendi sinyali varsa o da bu controller'ı iptal eder. */
 function trackRequest(config: RetryConfig) {
   const controller = new AbortController();
   const callerSignal = config.signal as AbortSignal | undefined;
@@ -93,7 +87,6 @@ function shouldNotifySessionEnd() {
 
 const isBlob = (value: unknown): value is Blob => typeof Blob !== 'undefined' && value instanceof Blob;
 
-/** Dosya istenen uçlarda hata cevabı da Blob gelir. React Native'in Blob'unda `text()` yok (mobil dosya indirmez). */
 async function readErrorBody(body: unknown): Promise<ApiBody | null> {
   if (!isBlob(body)) return (body as ApiBody | undefined) ?? null;
   const { text } = body as { text?: () => Promise<string> };
@@ -149,7 +142,6 @@ const safeDecode = (value: string) => {
   }
 };
 
-/** `attachment; filename*=UTF-8''a%20b.pdf` ya da `filename="a.pdf"`. */
 function fileNameFromContentDisposition(header: unknown): string | undefined {
   if (typeof header !== 'string') return undefined;
   const encoded = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(header)?.[1];
@@ -164,7 +156,6 @@ const handleRequest = async (config: InternalAxiosRequestConfig) => {
 
   const token = await getAccessToken(store?.getState());
   if (token) config.headers.Authorization = `Bearer ${token}`;
-  // Çağrı kendi dilini verdiyse ona dokunulmaz.
   const lang = (i18n.resolvedLanguage || i18n.language || '').split('-')[0];
   if (lang && !config.headers.has('Accept-Language')) config.headers.set('Accept-Language', lang);
 
@@ -173,12 +164,10 @@ const handleRequest = async (config: InternalAxiosRequestConfig) => {
   return config;
 };
 
-// Çağıran `AxiosResponse` değil `LocalResponse` alır.
 const handleResponse = (axiosResponse: AxiosResponse<unknown>) => {
   const config = axiosResponse.config as RetryConfig;
   settle(config, axiosResponse.headers);
 
-  // Dosya cevabı sözleşme şeklinde değil.
   if (isBlob(axiosResponse.data)) {
     const file: LocalResponse<Blob> = {
       isSuccess: true,
@@ -210,7 +199,6 @@ const handleResponse = (axiosResponse: AxiosResponse<unknown>) => {
   return response as unknown as AxiosResponse;
 };
 
-/** `onRequest`'in durdurduğu istek buraya `LocalResponse` olarak gelir; loading hiç başlamadı. */
 const isLocalResponse = (value: unknown): value is LocalResponse<null> =>
   !axios.isAxiosError(value) && typeof (value as LocalResponse<null> | null)?.isSuccess === 'boolean';
 
@@ -224,7 +212,6 @@ const handleResponseError = async (error: AxiosError | LocalResponse<null>) => {
   const status = error.response?.status;
   const response = toErrorResponse(error.response ? await readErrorBody(error.response.data) : null, status);
 
-  // Aynı anda gelen 401'ler tek refresh'i bekler. Oturum biterse uçuştakiler iptal edilir, mesaj bir kez gösterilir.
   let sessionEnded = false;
   if (status === 401 && config && !isAuthRequest(config.url)) {
     if (!config._retried) {
@@ -243,6 +230,5 @@ const handleResponseError = async (error: AxiosError | LocalResponse<null>) => {
   return Promise.reject(response);
 };
 
-// `onRequest` reddi `handleResponseError`'a düşer; request interceptor'ın onRejected'ı yok.
 API.interceptors.request.use(handleRequest);
 API.interceptors.response.use(handleResponse, handleResponseError);

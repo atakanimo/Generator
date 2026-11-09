@@ -156,7 +156,7 @@ function subField(p: Property): NormalizedObjectSubField {
  *   reference targets resolve through it (fallback: pluralized class name).
  */
 export function parseDotnetEntity(filePath: string, entityFolders: Map<string, string> = new Map()): NormalizedModel {
-  const content = readFileSync(filePath, 'utf8');
+  const content = readFileSync(filePath, 'utf8').replace(/\r\n/g, '\n');
   const className = basename(filePath, '.cs');
   const folder = basename(dirname(filePath));
   const body = classBody(content, new RegExp(`class\\s+${className}\\b[^{]*`));

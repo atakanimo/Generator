@@ -23,7 +23,7 @@ function anyOn(expr: string, modules: readonly AuthModule[]): boolean {
 
 /** `null` → the file is not written for these modules (`@auth-file` condition false). */
 export function applyAuthBlocks(text: string, modules: readonly AuthModule[]): string | null {
-  const lines = text.split('\n');
+  const lines = text.split(/\r?\n/);
   const first = MARKER.exec(lines[0] ?? '');
   if (first?.[1] === 'auth-file') {
     if (!anyOn(first[2], modules)) return null;

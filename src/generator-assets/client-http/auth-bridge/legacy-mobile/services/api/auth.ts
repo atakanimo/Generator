@@ -1,4 +1,3 @@
-// Oturum köprüsü: access token'ı ve 401 davranışını api.ts'e verir.
 import type { ApiAuth } from '@/types';
 import { resetAuthState } from '@/store/slices/auth.slice';
 
@@ -9,7 +8,6 @@ const tokenOf = (state: unknown) => (state as AuthState | undefined)?.auth?.toke
 const apiAuth: ApiAuth = {
   getAccessToken: state => tokenOf(state),
   hasSession: state => Boolean(tokenOf(state)),
-  // Refresh yok: 401 oturumu kapatır.
   refreshSessionOnce: async dispatch => {
     dispatch(resetAuthState() as never);
     return false;

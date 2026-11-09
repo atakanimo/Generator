@@ -4,7 +4,6 @@ using __App__.Domain.Common;
 
 namespace __App__.Application.Common.Pagination;
 
-/// <summary>Sıralanabilir alanlar: JSON adı → entity seçici. <c>id</c> her zaman eklenir.</summary>
 public sealed class SortMap<TEntity> where TEntity : IEntity
 {
     private readonly Dictionary<string, LambdaExpression> _map = new(StringComparer.Ordinal)
@@ -25,17 +24,11 @@ public sealed class SortMap<TEntity> where TEntity : IEntity
 
 public static class QueryableExtensions
 {
-    /// <summary>
-    /// Null değerler en küçük sayılır (artanda başta, azalanda sonda; sözleşme §2). SQL Server ve MongoDB böyle sıralar;
-    /// PostgreSQL tersini yaptığı için onun Infrastructure'ı açar ve sıralamaya önce "null mı" anahtarı eklenir.
-    /// </summary>
     public static bool ExplicitNullOrder { get; set; }
 
-    /// <summary>Varsayılan sıralama: <c>createdAt desc, id desc</c>.</summary>
     public static IOrderedQueryable<T> OrderByDefault<T>(this IQueryable<T> query) where T : IEntity, ITimestamped =>
         query.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id);
 
-    /// <summary><paramref name="sortBy"/> boşsa <paramref name="defaultSort"/>; değilse alan + <c>id</c> (kararlı sayfalama).</summary>
     public static IQueryable<T> ApplySort<T>(
         this IQueryable<T> query,
         string? sortBy,
@@ -62,7 +55,7 @@ public static class QueryableExtensions
     public static async Task<PaginatedList<TRow>> ToPaginatedListAsync<TRow>(
         this IQueryable<TRow> query, int? page, int? limit, CancellationToken cancellationToken)
     {
-        var currentLimit = limit is null or < 1 ? ListDefaults.Limit : Math.Min(limit.Value, ListDefaults.MaxLimit);
+        var currentLimit = limit ?? ListDefaults.Limit;
         var currentPage = page ?? ListDefaults.Page;
         var skip = (currentPage - 1) * currentLimit;
 

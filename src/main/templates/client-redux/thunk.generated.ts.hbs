@@ -1,5 +1,4 @@
 {{header}}
-// `{{entity}}` thunk'ları; `{{camel}}.thunk.ts` bunları `create{{entity}}Thunks({ … })` ile hook'larıyla kurar.
 import type { LocalResponse } from '{{imports.localResponse}}';
 import * as service from '{{imports.services}}/{{camel}}.service.generated';
 import type { {{serviceTypeImports}} } from '{{imports.services}}/{{camel}}.service.generated';
@@ -7,7 +6,6 @@ import { responseThunk, type RequestOptions{{#if ops.list}}, type PaginatedList{
 
 {{#if ops.list}}
 export type Get{{entity}}ListResponse = LocalResponse<PaginatedList<{{names.row}}>>;
-/** `append`: next page of an infinite list (no global loading; the slice appends). */
 export type Fetch{{entity}}ListArg = {{names.listBody}} & { append?: boolean };
 {{/if}}
 {{#if ops.getOne}}
@@ -23,18 +21,14 @@ export type Update{{entity}}Arg = { id: string; data: {{names.updateInput}} };
 export type Delete{{entity}}Response = LocalResponse<null>;
 {{/if}}
 
-/** What a hook gets besides the result: the thunk API's `dispatch` / `getState`. */
 export type {{entity}}ThunkApi = { dispatch: (action: any) => any; getState: () => unknown };
 
 export interface {{entity}}ThunkHooks {
 {{#if hasReads}}
-  /** Applied to every row a list / getOne answer carries (e.g. normalizing legacy values). */
   mapRow?: (row: {{names.row}}) => {{names.row}};
 {{/if}}
-  /** Request options per operation (e.g. a host header: `{ create: { headers: { premiumUx: 'paywall' } } }`). */
   requestOptions?: { {{requestOptionKeys}} };
 {{#if ops.list}}
-  /** Defaults of every list request (e.g. `{ page: 1, limit: 20 }`); the caller's body wins. */
   listDefaults?: Partial<{{names.listBody}}>;
   afterList?: (result: Get{{entity}}ListResponse, arg: Fetch{{entity}}ListArg | undefined, api: {{entity}}ThunkApi) => unknown;
 {{/if}}
