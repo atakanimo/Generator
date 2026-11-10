@@ -18,7 +18,7 @@ import { authUsesMail, type AuthModule } from '../../../shared/authModules.js';
 import { applyAuthBlocks } from '../../utils/authBlocks.js';
 import type { AuthSeedAdmin } from '../../utils/authSeed.js';
 import { DOTNET_LAYERS, dotnetLayout } from './dotnetLayout.js';
-import { WrittenFile, applyAppTokens, dotnetAssetsDir, listFiles, writeOnce } from './dotnetFiles.js';
+import { WrittenFile, applyAppTokens, dotnetAssetsDir, listFiles, writeOnce, writeSharedOnce } from './dotnetFiles.js';
 
 export const DOTNET_BCRYPT_PACKAGE = { name: 'BCrypt.Net-Next', version: '4.0.3' } as const;
 
@@ -93,13 +93,45 @@ function addEnvKeys(root: string, modules: readonly AuthModule[]): void {
   const lines = [
     'Jwt__AccessTtlMinutes=15',
     'Jwt__RefreshTtlDays=30',
-    'Auth__RateLimitPerMinute=10',
+    'RATE_LIMIT_ENABLED=true',
+    'RATE_LIMIT_AUTH=10/60',
+    'RATE_LIMIT_GENERAL=120/60',
+    'RATE_LIMIT_ADMIN_READ=600/900',
+    'RATE_LIMIT_ADMIN_WRITE=120/900',
+    'TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128',
     ...modules.flatMap((m) => DOTNET_MODULE_ENV[m] ?? []),
     ...(authUsesMail(modules) ? DOTNET_MAIL_ENV : [])
   ].filter((line) => !new RegExp(`^${line.split('=')[0]}=`, 'm').test(text));
   if (!lines.length) return;
   const block = ['', '# Auth (docs/backend/auth.md). Smtp__Host boşsa e-postalar log\'a yazılır.', ...lines, ''];
   writeFileSync(path, `${text.replace(/\n*$/, '\n')}${block.join('\n')}`);
+}
+
+export interface DotnetAuthFile {
+  target: string;
+  content: string;
+  owned: boolean;
+}
+
+/** `*.Custom.cs` and `*Hooks.cs` belong to the project (written once); every other auth file is the Generator's. */
+export function isDotnetAuthOwned(rel: string): boolean {
+  return /(\.Custom|Hooks)\.cs$/.test(rel);
+}
+
+/** Auth layer files of an existing host for its modules (`workspace.auth.modules`); `_skeleton` is not included. */
+export function renderDotnetAuthFiles(root: string, app: string, db: HostDatabase, modules: readonly AuthModule[]): DotnetAuthFile[] {
+  const dir = authDir();
+  const provider = db.database === 'mongodb' ? 'mongodb' : 'relational';
+  const layout = dotnetLayout(root, app);
+  const files: DotnetAuthFile[] = [];
+  for (const layer of DOTNET_LAYERS) {
+    const tree = collect([join(dir, layer), join(dir, 'providers', provider, layer)]);
+    for (const [rel, file] of [...tree.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      const content = render(file, app, modules);
+      if (content !== null) files.push({ target: join(layout.projectDir(layer), applyAppTokens(rel, app)), content, owned: isDotnetAuthOwned(rel) });
+    }
+  }
+  return files;
 }
 
 export function bootstrapDotnetAuth(root: string, app: string, db: HostDatabase, modules: readonly AuthModule[], admin: AuthSeedAdmin): { files: WrittenFile[] } {
@@ -111,7 +143,7 @@ export function bootstrapDotnetAuth(root: string, app: string, db: HostDatabase,
     const tree = collect([join(dir, layer), join(dir, 'providers', provider, layer)]);
     for (const [rel, file] of [...tree.entries()].sort(([a], [b]) => a.localeCompare(b))) {
       const content = render(file, app, modules);
-      if (content !== null) files.push(writeOnce(join(layout.projectDir(layer), applyAppTokens(rel, app)), content));
+      if (content !== null) files.push((isDotnetAuthOwned(rel) ? writeOnce : writeSharedOnce)(join(layout.projectDir(layer), applyAppTokens(rel, app)), content));
     }
   }
   // Skeleton replacements: the host was created a moment ago, these files are still the skeleton's.

@@ -233,10 +233,13 @@ export async function runAuthScenarios({ base, prefix, admin, usersAdmin, module
 /** `readOtp` for the console mailers: the last 6-digit code logged next to the address (subject tells the purpose). */
 export function otpReaderFromLog(getOutput) {
   return async (email) => {
-    const lines = getOutput().split('\n').filter((l) => l.includes(email));
+    const lines = getOutput().split(/\r?\n/);
     for (let i = lines.length - 1; i >= 0; i--) {
-      const m = /\b(\d{6})\b/.exec(lines[i]);
-      if (m) return m[1];
+      if (!lines[i].includes(email) || !lines.slice(Math.max(0, i - 4), i + 6).some((l) => l.includes('mail.console'))) continue;
+      for (const line of lines.slice(i, i + 6)) {
+        const m = /\b(\d{6})\b/.exec(line.replace(/\d{4}-\d{2}-\d{2}[ T][\d:.]+/g, ''));
+        if (m) return m[1];
+      }
     }
     return '000000';
   };

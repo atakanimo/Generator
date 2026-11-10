@@ -54,5 +54,5 @@ public sealed record SetPasswordBody(string? NewPassword);
 
 public sealed record ClientInfo(string? UserAgent, string? Ip);
 
-/// <summary>Ortamdan okunan süreler ve sınırlar (<c>Jwt__AccessTtlMinutes</c>, <c>Jwt__RefreshTtlDays</c>, <c>Auth__RateLimitPerMinute</c>).</summary>
-public sealed record AuthSettings(int AccessTtlMinutes, int RefreshTtlDays, int RateLimitPerMinute);
+/// <summary>Ortamdan okunan süreler ve sınırlar (<c>Jwt__AccessTtlMinutes</c>, <c>Jwt__RefreshTtlDays</c>).</summary>
+public sealed record AuthSettings(int AccessTtlMinutes, int RefreshTtlDays);

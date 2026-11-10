@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * SharedFrame, StockExchange and Varlik360 from the command line (src/generator-assets/cursor-rules/AtaProjectCommon.mdc).
+ * SharedFrame, AlphaTerminal and Varlik360 from the command line (src/generator-assets/cursor-rules/AtaProjectCommon.mdc).
  * Same functions the Electron IPC calls (`project:generateFrontend`, `project:generateBackend`).
  *
  *   node scripts/host.mjs admin-config <host> [Entity] [--dry-run]

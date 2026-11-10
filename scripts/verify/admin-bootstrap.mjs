@@ -116,7 +116,7 @@ if (install) {
     check('client auth files (redux-web)', authFiles === 3, clientAuth.files.map(f => f.path));
     const typecheck = run('npm', ['run', 'typecheck']);
     check('npm run typecheck', typecheck.status === 0, typecheck.status === 0 ? '' : typecheck.stdout.slice(-1500));
-    // Hosts with `verbatimModuleSyntax` (StockExchange web): generated files import types with `import type` / `type X`.
+    // Hosts with `verbatimModuleSyntax` (AlphaTerminal web): generated files import types with `import type` / `type X`.
     const generated = new Set(clientAuth.files.map(f => relative(panel, f.path)));
     const verbatim = run('npx', ['tsc', '-p', 'tsconfig.app.json', '--noEmit', '--verbatimModuleSyntax']);
     const verbatimErrors = (verbatim.stdout ?? '').split('\n').filter(l => generated.has(l.split('(')[0]));

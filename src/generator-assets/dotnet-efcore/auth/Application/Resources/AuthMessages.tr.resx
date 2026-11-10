@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Auth.InvalidToken" xml:space="preserve"><value>Geçersiz veya süresi dolmuş token</value></data>
+  <data name="Auth.InvalidCredentials" xml:space="preserve"><value>E-posta veya şifre hatalı</value></data>
+  <data name="Auth.Suspended" xml:space="preserve"><value>Hesap askıya alınmış</value></data>
+  <data name="Auth.EmailNotVerified" xml:space="preserve"><value>E-posta adresi doğrulanmamış</value></data>
+  <data name="Auth.LoggedIn" xml:space="preserve"><value>Giriş yapıldı</value></data>
+  <data name="Auth.LoggedOut" xml:space="preserve"><value>Çıkış yapıldı</value></data>
+  <data name="Auth.WrongPassword" xml:space="preserve"><value>Mevcut şifre hatalı</value></data>
+  <data name="Auth.PasswordChanged" xml:space="preserve"><value>Şifre güncellendi</value></data>
+  <data name="Auth.PasswordTooShort" xml:space="preserve"><value>Şifre en az 8 karakter olmalı</value></data>
+  <data name="Auth.PasswordTooLong" xml:space="preserve"><value>Şifre çok uzun (en fazla 72 bayt)</value></data>
+  <data name="Auth.PasswordWeak" xml:space="preserve"><value>Şifre en az bir harf ve bir rakam içermeli</value></data>
+  <data name="Auth.InvalidEmail" xml:space="preserve"><value>Geçerli bir e-posta adresi girin</value></data>
+  <data name="Auth.NameRequired" xml:space="preserve"><value>Ad gerekli</value></data>
+  <data name="Auth.OtpSent" xml:space="preserve"><value>Doğrulama kodu e-posta adresine gönderildi</value></data>
+  <data name="Auth.InvalidCode" xml:space="preserve"><value>Kod geçersiz veya süresi dolmuş</value></data>
+  <data name="Auth.EmailVerified" xml:space="preserve"><value>E-posta doğrulandı</value></data>
+  <data name="Auth.EmailRequired" xml:space="preserve"><value>Sağlayıcı e-posta adresi vermedi</value></data>
+  <data name="Auth.EmailInUse" xml:space="preserve"><value>Bu e-posta başka bir hesapta kayıtlı; o hesapla giriş yapın</value></data>
+  <data name="Auth.AccountDeleted" xml:space="preserve"><value>Hesap silindi</value></data>
+  <data name="Auth.AdminNotAllowed" xml:space="preserve"><value>Bu işlem admin hesapları için kapalı</value></data>
+  <data name="Auth.AdminPasswordOnly" xml:space="preserve"><value>Admin hesapları yalnız e-posta ve şifreyle giriş yapar</value></data>
+  <data name="Auth.PasswordAlreadySet" xml:space="preserve"><value>Hesabın şifresi zaten var; şifre değiştirmeyi kullanın</value></data>
+  <data name="Auth.PasswordCreated" xml:space="preserve"><value>Şifre oluşturuldu</value></data>
+  <data name="Auth.VerifySubject" xml:space="preserve"><value>__App__ doğrulama kodu</value></data>
+  <data name="Auth.ResetSubject" xml:space="preserve"><value>__App__ şifre sıfırlama kodu</value></data>
+  <data name="Auth.CodeText" xml:space="preserve"><value>Kodunuz: {0}. {1} dakika geçerlidir.</value></data>
+</root>

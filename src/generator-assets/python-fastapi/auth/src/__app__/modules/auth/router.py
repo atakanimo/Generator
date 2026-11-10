@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 
 from __app__.api.deps import AdminDep, DbDep, UserDep
 from __app__.core.auth.messages import auth_text
-from __app__.core.auth.rate_limit import auth_rate_limit, client_ip
+from __app__.core.http.client_ip import client_ip
 from __app__.core.http.contract import ContractResponse, ContractRoute, contract_ok
 from __app__.modules.auth import schemas, service
 from __app__.modules.auth.router_custom import map_custom_auth_routes
@@ -31,7 +31,6 @@ def _signed_in(request: Request, session: schemas.AuthSession) -> schemas.AuthSe
 @router.post(
     "/login",
     response_model=ContractResponse[schemas.AuthSession],
-    dependencies=[Depends(auth_rate_limit("login"))],
 )
 async def login(
     body: schemas.LoginBody, request: Request, db: DbDep
@@ -85,7 +84,6 @@ async def admin_set_password(
 @router.post(
     "/register",
     response_model=ContractResponse[None],
-    dependencies=[Depends(auth_rate_limit("register"))],
 )
 async def register(body: schemas.RegisterBody, db: DbDep) -> ContractResponse[None]:
     await service.register(db, body.email, body.password, body.name)
@@ -95,7 +93,6 @@ async def register(body: schemas.RegisterBody, db: DbDep) -> ContractResponse[No
 @router.post(
     "/verify-email",
     response_model=ContractResponse[schemas.AuthSession],
-    dependencies=[Depends(auth_rate_limit("verify-email"))],
 )
 async def verify_email(
     body: schemas.VerifyEmailBody, request: Request, db: DbDep
@@ -109,7 +106,6 @@ async def verify_email(
 @router.post(
     "/send-otp",
     response_model=ContractResponse[None],
-    dependencies=[Depends(auth_rate_limit("send-otp"))],
 )
 async def send_otp(body: schemas.SendOtpBody, db: DbDep) -> ContractResponse[None]:
     await service.resend_otp(db, body.email, body.purpose)
@@ -123,7 +119,6 @@ async def send_otp(body: schemas.SendOtpBody, db: DbDep) -> ContractResponse[Non
 @router.post(
     "/forgot-password",
     response_model=ContractResponse[None],
-    dependencies=[Depends(auth_rate_limit("forgot-password"))],
 )
 async def forgot_password(body: schemas.ForgotPasswordBody, db: DbDep) -> ContractResponse[None]:
     await service.forgot_password(db, body.email)
@@ -133,7 +128,6 @@ async def forgot_password(body: schemas.ForgotPasswordBody, db: DbDep) -> Contra
 @router.post(
     "/reset-password",
     response_model=ContractResponse[None],
-    dependencies=[Depends(auth_rate_limit("reset-password"))],
 )
 async def reset_password(body: schemas.ResetPasswordBody, db: DbDep) -> ContractResponse[None]:
     await service.reset_password(db, body.email, body.code, body.newPassword)
@@ -147,7 +141,6 @@ async def reset_password(body: schemas.ResetPasswordBody, db: DbDep) -> Contract
 @router.post(
     "/google",
     response_model=ContractResponse[schemas.AuthSession],
-    dependencies=[Depends(auth_rate_limit("google"))],
 )
 async def google(
     body: schemas.GoogleBody, request: Request, db: DbDep
@@ -165,7 +158,6 @@ async def google(
 @router.post(
     "/apple",
     response_model=ContractResponse[schemas.AuthSession],
-    dependencies=[Depends(auth_rate_limit("apple"))],
 )
 async def apple(
     body: schemas.AppleBody, request: Request, db: DbDep
@@ -183,7 +175,6 @@ async def apple(
 @router.post(
     "/set-password",
     response_model=ContractResponse[None],
-    dependencies=[Depends(auth_rate_limit("set-password"))],
 )
 async def set_password(body: schemas.SetPasswordBody, user: UserDep, db: DbDep) -> ContractResponse[None]:
     await service.set_password(db, user.doc, body.newPassword)

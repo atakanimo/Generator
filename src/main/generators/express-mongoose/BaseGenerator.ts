@@ -6,7 +6,7 @@
 import { renderTemplate } from '../../utils/templateEngine.js';
 import { safeWriteFile, ensureDirectory, getProjectDirectories, getFrontendDirectories } from '../../utils/fileUtils.js';
 import { validateSchema, validateDirectory } from '../../utils/validationUtils.js';
-import { handleError, ErrorCode, AppError, errorToResult } from '../../utils/errorHandler.js';
+import { handleError, ErrorCode, AppError } from '../../utils/errorHandler.js';
 import { logGenerate, log } from '../../utils/logger.js';
 import { getProjectRootPath } from '../../utils/templateHelpers.js';
 import { camelCase, pascalCase } from '../../utils/namingUtils.js';

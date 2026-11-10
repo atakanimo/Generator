@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Auth.InvalidToken" xml:space="preserve"><value>Invalid or expired token</value></data>
+  <data name="Auth.InvalidCredentials" xml:space="preserve"><value>Wrong e-mail or password</value></data>
+  <data name="Auth.Suspended" xml:space="preserve"><value>Account is suspended</value></data>
+  <data name="Auth.EmailNotVerified" xml:space="preserve"><value>E-mail address is not verified</value></data>
+  <data name="Auth.LoggedIn" xml:space="preserve"><value>Signed in</value></data>
+  <data name="Auth.LoggedOut" xml:space="preserve"><value>Signed out</value></data>
+  <data name="Auth.WrongPassword" xml:space="preserve"><value>Current password is wrong</value></data>
+  <data name="Auth.PasswordChanged" xml:space="preserve"><value>Password updated</value></data>
+  <data name="Auth.PasswordTooShort" xml:space="preserve"><value>Password must be at least 8 characters</value></data>
+  <data name="Auth.PasswordTooLong" xml:space="preserve"><value>Password is too long (at most 72 bytes)</value></data>
+  <data name="Auth.PasswordWeak" xml:space="preserve"><value>Password must contain a letter and a digit</value></data>
+  <data name="Auth.InvalidEmail" xml:space="preserve"><value>Enter a valid e-mail address</value></data>
+  <data name="Auth.NameRequired" xml:space="preserve"><value>Name is required</value></data>
+  <data name="Auth.OtpSent" xml:space="preserve"><value>A verification code was sent to the e-mail address</value></data>
+  <data name="Auth.InvalidCode" xml:space="preserve"><value>Code is invalid or expired</value></data>
+  <data name="Auth.EmailVerified" xml:space="preserve"><value>E-mail verified</value></data>
+  <data name="Auth.EmailRequired" xml:space="preserve"><value>The provider did not share an e-mail address</value></data>
+  <data name="Auth.EmailInUse" xml:space="preserve"><value>This e-mail belongs to another account; sign in with that account</value></data>
+  <data name="Auth.AccountDeleted" xml:space="preserve"><value>Account deleted</value></data>
+  <data name="Auth.AdminNotAllowed" xml:space="preserve"><value>This action is not available for admin accounts</value></data>
+  <data name="Auth.AdminPasswordOnly" xml:space="preserve"><value>Admin accounts sign in with e-mail and password only</value></data>
+  <data name="Auth.PasswordAlreadySet" xml:space="preserve"><value>This account already has a password; use change password</value></data>
+  <data name="Auth.PasswordCreated" xml:space="preserve"><value>Password created</value></data>
+  <data name="Auth.VerifySubject" xml:space="preserve"><value>__App__ verification code</value></data>
+  <data name="Auth.ResetSubject" xml:space="preserve"><value>__App__ password reset code</value></data>
+  <data name="Auth.CodeText" xml:space="preserve"><value>Your code: {0}. Valid for {1} minutes.</value></data>
+</root>

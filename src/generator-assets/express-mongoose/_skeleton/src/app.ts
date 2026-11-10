@@ -10,6 +10,7 @@ import {
   requestContextMiddleware,
   requestIdMiddleware
 } from '@middlewares';
+import { createRateLimitMiddleware, trustedProxies } from '@core/rate-limit/rate-limit';
 import authRoutes from '@modules/auth/auth.routes';
 import healthRoutes from '@modules/health/health.routes';
 
@@ -20,12 +21,13 @@ import healthRoutes from '@modules/health/health.routes';
  */
 export function createApp() {
   const app = express();
-  app.set('trust proxy', 1);
+  app.set('trust proxy', trustedProxies());
 
   app.use(corsMiddleware);
   app.use(requestIdMiddleware);
   app.use(requestContextMiddleware);
   app.use(i18nMiddleware);
+  app.use(createRateLimitMiddleware());
   app.use(express.json({ limit: '1mb' }));
 
   app.use('/api', healthRoutes);

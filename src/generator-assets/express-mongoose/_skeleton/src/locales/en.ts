@@ -48,7 +48,6 @@ const en = {
     adminPasswordOnly: 'Admin accounts sign in with e-mail and password only',
     passwordAlreadySet: 'This account already has a password; use change password',
     passwordCreated: 'Password created',
-    tooManyRequests: 'Too many attempts; try again later',
     mail: {
       verifySubject: '__App__ verification code',
       resetSubject: '__App__ password reset code',
@@ -56,7 +55,8 @@ const en = {
     }
   },
   rateLimit: {
-    tooManyRequests: 'Too Many Requests'
+    tooManyRequests: 'Too Many Requests',
+    retryLater: 'Too many requests; try again later'
   }
 };
 

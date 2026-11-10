@@ -6,6 +6,7 @@ export interface IErrorData {
   header?: string;
   message: string;
   code?: number;
+  field?: string;
 }
 
 export interface IApiResponse<T> {

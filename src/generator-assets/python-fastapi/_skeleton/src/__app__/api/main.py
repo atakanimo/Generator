@@ -25,6 +25,7 @@ from __app__.core.http.contract import (
     install_contract_handlers,
 )
 from __app__.core.http.middleware.trace import LEGACY_TRACE_ID_HEADER, TRACE_ID_HEADER, TraceIdMiddleware
+from __app__.core.http.rate_limit import RateLimitMiddleware
 from __app__.modules.auth.router import router as auth_router
 from __app__.modules.auth.seed import seed_auth
 from __app__.modules.auth.service import ensure_auth_indexes
@@ -67,13 +68,14 @@ def create_app() -> FastAPI:
     app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
     # Tanımsız yol / method, doğrulama ve beklenmeyen hatalar da sözleşme zarfıyla (api-contract §1).
     install_contract_handlers(app)
+    app.add_middleware(RateLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=[TRACE_ID_HEADER, LEGACY_TRACE_ID_HEADER],
+        expose_headers=[TRACE_ID_HEADER, LEGACY_TRACE_ID_HEADER, "Retry-After"],
     )
     # En dışta: her yanıt (CORS dahil) trace başlıklarını taşır.
     app.add_middleware(TraceIdMiddleware)

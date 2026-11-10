@@ -3,7 +3,7 @@ import { typography } from './typography';
 
 const lightTheme: ThemeOptions = {
   typography,
-  // Palette: Ata admin hosts (SharedFrame, Varlik360, StockExchange) (primary blue, slate secondary, MUI default status colours)
+  // Palette: Ata admin hosts (SharedFrame, Varlik360, AlphaTerminal) (primary blue, slate secondary, MUI default status colours)
   palette: {
     mode: 'light',
     primary: { main: '#2563eb' },

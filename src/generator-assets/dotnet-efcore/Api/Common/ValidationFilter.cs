@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentValidation;
 using __App__.Application.Common.Errors;
 
@@ -13,10 +14,16 @@ public sealed class ValidationFilter<T>(IValidator<T> validator) : IEndpointFilt
             var result = await validator.ValidateAsync(body, context.HttpContext.RequestAborted);
             if (!result.IsValid)
             {
-                return ResultExtensions.Fail<object>(Error.BadRequest(result.Errors[0].ErrorMessage));
+                var first = result.Errors[0];
+                return ResultExtensions.Fail<object>(Error.BadRequest(first.ErrorMessage, JsonPath(first.PropertyName)));
             }
         }
 
         return await next(context);
     }
+
+    private static string? JsonPath(string? propertyName) =>
+        string.IsNullOrEmpty(propertyName)
+            ? null
+            : string.Join('.', propertyName.Split('.').Select(JsonNamingPolicy.CamelCase.ConvertName));
 }

@@ -39,10 +39,72 @@ export function ensureDotnetHost(root: string, app: string, provider: DotnetDbPr
   const layout = dotnetLayout(root, app);
   const files: WrittenFile[] = [...copyAssetTrees(trees('_skeleton'), root, app), ...ensureEntityIdAlias(root, assets, idType)];
   for (const layer of DOTNET_LAYERS) {
-    files.push(...copyAssetTrees(trees(layer), layout.projectDir(layer), app));
+    files.push(...copyAssetTrees(trees(layer), layout.projectDir(layer), app, true));
   }
   files.push(...ensureEntityIdRouteConstraint(layout.projectDir('Api')));
+  files.push(...ensureLocalizationCultures(layout.projectDir('Api')));
+  files.push(...removeProgramRateLimiter(layout.projectDir('Api')));
+  files.push(...useHealthEndpoint(layout.projectDir('Api')));
+  files.push(...ensureInfrastructureRegistrations(layout.projectDir('Infrastructure'), app, provider));
   return files;
+}
+
+function ensureInfrastructureRegistrations(infraDir: string, app: string, provider: DotnetDbProvider): WrittenFile[] {
+  const path = join(infraDir, 'DependencyInjection.cs');
+  if (!existsSync(path)) return [];
+  let cs = readFileSync(path, 'utf8');
+  const anchor = /^([ \t]*)services\.AddScoped<IAppDbContext>\([^\n]*\);\r?\n/m.exec(cs);
+  if (!anchor) return [];
+  const eol = anchor[0].endsWith('\r\n') ? '\r\n' : '\n';
+  const lines: string[] = [];
+  if (!cs.includes('IDbErrorClassifier')) lines.push(`${anchor[1]}services.AddSingleton<IDbErrorClassifier, DbErrorClassifier>();${eol}`);
+  const before: string[] = [];
+  if (provider.database === 'postgres' && !cs.includes('ExplicitNullOrder')) before.push(`${anchor[1]}QueryableExtensions.ExplicitNullOrder = true;${eol}`);
+  if (!lines.length && !before.length) return [];
+  const at = anchor.index + anchor[0].length;
+  cs = `${cs.slice(0, at)}${lines.join('')}${cs.slice(at)}`;
+  if (before.length) {
+    const start = /^[ \t]*services\.AddSingleton\(TimeProvider\.System\);\r?\n/m.exec(cs);
+    const index = start ? start.index : anchor.index;
+    cs = `${cs.slice(0, index)}${before.join('')}${cs.slice(index)}`;
+  }
+  for (const ns of [`${app}.Application.Common.Errors`, `${app}.Application.Common.Pagination`, `${app}.Infrastructure.Common`]) {
+    if (!new RegExp(`^using ${ns.replace(/\./g, '\\.')};`, 'm').test(cs)) cs = `using ${ns};${eol}${cs}`;
+  }
+  writeFileSync(path, cs);
+  return [{ path, action: 'updated' }];
+}
+
+function ensureLocalizationCultures(apiDir: string): WrittenFile[] {
+  const path = join(apiDir, 'appsettings.json');
+  if (!existsSync(path)) return [];
+  const raw = readFileSync(path, 'utf8');
+  const json = JSON.parse(raw) as Record<string, unknown>;
+  if (json.Localization) return [];
+  json.Localization = { Cultures: ['en', 'tr'] };
+  const eol = raw.includes('\r\n') ? '\r\n' : '\n';
+  writeFileSync(path, `${JSON.stringify(json, null, 2)}\n`.replace(/\n/g, eol));
+  return [{ path, action: 'updated' }];
+}
+
+function useHealthEndpoint(apiDir: string): WrittenFile[] {
+  const path = join(apiDir, 'Program.cs');
+  if (!existsSync(path)) return [];
+  const cs = readFileSync(path, 'utf8');
+  const next = cs.split('app.MapGet("/api/health", () => TypedResults.Ok()).AllowAnonymous();').join('app.MapHealth();');
+  if (next === cs) return [];
+  writeFileSync(path, next);
+  return [{ path, action: 'updated' }];
+}
+
+function removeProgramRateLimiter(apiDir: string): WrittenFile[] {
+  const path = join(apiDir, 'Program.cs');
+  if (!existsSync(path)) return [];
+  const cs = readFileSync(path, 'utf8');
+  const next = cs.replace(/^[ \t]*app\.UseRateLimiter\(\);[ \t]*\r?\n/m, '');
+  if (next === cs) return [];
+  writeFileSync(path, next);
+  return [{ path, action: 'updated' }];
 }
 
 /**

@@ -178,14 +178,14 @@ Manifest `workspace.backendStack: 'python-fastapi'`; yoksa kökte `pyproject.tom
 - Gövdeler lax (`"yes"` → `true`); .NET ve Express strict.
 - Test Mongo'su: `TEST_MONGO_URI` varsa o, yoksa testcontainers `mongo:7` (Docker gerekir). `TestMongoClient` veritabanı adlarına `<pkg>_test_` öneki koyar (asıl DB'ye yazılamaz), kullanılan DB'ler her testten sonra silinir. Testler sıralı koşar (paralel değil).
 - PyMongo Async: `await coll.aggregate(...)`, `await client.close()`; `find()` senkron imleç döner.
-- Modül testi iskeletin `conftest.py`'sine dayanır; farklı fixture'lı host'ta (StockExchange) elle uyarlanır.
+- Modül testi iskeletin `conftest.py`'sine dayanır; farklı fixture'lı host'ta (AlphaTerminal) elle uyarlanır.
 - Electron'da uçtan uca akış (yeni proje → model editörü → generate) PY9'da denendi; içe aktarma penceresi Electron'da denenmedi ([açık konular](#açık-konular)).
 
 Doğrulama: [verification.md](../verification.md#python--fastapi).
 
 ## Kararlar
 
-Plan (`docs/plans/backend-python-fastapi.md`) tamamlandı ve silindi (2026-10-26); aşama notları (PY0–PY13), StockExchange geçişi ve ölçümler git geçmişinde. Koddaki `K<n>` atıfları aşağıdaki kararlardır (K16 yok; K19 / K20 StockExchange'e özeldi).
+Plan (`docs/plans/backend-python-fastapi.md`) tamamlandı ve silindi (2026-10-26); aşama notları (PY0–PY13), AlphaTerminal geçişi ve ölçümler git geçmişinde. Koddaki `K<n>` atıfları aşağıdaki kararlardır (K16 yok; K19 / K20 AlphaTerminal'e özeldi).
 
 | # | Konu | Karar |
 | --- | --- | --- |

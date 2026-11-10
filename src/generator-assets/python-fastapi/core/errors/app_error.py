@@ -8,11 +8,20 @@ from .common_codes import CommonErrorCodes
 class AppError(Exception):
     """`code` sözleşme kodu ya da projeye özel alt kod; HTTP status verilmezse 4xx / 5xx alt kodu ana koda iner."""
 
-    def __init__(self, code: int, message: str, *, status: int | None = None, header: str = "") -> None:
+    def __init__(
+        self,
+        code: int,
+        message: str,
+        *,
+        status: int | None = None,
+        header: str = "",
+        field: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = int(code)
         self.message = message
         self.header = header
+        self.field = field
         self.status = status or _status_for(self.code)
 
 

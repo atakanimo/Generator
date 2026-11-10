@@ -4,7 +4,7 @@
  *
  * G files (`*_generated.py`, the auth layer's shared files) carry the Generator header and are rewritten; K files (`model.py`, `repository.py`,
  * `hooks.py`, `service.py`, `__init__.py`, the module test `tests/modules/<folder>/test_admin_crud.py`) are created once. A generate only ensures the core assets (create-only);
- * the skeleton belongs to the bootstrap, so an existing host (StockExchange) gets no new skeleton files.
+ * the skeleton belongs to the bootstrap, so an existing host (AlphaTerminal) gets no new skeleton files.
  */
 import { AUTH_USERS_ENTITY, normalizeAuthModules } from '../../../shared/authModules.js';
 import Handlebars from 'handlebars';

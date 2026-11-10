@@ -48,7 +48,7 @@ export const SuccessResponse = <T>(data: T, uiMessage?: string): IApiResponse<T>
 };
 
 export const ErrorResponse = <T>(errorData: ErrorData): IApiResponse<T> => {
-  const { header, message, code = 'BAD_REQUEST' } = errorData;
+  const { header, message, code = 'BAD_REQUEST', field } = errorData;
 
   const ctx = getRequestContext();
   getAppLogger().warn({
@@ -62,7 +62,7 @@ export const ErrorResponse = <T>(errorData: ErrorData): IApiResponse<T> => {
   return {
     isSuccess: false,
     data: null,
-    errorData: { header: header || t('common.failed'), message, code: ErrorCodes[code as ErrorCodeKey] },
+    errorData: { header: header || t('common.failed'), message, code: ErrorCodes[code as ErrorCodeKey], ...(field ? { field } : {}) },
     uiMessage: null
   };
 };

@@ -123,7 +123,7 @@ export class BackendGenerator extends BaseGenerator {
   constructor(options: BackendGenerateOptions) {
     super(options);
 
-    this.isProtectedRoute = options.isProtectedRoute;
+    this.isProtectedRoute = options.isProtectedRoute && (this.schema as V2Model).api?.requiresAuth !== false;
     this.shouldAddRoute = options.shouldAddRoute ?? true;
     this.baseUrl = options.baseUrl || '/api';
     this.updateExistingFiles = options.updateExistingFiles ?? false;

@@ -10,12 +10,12 @@
  *      EXPRESS_BASE=http://localhost:5092 DOTNET_BASE=http://localhost:5093 JWT_SECRET=… JWT_ISSUER=… JWT_AUDIENCE=… \
  *      EXPRESS_ADMIN_ID=<ObjectId in ADMIN_USER_IDS> node scripts/verify/contract-parity.mjs
  *    One token serves both: Express reads `userId` (+ ADMIN_USER_IDS), .NET reads `sub` + `role`.
- *  - `subscription-plans`: `fixtures/python/subscription-plans.models.json`. Python is StockExchange's API
+ *  - `subscription-plans`: `fixtures/python/subscription-plans.models.json`. Python is AlphaTerminal's API
  *    (`/api/v1/admin-crud/subscription-plans`), .NET the `python-parity` host of `regen-dotnet.mjs`.
  *      PYTHON_BASE=http://localhost:8766 DOTNET_BASE=… JWT_SECRET=… JWT_ISSUER=… JWT_AUDIENCE=… \
- *      PYTHON_JWT_SECRET=<StockExchange JWT_SECRET> PYTHON_ADMIN_ID=<admin user id> PYTHON_USER_ID=<user id> \
+ *      PYTHON_JWT_SECRET=<AlphaTerminal JWT_SECRET> PYTHON_ADMIN_ID=<admin user id> PYTHON_USER_ID=<user id> \
  *      node scripts/verify/contract-parity.mjs --suite subscription-plans
- *    StockExchange tokens carry `sub` + `typ` + `role` + `jti` (no `iss` / `aud`); both users must exist in its DB.
+ *    AlphaTerminal tokens carry `sub` + `typ` + `role` + `jti` (no `iss` / `aud`); both users must exist in its DB.
  *  - `golden-models` (backend-python-fastapi PY6): `fixtures/dotnet/models.json` (reference + populate, decimal, map /
  *    json, object / object[], access). Python is a host generated from those models (skeleton, Mongo), .NET the
  *    `models/` host of `regen-dotnet.mjs` (Postgres). Both empty at start; one token serves both (`sub` + `role`).

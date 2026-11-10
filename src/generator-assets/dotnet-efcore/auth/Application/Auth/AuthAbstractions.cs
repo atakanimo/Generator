@@ -9,6 +9,8 @@ public interface IPasswordHasher
 
     /// <summary>Hash yoksa da bir karşılaştırma yapar (kullanıcı var / yok süreden anlaşılmasın).</summary>
     bool Verify(string? hash, string password);
+
+    bool NeedsRehash(string? hash);
 }
 
 public interface ITokenIssuer

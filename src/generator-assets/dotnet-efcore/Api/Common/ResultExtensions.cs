@@ -16,8 +16,11 @@ public static class ResultExtensions
     {
         context.Response.StatusCode = error.Code;
         return context.Response.WriteAsJsonAsync(
-            new ApiResponse<object>(false, null, null, new ErrorData(error.Header, error.Message, error.Code), TraceId.Current(context)));
+            new ApiResponse<object>(false, null, null, Localized(error), TraceId.Current(context)));
     }
+
+    private static ErrorData Localized(Error error) =>
+        new(MessageLocalizer.Localize(error.Header), MessageLocalizer.Localize(error.Message), error.Code, error.Field);
 
     private sealed class PlainContractResult(Result result) : IResult
     {
@@ -28,12 +31,12 @@ public static class ResultExtensions
             {
                 httpContext.Response.StatusCode = error.Code;
                 return httpContext.Response.WriteAsJsonAsync(
-                    new ApiResponse<object>(false, null, null, new ErrorData(error.Header, error.Message, error.Code), traceId),
+                    new ApiResponse<object>(false, null, null, Localized(error), traceId),
                     httpContext.RequestAborted);
             }
 
             return httpContext.Response.WriteAsJsonAsync(
-                new ApiResponse<object>(true, null, result.UiMessage, null, traceId),
+                new ApiResponse<object>(true, null, MessageLocalizer.Localize(result.UiMessage), null, traceId),
                 httpContext.RequestAborted);
         }
     }
@@ -47,12 +50,12 @@ public static class ResultExtensions
             {
                 httpContext.Response.StatusCode = error.Code;
                 return httpContext.Response.WriteAsJsonAsync(
-                    new ApiResponse<T>(false, default, null, new ErrorData(error.Header, error.Message, error.Code), traceId),
+                    new ApiResponse<T>(false, default, null, Localized(error), traceId),
                     httpContext.RequestAborted);
             }
 
             return httpContext.Response.WriteAsJsonAsync(
-                new ApiResponse<T>(true, result.Value, result.UiMessage, null, traceId),
+                new ApiResponse<T>(true, result.Value, MessageLocalizer.Localize(result.UiMessage), null, traceId),
                 httpContext.RequestAborted);
         }
     }

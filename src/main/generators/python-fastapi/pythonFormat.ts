@@ -1,7 +1,7 @@
 /**
  * Python source layout for generated files: import blocks in ruff isort order and the line wrapping `ruff format` would
  * produce for the constructs the templates use (imports, class bases, function signatures, calls). G files are kept
- * `ruff check` / `ruff format` clean for the host's line length (skeleton and StockExchange: 110).
+ * `ruff check` / `ruff format` clean for the host's line length (skeleton and AlphaTerminal: 110).
  */
 
 export const PY_LINE_LENGTH = 110;

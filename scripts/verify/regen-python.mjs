@@ -10,13 +10,13 @@
  *     `fixtures/python/tests/test_<m>_cases.py`: golden-set semantics the generic module test cannot express)
  *     → uvicorn on a throwaway Docker Mongo (`mongo:7`) + HTTP smoke (CRUD, 409, 400, 404, dates; PY6: populate,
  *     relation check, decimal range / sort and `Decimal128` storage, hidden fields over HTTP; pytest also runs on real Mongo).
- * (b) StockExchange copy (`out/regen-python/stockexchange`: `pyproject.toml` + `src/`; the real repo is never written):
- *     `SubscriptionPlans` generated → only its G files and the manifest change; every G file = StockExchange's file, or
+ * (b) AlphaTerminal copy (`out/regen-python/alphaterminal`: `pyproject.toml` + `src/`; the real repo is never written):
+ *     `SubscriptionPlans` generated → only its G files and the manifest change; every G file = AlphaTerminal's file, or
  *     = `ruff format` of it (PY3 was hand-written; the generator writes ruff-format output); K files, assets and the
  *     registry untouched; a second generate writes nothing.
  *
- * Run:  node scripts/verify/regen-python.mjs [--no-docker] [--no-stockexchange]
- *       STOCKEXCHANGE_ROOT overrides ~/Projects/AtaAllWorkspace/AlphaTerminal.
+ * Run:  node scripts/verify/regen-python.mjs [--no-docker] [--no-alphaterminal]
+ *       ALPHATERMINAL_ROOT overrides ~/Projects/AtaAllWorkspace/AlphaTerminal.
  */
 import { build } from 'esbuild';
 import { spawn, spawnSync } from 'child_process';
@@ -29,8 +29,8 @@ import { AUTH_ALL_MODULES, AUTH_TEST_ADMIN } from './auth-scenarios.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const withDocker = !process.argv.includes('--no-docker');
-const withStockExchange = !process.argv.includes('--no-stockexchange');
-const stockExchange = process.env.STOCKEXCHANGE_ROOT ?? join(homedir(), 'Projects/AtaAllWorkspace/AlphaTerminal');
+const withAlphaTerminal = !process.argv.includes('--no-alphaterminal');
+const alphaTerminal = process.env.ALPHATERMINAL_ROOT ?? join(homedir(), 'Projects/AtaAllWorkspace/AlphaTerminal');
 const outDir = join(root, 'scripts/verify/out/regen-python');
 const fixtures = join(root, 'scripts/verify/fixtures/python');
 const appName = 'SampleHost';
@@ -307,19 +307,19 @@ if (withDocker) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// (b) StockExchange copy
+// (b) AlphaTerminal copy
 // ---------------------------------------------------------------------------------------------------------------
-if (withStockExchange) {
+if (withAlphaTerminal) {
   const sePkg = 'alpha_terminal';
-  if (!existsSync(join(stockExchange, 'src', sePkg))) {
-    check('StockExchange present', false, `${stockExchange} (use --no-stockexchange to skip)`);
+  if (!existsSync(join(alphaTerminal, 'src', sePkg))) {
+    check('AlphaTerminal present', false, `${alphaTerminal} (use --no-alphaterminal to skip)`);
   } else {
-    const copy = join(outDir, 'stockexchange');
+    const copy = join(outDir, 'alphaterminal');
     rmSync(copy, { recursive: true, force: true });
     mkdirSync(copy, { recursive: true });
-    cpSync(join(stockExchange, 'pyproject.toml'), join(copy, 'pyproject.toml'));
-    cpSync(join(stockExchange, 'src'), join(copy, 'src'), { recursive: true, filter: (p) => !/__pycache__|\.pyc$/.test(p) });
-    const seManifest = join(stockExchange, '.generator/manifest.json');
+    cpSync(join(alphaTerminal, 'pyproject.toml'), join(copy, 'pyproject.toml'));
+    cpSync(join(alphaTerminal, 'src'), join(copy, 'src'), { recursive: true, filter: (p) => !/__pycache__|\.pyc$/.test(p) });
+    const seManifest = join(alphaTerminal, '.generator/manifest.json');
     if (existsSync(seManifest)) cpSync(seManifest, join(copy, '.generator/manifest.json'));
     const before = new Map(listFiles(copy).map((f) => [relative(copy, f), readFileSync(f)]));
 
@@ -330,30 +330,30 @@ if (withStockExchange) {
     const after = listFiles(copy).map((f) => relative(copy, f));
     const changed = after.filter((rel) => !before.has(rel) || !before.get(rel).equals(readFileSync(join(copy, rel))));
     const moduleRel = `src/${sePkg}/modules/subscription_plans`;
-    // `api/indexes_generated.py` is a new G registry; StockExchange does not call it yet (its `app_state` sets indexes).
+    // `api/indexes_generated.py` is a new G registry; AlphaTerminal does not call it yet (its `app_state` sets indexes).
     const allowed = new Set([...gFiles.map((f) => `${moduleRel}/${f}`), '.generator/manifest.json', `src/${sePkg}/api/indexes_generated.py`]);
     const unexpected = changed.filter((rel) => !allowed.has(rel));
     check('copy: only G files + manifest change (K files, assets, registry untouched)', unexpected.length === 0, unexpected.join(', '));
 
-    const formatted = (text) => run(stockExchange, 'uv', ['run', '--no-sync', 'ruff', 'format', '--stdin-filename', 'x.py', '-'], {}, text);
+    const formatted = (text) => run(alphaTerminal, 'uv', ['run', '--no-sync', 'ruff', 'format', '--stdin-filename', 'x.py', '-'], {}, text);
     for (const file of gFiles) {
       const generated = readFileSync(join(copy, moduleRel, file), 'utf8');
-      const real = readFileSync(join(stockExchange, moduleRel, file), 'utf8');
+      const real = readFileSync(join(alphaTerminal, moduleRel, file), 'utf8');
       if (generated === real) {
-        check(`copy: ${file} = StockExchange`, true);
+        check(`copy: ${file} = AlphaTerminal`, true);
         continue;
       }
       const f = formatted(real);
       const same = f.ok && f.stdout === generated;
-      check(`copy: ${file} = ruff format(StockExchange)`, same, same ? '' : f.ok ? 'differs beyond formatting' : tail(f.output));
+      check(`copy: ${file} = ruff format(AlphaTerminal)`, same, same ? '' : f.ok ? 'differs beyond formatting' : tail(f.output));
     }
     const registryCopy = readFileSync(join(copy, `src/${sePkg}/api/routers_generated.py`), 'utf8');
-    check('copy: registry = StockExchange', registryCopy === readFileSync(join(stockExchange, `src/${sePkg}/api/routers_generated.py`), 'utf8'));
+    check('copy: registry = AlphaTerminal', registryCopy === readFileSync(join(alphaTerminal, `src/${sePkg}/api/routers_generated.py`), 'utf8'));
     const second = gen.generatePythonBackend(copy, spModels[0]);
     check('copy: second generate writes nothing', second.success && (second.writtenFiles ?? []).length === 0, (second.writtenFiles ?? [second.error]).join(', '));
   }
 } else {
-  console.log('SKIP  StockExchange copy (--no-stockexchange)');
+  console.log('SKIP  AlphaTerminal copy (--no-alphaterminal)');
 }
 
 console.log(failed ? `\n${failed} check(s) FAILED (host kept: ${host})` : '\nall checks PASS');

@@ -91,7 +91,7 @@ function listFiles(dir, skip = new Set(['node_modules', 'dist', '.git', 'system'
 }
 
 function run(cmd, args, cwd, extraEnv = {}) {
-  const r = spawnSync(cmd, args, { cwd, encoding: 'utf8', env: { ...process.env, ...extraEnv } });
+  const r = spawnSync(cmd, args, { cwd, encoding: 'utf8', env: { ...process.env, ...extraEnv }, shell: process.platform === 'win32' });
   return { ok: r.status === 0, output: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 }
 

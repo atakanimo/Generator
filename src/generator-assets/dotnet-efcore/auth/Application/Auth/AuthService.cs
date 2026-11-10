@@ -67,6 +67,11 @@ public sealed partial class AuthService(
         }
         // @endif
 
+        if (hasher.NeedsRehash(user.PasswordHash))
+        {
+            user.PasswordHash = hasher.Hash(body.Password!);
+        }
+
         user.LastLoginAt = time.GetUtcNow();
         return Result.Ok(await IssueSessionAsync(user, client, null, ct), AuthMessages.LoggedIn);
     }
@@ -441,7 +446,7 @@ public sealed partial class AuthService(
         db.OtpCodes.Add(new OtpCode { UserId = userId, Purpose = purpose, CodeHash = Sha256(code), ExpiresAt = now.AddMinutes(OtpMinutes) });
         await db.SaveChangesAsync(ct);
         var subject = purpose == OtpReset ? AuthMessages.ResetSubject : AuthMessages.VerifySubject;
-        await mail.SendAsync(user.Email, subject, string.Format(CultureInfo.CurrentCulture, AuthMessages.CodeText, code, OtpMinutes), ct);
+        await mail.SendAsync(user.Email, MessageLocalizer.Localize(subject), MessageLocalizer.Localize(string.Format(CultureInfo.InvariantCulture, AuthMessages.CodeText, code, OtpMinutes)), ct);
     }
 
     private async Task<bool> ConsumeOtpAsync(User user, string purpose, string? code, CancellationToken ct)

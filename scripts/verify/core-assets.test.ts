@@ -13,7 +13,7 @@ import { toMergePatch } from '../../src/generator-assets/express-mongoose/servic
 import { dateOnlyRangeFilter } from '../../src/generator-assets/express-mongoose/filters/filter-query.helper.ts';
 import { mapListRows, mapOneRow, runAfterWrite } from '../../src/generator-assets/express-mongoose/services/service-hooks.ts';
 
-const requireFromHost = createRequire('/Users/atakanatabey/Projects/AtaAllWorkspace/Varlik360/package.json');
+const requireFromHost = createRequire(`${process.env.VARLIK360}/package.json`);
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const mongoose = requireFromHost('mongoose') as typeof import('mongoose');
 const { ObjectId, Decimal128 } = mongoose.Types;

@@ -11,6 +11,7 @@ import { missingHostExports } from '../../utils/coreAssetImports.js';
 interface CoreBootstrapFile {
   sourceRelativePath: string;
   targetRelativePath: string;
+  createOnly?: boolean;
 }
 
 export interface ExpressCoreAssetWrite {
@@ -41,8 +42,20 @@ export const EXPRESS_CORE_BOOTSTRAP_FILES: readonly CoreBootstrapFile[] = [
     targetRelativePath: 'src/core/logging/job-log-context.ts'
   },
   {
-    sourceRelativePath: 'src/generator-assets/express-mongoose/logging/pino-stdout-file-tee.ts',
-    targetRelativePath: 'src/core/logging/pino-stdout-file-tee.ts'
+    sourceRelativePath: 'src/generator-assets/express-mongoose/logging/jsonl-log-destination.ts',
+    targetRelativePath: 'src/core/logging/jsonl-log-destination.ts'
+  },
+  {
+    sourceRelativePath: 'src/generator-assets/express-mongoose/logging/jsonl-writer.ts',
+    targetRelativePath: 'src/core/logging/jsonl-writer.ts'
+  },
+  {
+    sourceRelativePath: 'src/generator-assets/express-mongoose/logging/log-record.ts',
+    targetRelativePath: 'src/core/logging/log-record.ts'
+  },
+  {
+    sourceRelativePath: 'src/generator-assets/express-mongoose/logging/category-router.ts',
+    targetRelativePath: 'src/core/logging/category-router.ts'
   },
   {
     sourceRelativePath: 'src/generator-assets/express-mongoose/logging/daily-log-file-path.ts',
@@ -99,6 +112,15 @@ export const EXPRESS_CORE_BOOTSTRAP_FILES: readonly CoreBootstrapFile[] = [
   {
     sourceRelativePath: 'src/generator-assets/express-mongoose/services/export-csv.ts',
     targetRelativePath: 'src/core/services/export-csv.ts'
+  },
+  {
+    sourceRelativePath: 'src/generator-assets/express-mongoose/rate-limit/rate-limit.policies.ts',
+    targetRelativePath: 'src/core/rate-limit/rate-limit.policies.ts',
+    createOnly: true
+  },
+  {
+    sourceRelativePath: 'src/generator-assets/express-mongoose/rate-limit/rate-limit.ts',
+    targetRelativePath: 'src/core/rate-limit/rate-limit.ts'
   }
 ];
 

@@ -23,10 +23,9 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ISSUER: str = ""
     JWT_AUDIENCE: str = ""
-    # Auth (docs/backend/auth.md): access / refresh süreleri, login / kod uçlarında IP başına dakikalık sınır.
+    # Auth (docs/backend/auth.md): access / refresh süreleri.
     JWT_ACCESS_TTL_MINUTES: int = 15
     JWT_REFRESH_TTL_DAYS: int = 30
-    AUTH_RATE_LIMIT_PER_MINUTE: int = 10
     # Sosyal giriş client id'leri (virgülle) ve e-posta (SMTP_HOST boşsa e-postalar log'a yazılır).
     GOOGLE_CLIENT_IDS: str = ""
     APPLE_CLIENT_IDS: str = ""

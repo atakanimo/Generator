@@ -42,6 +42,11 @@ _CATALOG: dict[str, dict[str, str]] = {
         "tr": "Dışa aktarılacak çok fazla kayıt var ({total}); en fazla {limit}. Filtreleri daraltın.",
         "en": "Too many records to export ({total}); at most {limit}. Narrow the filters.",
     },
+    "too_many_requests_header": {"tr": "Çok fazla istek", "en": "Too many requests"},
+    "too_many_requests": {
+        "tr": "Çok fazla istek gönderildi; biraz sonra tekrar deneyin.",
+        "en": "Too many requests; try again later.",
+    },
     "internal_header": {"tr": "Sunucu hatası", "en": "Server error"},
     "internal": {"tr": "Beklenmeyen bir hata oluştu.", "en": "An unexpected error occurred."},
 }

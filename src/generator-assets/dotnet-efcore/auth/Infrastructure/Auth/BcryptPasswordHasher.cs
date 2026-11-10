@@ -3,7 +3,7 @@ using __App__.Application.Auth;
 namespace __App__.Infrastructure.Auth;
 
 /// <summary>bcrypt cost 12 (BCrypt.Net-Next): Express (bcryptjs) ve Python (bcrypt) hash'leriyle karşılıklı uyumlu.</summary>
-public sealed class BcryptPasswordHasher : IPasswordHasher
+public sealed partial class BcryptPasswordHasher : IPasswordHasher
 {
     public const int Cost = 12;
 
@@ -19,6 +19,13 @@ public sealed class BcryptPasswordHasher : IPasswordHasher
             return false;
         }
 
+        if (!IsBcrypt(hash))
+        {
+            var verified = false;
+            VerifyLegacyHash(hash, password, ref verified);
+            return verified;
+        }
+
         try
         {
             return BCrypt.Net.BCrypt.Verify(password, hash);
@@ -28,4 +35,11 @@ public sealed class BcryptPasswordHasher : IPasswordHasher
             return false;
         }
     }
+
+    public bool NeedsRehash(string? hash) =>
+        !string.IsNullOrEmpty(hash) && (!IsBcrypt(hash) || BCrypt.Net.BCrypt.PasswordNeedsRehash(hash, Cost));
+
+    private static bool IsBcrypt(string hash) => hash.StartsWith("$2", StringComparison.Ordinal);
+
+    static partial void VerifyLegacyHash(string hash, string password, ref bool verified);
 }

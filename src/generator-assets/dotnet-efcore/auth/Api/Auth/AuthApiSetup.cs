@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using __App__.Api.Common;
@@ -14,17 +13,13 @@ namespace __App__.Api.Auth;
 
 public static class AuthApiSetup
 {
-    /// <summary>Login / kayıt / kod / şifre sıfırlama: IP + uç başına dakikada <c>Auth__RateLimitPerMinute</c> (varsayılan 10).</summary>
-    public const string RateLimitPolicy = "auth";
-
     private const string SuspendedKey = "auth.suspended";
 
     public static IServiceCollection AddAuthModule(this IServiceCollection services, IConfiguration configuration)
     {
         var settings = new AuthSettings(
             configuration.GetValue("Jwt:AccessTtlMinutes", 15),
-            configuration.GetValue("Jwt:RefreshTtlDays", 30),
-            configuration.GetValue("Auth:RateLimitPerMinute", 10));
+            configuration.GetValue("Jwt:RefreshTtlDays", 30));
         services.AddSingleton(settings);
         services.AddSingleton<ITokenIssuer, JwtTokenIssuer>();
         // @if google|apple
@@ -65,19 +60,6 @@ public static class AuthApiSetup
             options.Events = events;
         });
 
-        services.AddRateLimiter(options =>
-        {
-            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            options.OnRejected = (context, _) => new ValueTask(context.HttpContext.WriteContractAsync(AuthErrors.TooManyRequests()));
-            options.AddPolicy(RateLimitPolicy, http => RateLimitPartition.GetFixedWindowLimiter(
-                $"{http.Connection.RemoteIpAddress}|{http.Request.Path}",
-                _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = settings.RateLimitPerMinute,
-                    Window = TimeSpan.FromMinutes(1),
-                    QueueLimit = 0,
-                }));
-        });
         return services;
     }
 

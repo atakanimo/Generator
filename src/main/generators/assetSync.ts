@@ -18,6 +18,7 @@ import { isGeneratorOwnedSource, withOnceHeader, withSharedHeader, withoutGenera
 import { applyAppTokens, dotnetAssetsDir, listFiles } from './dotnet-efcore/dotnetFiles.js';
 import { DOTNET_LAYERS, dotnetLayout } from './dotnet-efcore/dotnetLayout.js';
 import { dotnetDbProvider } from './dotnet-efcore/providers/index.js';
+import { renderDotnetAuthFiles } from './dotnet-efcore/DotnetAuthBootstrap.js';
 import { EXPRESS_CORE_BOOTSTRAP_FILES } from './express-mongoose/expressCoreAssets.js';
 import { applyPythonTokens, pythonAssetsDir } from './python-fastapi/pythonFiles.js';
 import { pythonLayout } from './python-fastapi/pythonLayout.js';
@@ -87,6 +88,16 @@ function dotnetPlan(root: string): AssetPlan | null {
     }
   }
   const notes: string[] = [];
+  if (existsSync(join(layout.projectDir('Application'), 'Auth', 'AuthService.cs'))) {
+    const modules = readWorkspaceManifest(root)?.workspace?.auth?.modules;
+    if (modules?.length) {
+      for (const file of renderDotnetAuthFiles(root, host.app, db, modules)) {
+        entries.set(file.target, { rel: relative(root, file.target).replace(/\\/g, '/'), target: file.target, content: file.content, createOnly: file.owned });
+      }
+    } else {
+      notes.push('Auth dosyaları eşitlenmedi: manifest workspace.auth.modules boş.');
+    }
+  }
   if (existsSync(join(layout.projectDir('Api'), 'Common', 'EnvelopeExceptionHandler.cs'))) {
     notes.push('Api/Common/EnvelopeExceptionHandler.cs eski, kaldırın: yerini ContractExceptionHandler.cs aldı (WriteEnvelopeAsync → WriteContractAsync).');
   }
@@ -98,6 +109,13 @@ function pythonPlan(root: string): AssetPlan | null {
   if (!host) return null;
   const layout = pythonLayout(root, host.pkg);
   const entries = treeEntries(root, join(pythonAssetsDir(), 'core'), layout.coreDir, (text) => text);
+  const policies = join(layout.coreDir, 'http', 'rate_limit_policies.py');
+  entries.set(policies, {
+    rel: relative(root, policies).replace(/\\/g, '/'),
+    target: policies,
+    content: readFileSync(join(pythonAssetsDir(), '_skeleton', 'src', '__app__', 'core', 'http', 'rate_limit_policies.py'), 'utf8'),
+    createOnly: true
+  });
   const notes: string[] = [];
   // Auth `.Custom` eşleri yalnız yoksa yazılır; auth G dosyalarını generate yazar (`workspace.auth.appName` gerekir).
   const authDir = join(layout.packageDir, 'modules', 'auth');
@@ -121,7 +139,7 @@ function expressPlan(root: string): AssetPlan | null {
   const entries = EXPRESS_CORE_BOOTSTRAP_FILES.map((file) => {
     const source = join(assets, relative('src/generator-assets/express-mongoose', file.sourceRelativePath));
     const target = join(root, file.targetRelativePath);
-    return { rel: file.targetRelativePath, target, content: readFileSync(source, 'utf8') };
+    return { rel: file.targetRelativePath, target, content: readFileSync(source, 'utf8'), createOnly: file.createOnly };
   });
   return { stack: 'express-mongoose', root, entries };
 }

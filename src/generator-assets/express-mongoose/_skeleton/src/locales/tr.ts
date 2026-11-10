@@ -48,7 +48,6 @@ const tr = {
     adminPasswordOnly: 'Admin hesapları yalnız e-posta ve şifreyle giriş yapar',
     passwordAlreadySet: 'Hesabın şifresi zaten var; şifre değiştirmeyi kullanın',
     passwordCreated: 'Şifre oluşturuldu',
-    tooManyRequests: 'Çok fazla deneme; biraz sonra tekrar deneyin',
     mail: {
       verifySubject: '__App__ doğrulama kodu',
       resetSubject: '__App__ şifre sıfırlama kodu',
@@ -56,7 +55,8 @@ const tr = {
     }
   },
   rateLimit: {
-    tooManyRequests: 'Çok fazla istek'
+    tooManyRequests: 'Çok fazla istek',
+    retryLater: 'Çok fazla istek gönderildi; biraz sonra tekrar deneyin'
   }
 };
 

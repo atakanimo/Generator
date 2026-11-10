@@ -12,18 +12,18 @@
  * (b) Round trip: the fixture models of `regen-python` are generated, every `model_generated.py` is parsed back and the
  *     file-owned parts (kind, array, enum, int / date format, constraints, default, object sub-fields) must match the
  *     manifest (known, documented losses aside).
- * (c) StockExchange copy (`out/python-import/stockexchange`; the real repo is never written): scan (generated
+ * (c) AlphaTerminal copy (`out/python-import/alphaterminal`; the real repo is never written): scan (generated
  *     `SubscriptionPlans` + importable modules), all 14 hand-written entity models parse with nothing refused,
  *     the subject (`SUBJECT`, a module outside the PY-R screens) imported → only its G files, the new `hooks.py`, the registries and the manifest change; notes name
- *     the K files to adapt; G files pass `ruff` and import with StockExchange's venv; a second generate writes nothing.
- * (d) Real StockExchange data, read-only: extra-field report of the subject (local Mongo from `config.env`; when it
+ *     the K files to adapt; G files pass `ruff` and import with AlphaTerminal's venv; a second generate writes nothing.
+ * (d) Real AlphaTerminal data, read-only: extra-field report of the subject (local Mongo from `config.env`; when it
  *     is not reachable the report must say so); the generated row model is run on the same documents and must fail
- *     exactly as the report predicts. `git status` of StockExchange is the same before and after.
+ *     exactly as the report predicts. `git status` of AlphaTerminal is the same before and after.
  * (e) Report fixture on a throwaway Docker Mongo: extra (top-level / sub-object / object[]), missing, wrong type, soft
  *     (ISO string date) rows; unreachable server, missing configuration and a remote server are reported, not thrown.
  *
- * Run:  node scripts/verify/python-import.mjs [--no-docker] [--no-stockexchange]
- *       STOCKEXCHANGE_ROOT overrides ~/Projects/AtaAllWorkspace/AlphaTerminal.
+ * Run:  node scripts/verify/python-import.mjs [--no-docker] [--no-alphaterminal]
+ *       ALPHATERMINAL_ROOT overrides ~/Projects/AtaAllWorkspace/AlphaTerminal.
  */
 import { build } from 'esbuild';
 import { spawnSync } from 'child_process';
@@ -36,12 +36,12 @@ import { AUTH_TEST_ADMIN } from './auth-scenarios.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const withDocker = !process.argv.includes('--no-docker');
-const withStockExchange = !process.argv.includes('--no-stockexchange');
-const stockExchange = process.env.STOCKEXCHANGE_ROOT ?? join(homedir(), 'Projects/AtaAllWorkspace/AlphaTerminal');
+const withAlphaTerminal = !process.argv.includes('--no-alphaterminal');
+const alphaTerminal = process.env.ALPHATERMINAL_ROOT ?? join(homedir(), 'Projects/AtaAllWorkspace/AlphaTerminal');
 const outDir = join(root, 'scripts/verify/out/python-import');
 const fixtures = join(root, 'scripts/verify/fixtures/python');
 const mongoContainer = 'gen-python-import-mongo';
-const seVenvPython = join(stockExchange, '.venv/bin/python');
+const seVenvPython = join(alphaTerminal, '.venv/bin/python');
 
 let failed = 0;
 function check(name, ok, detail = '') {
@@ -278,22 +278,22 @@ for (const model of rtModels) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// (c) StockExchange copy, (d) real StockExchange data (read-only)
+// (c) AlphaTerminal copy, (d) real AlphaTerminal data (read-only)
 // ---------------------------------------------------------------------------------------------------------------
 // Import subject: a module outside the 12 admin screens (PY-R), so it stays hand-written while the screens are
-// imported one by one; the generated / importable split is read from StockExchange's manifest.
+// imported one by one; the generated / importable split is read from AlphaTerminal's manifest.
 const SUBJECT = { folder: 'ohlcv_discontinuity_alerts', entity: 'OhlcvDiscontinuityAlerts' };
 const SUBJECT_FIELDS =
   'ticker:string! market:string! sourceJob:string detectedAt:date refClose:number! refBarTime:date livePrice:number! jumpPct:number! reason:enum comment:string status:enum resolvedAt:date createdAt:date updatedAt:date';
 const seEntities = ['users', 'user_subscriptions', 'ip_blacklist', 'audit_logs', 'markets', 'providers', 'symbols', 'scheduled_reports', 'daily_report_watchlist', 'deep_dive_reports', 'deep_dive_prompts', 'market_pulse_items', 'ohlcv_discontinuity_alerts', 'user_watch_lists'];
-if (withStockExchange && existsSync(join(stockExchange, 'src/alpha_terminal'))) {
-  const gitBefore = run(stockExchange, 'git', ['status', '--porcelain']).stdout;
-  const copy = join(outDir, 'stockexchange');
+if (withAlphaTerminal && existsSync(join(alphaTerminal, 'src/alpha_terminal'))) {
+  const gitBefore = run(alphaTerminal, 'git', ['status', '--porcelain']).stdout;
+  const copy = join(outDir, 'alphaterminal');
   rmSync(copy, { recursive: true, force: true });
   mkdirSync(copy, { recursive: true });
-  cpSync(join(stockExchange, 'pyproject.toml'), join(copy, 'pyproject.toml'));
-  cpSync(join(stockExchange, 'src'), join(copy, 'src'), { recursive: true, filter: (p) => !/__pycache__|\.pyc$/.test(p) });
-  if (existsSync(join(stockExchange, '.generator/manifest.json'))) cpSync(join(stockExchange, '.generator/manifest.json'), join(copy, '.generator/manifest.json'));
+  cpSync(join(alphaTerminal, 'pyproject.toml'), join(copy, 'pyproject.toml'));
+  cpSync(join(alphaTerminal, 'src'), join(copy, 'src'), { recursive: true, filter: (p) => !/__pycache__|\.pyc$/.test(p) });
+  if (existsSync(join(alphaTerminal, '.generator/manifest.json'))) cpSync(join(alphaTerminal, '.generator/manifest.json'), join(copy, '.generator/manifest.json'));
   const before = snapshot(copy);
 
   const scan = await gen.scanProject(copy);
@@ -309,7 +309,7 @@ if (withStockExchange && existsSync(join(stockExchange, 'src/alpha_terminal'))) 
   );
   check('copy: scan → every hand-written entity module importable', handWritten.every((e) => seImportable.includes(e)), `${seImportable.length}: ${seImportable.join(', ')}`);
   for (const entity of handWritten) {
-    const r = gen.parsePydanticModel(join(copy, 'src/alpha_terminal/modules', entity, 'model.py'), { root: stockExchange });
+    const r = gen.parsePydanticModel(join(copy, 'src/alpha_terminal/modules', entity, 'model.py'), { root: alphaTerminal });
     check(`copy: parse ${entity} → ${r.className}`, r.unsupported.length === 0 && r.model.fields.length > 2, `${r.model.fields.length} fields, ${r.warnings.length} warnings${r.unsupported.length ? `, refused: ${r.unsupported.join('; ')}` : ''}`);
   }
 
@@ -335,26 +335,26 @@ if (withStockExchange && existsSync(join(stockExchange, 'src/alpha_terminal'))) 
     json(ipImport.notes)
   );
   const seRuffTargets = gFiles.map((f) => join(copy, moduleRel, f));
-  const seRuff = run(stockExchange, 'uv', ['run', '--no-sync', 'ruff', 'check', '--select', 'E,F,I,UP,B', ...seRuffTargets]);
+  const seRuff = run(alphaTerminal, 'uv', ['run', '--no-sync', 'ruff', 'check', '--select', 'E,F,I,UP,B', ...seRuffTargets]);
   check('copy: ruff check (E, F, I, UP, B) on generated files', seRuff.ok, seRuff.ok ? '' : tail(seRuff.output, 30));
-  const seFmt = run(stockExchange, 'uv', ['run', '--no-sync', 'ruff', 'format', '--check', ...seRuffTargets]);
+  const seFmt = run(alphaTerminal, 'uv', ['run', '--no-sync', 'ruff', 'format', '--check', ...seRuffTargets]);
   check('copy: ruff format --check on generated files', seFmt.ok, seFmt.ok ? '' : tail(seFmt.output));
   const seImp = run(copy, seVenvPython, ['-c', `import alpha_terminal.modules.${SUBJECT.folder}.service_generated, alpha_terminal.modules.${SUBJECT.folder}.schemas_generated`], {
     PYTHONPATH: join(copy, 'src')
   });
-  check('copy: generated modules import (StockExchange venv)', seImp.ok, seImp.ok ? '' : tail(seImp.output));
+  check('copy: generated modules import (AlphaTerminal venv)', seImp.ok, seImp.ok ? '' : tail(seImp.output));
   const seAgain = gen.generatePythonBackend(copy, gen.readWorkspaceManifest(copy).models.find((x) => x.model.entityName === SUBJECT.entity).model);
   check('copy: second generate writes nothing', seAgain.success && (seAgain.writtenFiles ?? []).length === 0, json(seAgain.writtenFiles));
 
   // (d) Real data, read-only.
-  const real = gen.previewPythonImport(stockExchange, join(stockExchange, `src/alpha_terminal/modules/${SUBJECT.folder}/model.py`));
+  const real = gen.previewPythonImport(alphaTerminal, join(alphaTerminal, `src/alpha_terminal/modules/${SUBJECT.folder}/model.py`));
   const report = real.report;
   if (report?.ok) {
     console.log(`INFO  report: ${real.reportSummary}`);
     check('real: report ran (read-only sample)', report.exists === true && report.scanned > 0, `${report.database}.${report.collection} ${report.scanned}/${report.total}`);
     const missingUpdated = report.missing.find((i) => i.path === 'updatedAt')?.docs ?? 0;
     // The generated row model on the same documents: as many fail as the report predicts (read-only `find`).
-    const cfg = gen.resolveMongoConfig(stockExchange);
+    const cfg = gen.resolveMongoConfig(alphaTerminal);
     const rows = run(copy, seVenvPython, ['-c', `
 import os, sys
 from pydantic import ValidationError
@@ -384,16 +384,16 @@ print(total, bad)
   } else {
     check('real: Mongo not reachable → reported, not thrown', real.success && !!report && ['unreachable', 'no-config', 'no-driver'].includes(report.reason), `${report?.reason}: ${report?.error}`);
   }
-  const gitAfter = run(stockExchange, 'git', ['status', '--porcelain']).stdout;
-  check('real: StockExchange working tree unchanged', gitBefore === gitAfter);
+  const gitAfter = run(alphaTerminal, 'git', ['status', '--porcelain']).stdout;
+  check('real: AlphaTerminal working tree unchanged', gitBefore === gitAfter);
 } else {
-  console.log('SKIP  StockExchange (--no-stockexchange or missing)');
+  console.log('SKIP  AlphaTerminal (--no-alphaterminal or missing)');
 }
 
 // ---------------------------------------------------------------------------------------------------------------
 // (e) Report fixture on a throwaway Mongo
 // ---------------------------------------------------------------------------------------------------------------
-const reportRoot = existsSync(seVenvPython) ? stockExchange : host; // interpreter with PyMongo
+const reportRoot = existsSync(seVenvPython) ? alphaTerminal : host; // interpreter with PyMongo
 const rModel = parsed.model;
 const closed = await freePort();
 const unreachable = gen.collectionReport(reportRoot, rModel, { collection: 'catalog_items', config: { uri: `mongodb://127.0.0.1:${closed}/x`, db: 'x' }, timeoutMs: 800 });

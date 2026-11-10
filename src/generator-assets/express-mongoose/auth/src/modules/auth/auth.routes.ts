@@ -1,6 +1,5 @@
 import express, { type NextFunction, type Request, type Response, type Router } from 'express';
 import { validate } from '@core';
-import { authRateLimit } from '@core/auth/rate-limit';
 import { AtaResponse } from '@core/response/response.helper';
 import { adminAuthMiddleware, authMiddleware } from '@middlewares';
 import * as authService from './auth.service';
@@ -19,7 +18,7 @@ const h =
     fn(req, res).catch(next);
   };
 
-router.post('/login', authRateLimit('login'), validate({ body: S.LoginBodySchema }), h(async (req, res) => {
+router.post('/login', validate({ body: S.LoginBodySchema }), h(async (req, res) => {
   AtaResponse(res, await authService.login(req.body.email, req.body.password, client(req)));
 }));
 
@@ -44,43 +43,43 @@ router.post('/admin/set-password', authMiddleware, adminAuthMiddleware, validate
 }));
 // @if register
 
-router.post('/register', authRateLimit('register'), validate({ body: S.RegisterBodySchema }), h(async (req, res) => {
+router.post('/register', validate({ body: S.RegisterBodySchema }), h(async (req, res) => {
   AtaResponse(res, await authService.register(req.body));
 }));
 
-router.post('/verify-email', authRateLimit('verify-email'), validate({ body: S.VerifyEmailBodySchema }), h(async (req, res) => {
+router.post('/verify-email', validate({ body: S.VerifyEmailBodySchema }), h(async (req, res) => {
   AtaResponse(res, await authService.verifyEmail(req.body.email, req.body.code, client(req)));
 }));
 
-router.post('/send-otp', authRateLimit('send-otp'), validate({ body: S.SendOtpBodySchema }), h(async (req, res) => {
+router.post('/send-otp', validate({ body: S.SendOtpBodySchema }), h(async (req, res) => {
   AtaResponse(res, await authService.resendOtp(req.body.email, req.body.purpose));
 }));
 // @endif
 // @if password-reset
 
-router.post('/forgot-password', authRateLimit('forgot-password'), validate({ body: S.ForgotPasswordBodySchema }), h(async (req, res) => {
+router.post('/forgot-password', validate({ body: S.ForgotPasswordBodySchema }), h(async (req, res) => {
   AtaResponse(res, await authService.forgotPassword(req.body.email));
 }));
 
-router.post('/reset-password', authRateLimit('reset-password'), validate({ body: S.ResetPasswordBodySchema }), h(async (req, res) => {
+router.post('/reset-password', validate({ body: S.ResetPasswordBodySchema }), h(async (req, res) => {
   AtaResponse(res, await authService.resetPassword(req.body.email, req.body.code, req.body.newPassword));
 }));
 // @endif
 // @if google
 
-router.post('/google', authRateLimit('google'), validate({ body: S.GoogleBodySchema }), h(async (req, res) => {
+router.post('/google', validate({ body: S.GoogleBodySchema }), h(async (req, res) => {
   AtaResponse(res, await authService.loginWithGoogle(req.body.idToken, client(req)));
 }));
 // @endif
 // @if apple
 
-router.post('/apple', authRateLimit('apple'), validate({ body: S.AppleBodySchema }), h(async (req, res) => {
+router.post('/apple', validate({ body: S.AppleBodySchema }), h(async (req, res) => {
   AtaResponse(res, await authService.loginWithApple(req.body.identityToken, client(req), req.body.fullName, req.body.authorizationCode));
 }));
 // @endif
 // @if google|apple
 
-router.post('/set-password', authMiddleware, authRateLimit('set-password'), validate({ body: S.SetPasswordBodySchema }), h(async (req, res) => {
+router.post('/set-password', authMiddleware, validate({ body: S.SetPasswordBodySchema }), h(async (req, res) => {
   AtaResponse(res, await authService.setPassword(req.authUser!, req.body.newPassword));
 }));
 // @endif

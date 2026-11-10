@@ -3,11 +3,11 @@
  * Python + FastAPI entry gate (plan backend-python-fastapi PY8): runs the Python gates in order and prints one summary.
  *
  *  1. `regen-python.mjs`     module generator: empty host (fixture models + golden set, generated module tests, ruff,
- *                            lint-imports, pytest, HTTP smoke on Docker Mongo) + StockExchange copy.
+ *                            lint-imports, pytest, HTTP smoke on Docker Mongo) + AlphaTerminal copy.
  *  2. `python-bootstrap.mjs` skeleton + assets: empty host, uv sync, ruff, lint-imports, pytest, uvicorn health,
- *                            assets = StockExchange.
- *  3. `python-import.mjs`    Pydantic import, scan, round trip, StockExchange copy, extra-field report.
- *  4. Parity (`dotnet-e2e.mjs --python-only`): `contract-parity --suite subscription-plans` (StockExchange API vs the
+ *                            assets = AlphaTerminal.
+ *  3. `python-import.mjs`    Pydantic import, scan, round trip, AlphaTerminal copy, extra-field report.
+ *  4. Parity (`dotnet-e2e.mjs --python-only`): `contract-parity --suite subscription-plans` (AlphaTerminal API vs the
  *     .NET `python-parity` host) and `--suite golden-models` (generated Python golden host vs the .NET `models` host).
  *     `regen-dotnet.mjs <label>` rebuilds those .NET hosts first (the generators may have changed); `--reuse-dotnet`
  *     skips it when `out/dotnet/<label>/{models,python-parity}` exist.
@@ -16,9 +16,9 @@
  * writes them (`out/dotnet/<label>/parity-<suite>.log`). The summary lists each gate's PASS count and its FAIL lines.
  *
  * Needs: uv + Python 3.12, Docker (OrbStack) for the smokes and parity, and for parity the .NET 10 SDK + local Postgres
- * (see dotnet-e2e.mjs) + StockExchange with uv.
+ * (see dotnet-e2e.mjs) + AlphaTerminal with uv.
  *
- * Run:  node scripts/verify/python-e2e.mjs [label] [--no-docker] [--no-stockexchange] [--no-parity] [--reuse-dotnet]
+ * Run:  node scripts/verify/python-e2e.mjs [label] [--no-docker] [--no-alphaterminal] [--no-parity] [--reuse-dotnet]
  *                                          [--only=<gate,…>]
  *       gates: regen-python, python-bootstrap, python-import, parity
  */
@@ -31,7 +31,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const args = process.argv.slice(2);
 const label = args.find((a) => !a.startsWith('--')) ?? 'reference';
 const noDocker = args.includes('--no-docker');
-const noStockExchange = args.includes('--no-stockexchange');
+const noAlphaTerminal = args.includes('--no-alphaterminal');
 const only = args.find((a) => a.startsWith('--only='))?.slice('--only='.length).split(',');
 const logDir = join(root, 'scripts/verify/out/python-e2e');
 const dotnetOut = join(root, 'scripts/verify/out/dotnet', label);
@@ -69,11 +69,11 @@ async function gate(name, script, scriptArgs) {
 }
 
 const wanted = (name) => !only || only.includes(name);
-const flags = [...(noDocker ? ['--no-docker'] : []), ...(noStockExchange ? ['--no-stockexchange'] : [])];
+const flags = [...(noDocker ? ['--no-docker'] : []), ...(noAlphaTerminal ? ['--no-alphaterminal'] : [])];
 
 mkdirSync(logDir, { recursive: true });
 if (wanted('regen-python')) await gate('regen-python', 'regen-python.mjs', flags);
-if (wanted('python-bootstrap')) await gate('python-bootstrap', 'python-bootstrap.mjs', noStockExchange ? ['--no-stockexchange'] : []);
+if (wanted('python-bootstrap')) await gate('python-bootstrap', 'python-bootstrap.mjs', noAlphaTerminal ? ['--no-alphaterminal'] : []);
 if (wanted('python-import')) await gate('python-import', 'python-import.mjs', flags);
 if (wanted('parity')) {
   if (args.includes('--no-parity') || noDocker) {
@@ -81,7 +81,7 @@ if (wanted('parity')) {
   } else {
     const reuse = args.includes('--reuse-dotnet') && existsSync(join(dotnetOut, 'models')) && existsSync(join(dotnetOut, 'python-parity'));
     const ready = reuse || (await gate('regen-dotnet', 'regen-dotnet.mjs', [label]));
-    // `--python-only` without StockExchange still runs golden-models; the subscription-plans suite reports it missing.
+    // `--python-only` without AlphaTerminal still runs golden-models; the subscription-plans suite reports it missing.
     if (ready) await gate('parity', 'dotnet-e2e.mjs', [label, '--python-only']);
   }
 }

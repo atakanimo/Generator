@@ -145,7 +145,7 @@ Kapılar: `node scripts/verify/client-http-sync.mjs`; projelerdeki kopyaların e
 | Preset | İstemci | Token saklama |
 | --- | --- | --- |
 | `redux-rn` | Varlik360 `apps/mobile`, CeyizDefterim `apps/mobile` | AsyncStorage |
-| `redux-web` | SharedFrame `apps/web`, StockExchange `apps/web` | `localStorage` / `sessionStorage` |
+| `redux-web` | SharedFrame `apps/web`, AlphaTerminal `apps/web` | `localStorage` / `sessionStorage` |
 
 İstek bayrakları ikisinde de axios config'inde (`skipLoading`, `skipSuccessToast`; okumalar başarı mesajı göstermez):
 bütün istemciler aynı interceptor'ı kullanır ([§ HTTP katmanı](#http-katmanı-client-http)).

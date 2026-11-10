@@ -27,8 +27,7 @@ forwarded.KnownIPNetworks.Clear();
 forwarded.KnownProxies.Clear();
 app.UseForwardedHeaders(forwarded);
 app.UseApi();
-app.UseRateLimiter();
-app.MapGet("/api/health", () => TypedResults.Ok()).AllowAnonymous();
+app.MapHealth();
 app.MapEndpoints();
 app.MapAuthEndpoints();
 

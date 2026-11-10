@@ -7,11 +7,11 @@
  *     `dotnet run` → dotnet-d2 / d3 / d4 / py1-formats smokes (need empty tables, run first) → dotnet-d0-smoke (event-types).
  *  3. Parity (skip with --no-parity): Mongo in Docker (`mongo:7`) + Varlik360's HTTP app
  *     (`fixtures/express-parity-host.ts`) vs the golden host on Postgres → `contract-parity.mjs`.
- *  4. Python parity (backend-python-fastapi PY3): StockExchange's API (`uv run`, same Mongo container, `alpha_parity`)
+ *  4. Python parity (backend-python-fastapi PY3): AlphaTerminal's API (`uv run`, same Mongo container, `alpha_parity`)
  *     vs the `python-parity` host on Postgres → `contract-parity.mjs --suite subscription-plans`.
- *     Skipped with a FAIL line when StockExchange (`STOCKEXCHANGE`) is missing.
+ *     Skipped with a FAIL line when AlphaTerminal (`ALPHATERMINAL_ROOT`) is missing.
  *  5. Python golden parity (PY6): a Python host generated from `fixtures/dotnet/models.json` (`out/dotnet/<label>/
- *     python-golden`, empty Mongo DB `py_golden` in the same container; StockExchange untouched) vs the `models/` host
+ *     python-golden`, empty Mongo DB `py_golden` in the same container; AlphaTerminal untouched) vs the `models/` host
  *     on a fresh Postgres DB → `contract-parity.mjs --suite golden-models`. `--python-only` runs steps 4 and 5 only.
  *  6. Auth (docs/backend/auth.md): a new host through the app's `bootstrapDotnetProject` (every auth module) on the
  *     chosen database → first admin seeded → `auth-scenarios.mjs`. `--auth-only` runs this step only.
@@ -22,7 +22,7 @@
  *
  * Needs: dotnet 10 SDK, a local Postgres reachable as `PG_HOST` (default /tmp socket) by the current user with
  * `createdb` rights (Postgres runs), and for parity / SQL Server Docker (OrbStack) + Varlik360 checked out with
- * node_modules + StockExchange with uv.
+ * node_modules + AlphaTerminal with uv.
  *
  * `--id objectid` (MongoDB only): hosts with ObjectId ids; the smokes get `ID_TYPE` (`_smoke-ids.mjs`).
  *
@@ -46,7 +46,7 @@ const label = args.find((a, i) => !a.startsWith('--') && !optionValues.has(i)) ?
 const parity = !args.includes('--no-parity');
 const outBase = join(root, 'scripts/verify/out/dotnet', label);
 const varlik = process.env.VARLIK360 ?? '/Users/atakanatabey/Projects/AtaAllWorkspace/Varlik360';
-const stockExchange = process.env.STOCKEXCHANGE ?? '/Users/atakanatabey/Projects/AtaAllWorkspace/AlphaTerminal';
+const alphaTerminal = process.env.ALPHATERMINAL_ROOT ?? '/Users/atakanatabey/Projects/AtaAllWorkspace/AlphaTerminal';
 const pythonOnly = args.includes('--python-only');
 const authOnly = args.includes('--auth-only');
 const pythonJwtSecret = 'parity-secret-parity-secret-parity-1234';
@@ -242,11 +242,11 @@ async function parityRun() {
 }
 
 async function pythonParity() {
-  if (!existsSync(join(stockExchange, 'pyproject.toml'))) {
-    step('python parity: StockExchange', false, `${stockExchange} yok`);
+  if (!existsSync(join(alphaTerminal, 'pyproject.toml'))) {
+    step('python parity: AlphaTerminal', false, `${alphaTerminal} yok`);
     return;
   }
-  // StockExchange reads config.env; the env below overrides what the parity host needs (no real DB, no rate limit).
+  // AlphaTerminal reads config.env; the env below overrides what the parity host needs (no real DB, no rate limit).
   const env = {
     MONGO_URI: 'mongodb://localhost:27028',
     MONGO_DB_NAME: 'alpha_parity',
@@ -255,14 +255,14 @@ async function pythonParity() {
     ENVIRONMENT: 'test'
   };
   // The project's venv python directly: `uv run` would start uvicorn as its own child, which a kill would leave running.
-  run('uv', ['sync', '--frozen'], { cwd: stockExchange });
-  const py = join(stockExchange, '.venv/bin/python');
-  run(py, ['-m', 'scripts.parity_seed_users'], { cwd: stockExchange, env });
+  run('uv', ['sync', '--frozen'], { cwd: alphaTerminal });
+  const py = join(alphaTerminal, '.venv/bin/python');
+  run(py, ['-m', 'scripts.parity_seed_users'], { cwd: alphaTerminal, env });
   const python = start('python', py, ['-m', 'uvicorn', 'alpha_terminal.api.main:app', '--port', '5194'], {
-    cwd: stockExchange,
+    cwd: alphaTerminal,
     env: { ...process.env, ...env }
   });
-  await waitFor(async () => (await fetch('http://localhost:5194/api/v1/health')).ok, 'StockExchange parity host', 90000).catch((error) => {
+  await waitFor(async () => (await fetch('http://localhost:5194/api/v1/health')).ok, 'AlphaTerminal parity host', 90000).catch((error) => {
     throw new Error(`${error.message}\n${python.output().slice(-2000)}`);
   });
   const dotnet = await startDotnetHost(join(outBase, 'python-parity'), 'gen_e2e_pyparity', 5195);

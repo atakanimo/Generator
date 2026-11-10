@@ -7,8 +7,9 @@ import { fileURLToPath } from 'url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const source = join(root, 'src/generator-assets/cursor-rules');
 const MARKER = '<!-- rules-sync: bu satırın altı projeye aittir -->';
-const HOME = process.env.HOME ?? '';
-const DEFAULT_HOSTS = ['Projects/AtaAllWorkspace/SharedFrame', 'Projects/AtaAllWorkspace/AlphaTerminal', 'Projects/AtaAllWorkspace/Varlik360', 'Projects/AtaAllWorkspace/CeyizDefterim'].map((p) => join(HOME, p));
+const workspace = dirname(root);
+const DEFAULT_HOSTS = [['SharedFrame'], ['AlphaTerminal'], ['Varlik360', 'Varlik360-Backend-Admin'], ['CeyizDefterim']]
+  .map((names) => names.map((name) => join(workspace, name)).find((dir) => existsSync(dir)) ?? join(workspace, names[0]));
 // Generator'ın kendi .cursor/rules klasöründe yalnız bu kopyalar durur.
 const SELF_FILES = ['AtaProjectCommon.mdc', 'frontend.admin.mdc'];
 
@@ -40,7 +41,7 @@ const splitAtMarker = (text) => {
 const sourceFiles = readdirSync(source).filter((f) => f.endsWith('.mdc'));
 const heads = Object.fromEntries(
   sourceFiles.map((f) => {
-    const parts = splitAtMarker(readFileSync(join(source, f), 'utf8'));
+    const parts = splitAtMarker(readFileSync(join(source, f), 'utf8').replace(/\r\n/g, '\n'));
     if (!parts) throw new Error(`Kaynakta işaret yok: ${f}`);
     return [f, parts.head];
   })
@@ -63,7 +64,7 @@ for (const host of hosts.length ? hosts : [...DEFAULT_HOSTS, root]) {
   const wanted = filesFor(host);
   for (const file of wanted) {
     const target = join(dir, file);
-    const current = existsSync(target) ? readFileSync(target, 'utf8') : null;
+    const current = existsSync(target) ? readFileSync(target, 'utf8').replace(/\r\n/g, '\n') : null;
     const parts = current ? splitAtMarker(current) : null;
     if (current && !parts && !force) {
       console.log(`  işaret yok   ${file} (atlandı; projeye özel kısmı işaretin altına taşıyın ya da --force)`);

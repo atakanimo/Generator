@@ -15,7 +15,7 @@ var app = builder.Build();
 await app.Services.InitializeDatabaseAsync(app.Configuration);
 
 app.UseApi();
-app.MapGet("/api/health", () => TypedResults.Ok()).AllowAnonymous();
+app.MapHealth();
 app.MapEndpoints();
 
 await app.RunAsync();

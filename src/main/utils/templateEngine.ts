@@ -3,7 +3,7 @@
  * Centralized template compilation, caching, and rendering
  */
 
-import Handlebars, { HelperOptions } from 'handlebars';
+import Handlebars from 'handlebars';
 import { safeReadFile } from './fileUtils.js';
 import { getTemplatesDir, registerHandlebarsHelpers, TemplateSet } from './templateHelpers.js';
 import { log } from './logger.js';
@@ -46,7 +46,6 @@ export function compileTemplate(
 
   // Check cache first
   if (templateCache.has(cacheKey)) {
-    log(`Template loaded from cache: ${cacheKey}`, 'debug');
     return {
       success: true,
       template: templateCache.get(cacheKey)

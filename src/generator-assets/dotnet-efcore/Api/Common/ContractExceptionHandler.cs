@@ -13,10 +13,9 @@ public sealed class ContractExceptionHandler(ILogger<ContractExceptionHandler> l
         {
             logger.LogInformation(exception, "Bad request body");
             // System.Text.Json'ın İngilizce teknik metni yerine alan adı (JSON yolu) ve istek dilinde mesaj.
-            var message = (exception.InnerException ?? exception) is JsonException { Path: { Length: > 2 } path }
-                ? string.Format(Messages.InvalidValue, path.TrimStart('$', '.'))
-                : Messages.InvalidBody;
-            await httpContext.WriteContractAsync(Error.BadRequest(message));
+            var field = (exception.InnerException ?? exception) is JsonException { Path: { Length: > 2 } path } ? path.TrimStart('$', '.') : null;
+            var error = field is null ? Error.BadRequest(Messages.InvalidBody) : Error.BadRequest(string.Format(Messages.InvalidValue, field), field);
+            await httpContext.WriteContractAsync(error);
             return true;
         }
 

@@ -7,6 +7,7 @@
  * `api/hooks.ts`) yalnız yoksa yazılır; varsa `proje` olarak listelenir, dokunulmaz.
  *
  *   node scripts/assets-sync.mjs <dir>                       özet: eksik / farklı / aynı (yazmaz)
+ *   node scripts/assets-sync.mjs <dir> --check               özet; eksik ya da farklı varsa çıkış kodu 1 (commit öncesi)
  *   node scripts/assets-sync.mjs <dir> --diff [yol…]         farklı dosyaların diff'i (yol verilirse yalnız onlar)
  *   node scripts/assets-sync.mjs <dir> --apply yol [yol…]    yalnız verilen dosyaları yazar
  *   node scripts/assets-sync.mjs <dir> --apply-all           bütün eksik / farklı dosyaları yazar
@@ -26,8 +27,8 @@ const dirArg = args.find((a) => !a.startsWith('--'));
 const mode = args.find((a) => a.startsWith('--')) ?? '';
 const paths = args.filter((a) => !a.startsWith('--') && a !== dirArg);
 
-if (!dirArg || !['', '--diff', '--apply', '--apply-all'].includes(mode) || (mode === '--apply' && paths.length === 0)) {
-  console.error('Kullanım: node scripts/assets-sync.mjs <dir> [--diff [yol…] | --apply yol [yol…] | --apply-all]');
+if (!dirArg || !['', '--check', '--diff', '--apply', '--apply-all'].includes(mode) || (mode === '--apply' && paths.length === 0)) {
+  console.error('Kullanım: node scripts/assets-sync.mjs <dir> [--check | --diff [yol…] | --apply yol [yol…] | --apply-all]');
   process.exit(1);
 }
 
@@ -73,13 +74,14 @@ if (!plan) {
 const diffs = gen.diffAssets(plan);
 const pending = diffs.filter((d) => d.status === 'missing' || d.status === 'differs');
 
-if (mode === '') {
+if (mode === '' || mode === '--check') {
   const count = (status) => diffs.filter((d) => d.status === status).length;
   const owned = count('owned');
   console.log(`${plan.stack}${plan.platform ? ` (${plan.platform})` : ''}: ${diffs.length} asset — eksik ${count('missing')}, farklı ${count('differs')}, aynı ${count('same')}${owned ? `, proje ${owned}` : ''}`);
   for (const d of pending) console.log(`  ${d.status === 'missing' ? '+' : '~'} ${d.rel}${d.createOnly ? ' (projeye ait; yalnız bu kez yazılır)' : ''}`);
   for (const note of plan.notes ?? []) console.log(`  ! ${note}`);
-  if (pending.length) console.log('\nFark: --diff [yol…]  Yaz: --apply yol [yol…] | --apply-all');
+  if (pending.length && mode === '') console.log('\nFark: --diff [yol…]  Yaz: --apply yol [yol…] | --apply-all');
+  if (mode === '--check' && pending.length) process.exitCode = 1;
 } else if (mode === '--diff') {
   const tmp = mkdtempSync(join(tmpdir(), 'assets-sync-'));
   try {

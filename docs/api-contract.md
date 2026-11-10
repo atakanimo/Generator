@@ -9,7 +9,7 @@ interface IApiResponse<T> {
   isSuccess: boolean;
   data?: T | null;
   uiMessage: string | null;
-  errorData: { header?: string; message: string; code?: number } | null;
+  errorData: { header?: string; message: string; code?: number; field?: string } | null;
   traceId?: string;
 }
 ```
@@ -21,8 +21,9 @@ interface IApiResponse<T> {
 
 - `traceId` opsiyoneldir: isteğin kimliği. Gelen `X-Request-Id` (en çok 128 karakter) kullanılır, yoksa üretilir; yanıt başlığında da döner. Express: host'un istek bağlamındaki `requestId` (`@utils/requestContext`); .NET: `TraceIdMiddleware` (`HttpContext.TraceIdentifier` ile aynı). İstek dışında (job) yazılmaz.
 - `errorData.header` / `message` yerelleştirilmiş, kullanıcıya gösterilen metindir.
+- `errorData.field` opsiyoneldir: hatanın ait olduğu gövde alanının JSON yolu (`limit`, `items[0].name`). Gövde doğrulamasında (ilk hatanın yolu) yazılır; okunamayan gövdede yalnız .NET yazar (System.Text.Json yolu verir; Express / Python'un JSON ayrıştırıcısı vermez). Query / path hatası ve veritabanı hatası alan taşımaz. Servis kendisi de verebilir: .NET `Error.BadRequest(message, field)`, Python `AppError(…, field=…)`, Express `ErrorResponse({ …, field })`. İstemci formda alanın altında gösterir. Alan yoksa yazılmaz.
 - Hata kodları her stack'te aynı sayılardır. Tek kaynak `core/errors/error-codes.ts`: 400, 401, 403, 404, 408, 409, 422, 429, `PLAN_REQUIRED` 460, `EMAIL_NOT_VERIFIED` 463, 500, `UPSTREAM_ERROR` 502, 503.
-- Projeye özel alt kodlar (K9): 461–462, 464–479 (4xx) ve 560–579 (5xx); 460 ve 463 ortak (karar 2026-10-26: `PLAN_REQUIRED` Varlik360 `PREMIUM_REQUIRED` ve StockExchange `PLAN_REQUIRED` ile aynı anlam). Generic asset'te başka projeye özel kod yok.
+- Projeye özel alt kodlar (K9): 461–462, 464–479 (4xx) ve 560–579 (5xx); 460 ve 463 ortak (karar 2026-10-26: `PLAN_REQUIRED` Varlik360 `PREMIUM_REQUIRED` ve AlphaTerminal `PLAN_REQUIRED` ile aynı anlam). Generic asset'te başka projeye özel kod yok.
 
 ### 1.1 İstek dili (K6)
 
@@ -31,7 +32,7 @@ interface IApiResponse<T> {
 - `lang`, `x-lang`, `?lang=`, `?culture=` ve çerezle dil seçimi yoktur. Gövde ya da query'de "isteğin dili" taşıyan alan yoktur: hesabın dili, kaydedilen raporun dili, üretilecek içeriğin (LLM özeti, davetiye) dili de isteğin dilidir. İçerik arayüzden farklı dildeyse istemci o çağrıda `Accept-Language`'ı içeriğin diliyle verir.
 - Saklanan kaydın alanı olarak `language` (admin CRUD'unda düzenlenen sütun, liste filtresi) ve birden çok dil seçen girdiler (ör. "şu dillerin varsayılanını sıfırla") veri alanıdır, bu kuralın dışındadır.
 - Desteklenen diller ve varsayılan dil her stack'te tek sabittedir: .NET `ApiSetup` (`SupportedCultures`, `DefaultCulture`), Python `core/http/contract.py` (`SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`), Express `config/i18n.ts` (`SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`).
-- Varsayılan dil proje kararıdır. Generator asset'leri `en` ile gelir; host kendi sabitini değiştirir. Projeler: CeyizDefterim `en`, SharedFrame `en` (kullanıcının `Language` kolonu da `en`), StockExchange `en`, Varlik360 `tr` (Türk kullanıcı kitlesi; arka plan işlerinin `deviceLanguageTag || 'tr'` varsayılanı da buna uyar).
+- Varsayılan dil proje kararıdır. Generator asset'leri `en` ile gelir; host kendi sabitini değiştirir. Projeler: CeyizDefterim `en`, SharedFrame `en` (kullanıcının `Language` kolonu da `en`), AlphaTerminal `en`, Varlik360 `tr` (Türk kullanıcı kitlesi; arka plan işlerinin `deviceLanguageTag || 'tr'` varsayılanı da buna uyar).
 - `Accept-Language` CORS'ta safelisted'dır; `allowedHeaders`'a dil header'ı eklenmez.
 
 ## 2. Uçlar (resource başına)
@@ -197,7 +198,7 @@ type AuthSession = { accessToken: string; refreshToken: string; expiresIn: numbe
 ```
 
 - Access token Bearer header'da (cookie yok); 15 dk. Refresh token 30 gün, her kullanımda yenisi döner.
-- Hata kodları: yanlış kimlik ve geçersiz token 401 (aynı mesaj), `suspended` / admin olmayan 403, doğrulanmamış e-posta 463, rate limit 429.
+- Hata kodları: yanlış kimlik ve geçersiz token 401 (aynı mesaj), `suspended` / admin olmayan 403, doğrulanmamış e-posta 463, rate limit 429 (`Retry-After` saniye; [backend/rate-limit.md](backend/rate-limit.md)).
 - `Users` admin CRUD'u diğer modeller gibidir (§2); `passwordHash` hiçbir cevapta yoktur ve filtrelenmez.
 
 ## Kararlar

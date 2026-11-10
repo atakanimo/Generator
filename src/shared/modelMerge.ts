@@ -234,7 +234,7 @@ function mergeField(code: NormalizedField, saved: NormalizedField): NormalizedFi
   const rawComponent = saved.ui?.component ?? defaults.ui?.component;
   const component = isRef && (!rawComponent || rawComponent === 'TextField')
     ? 'Autocomplete'
-    : fitComponent(code, rawComponent ?? 'Autocomplete');
+    : fitComponent(code, (rawComponent ?? 'Autocomplete') as UIComponent);
 
   return {
     ...saved,

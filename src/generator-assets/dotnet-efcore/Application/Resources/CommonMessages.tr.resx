@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Success" xml:space="preserve"><value>İşlem başarılı.</value></data>
+  <data name="Created" xml:space="preserve"><value>Kayıt oluşturuldu.</value></data>
+  <data name="Updated" xml:space="preserve"><value>Kayıt güncellendi.</value></data>
+  <data name="Deleted" xml:space="preserve"><value>Kayıt silindi.</value></data>
+  <data name="BadRequestHeader" xml:space="preserve"><value>Geçersiz istek</value></data>
+  <data name="InvalidBody" xml:space="preserve"><value>İstek gövdesi geçersiz.</value></data>
+  <data name="InvalidValue" xml:space="preserve"><value>Geçersiz değer: {0}</value></data>
+  <data name="InvalidSort" xml:space="preserve"><value>Bu alana göre sıralanamaz: {0}</value></data>
+  <data name="UnauthorizedHeader" xml:space="preserve"><value>Yetkisiz</value></data>
+  <data name="Unauthorized" xml:space="preserve"><value>Bu işlem için giriş yapmalısınız.</value></data>
+  <data name="ForbiddenHeader" xml:space="preserve"><value>Erişim engellendi</value></data>
+  <data name="Forbidden" xml:space="preserve"><value>Bu işlem için yetkiniz yok.</value></data>
+  <data name="NotFoundHeader" xml:space="preserve"><value>Bulunamadı</value></data>
+  <data name="NotFound" xml:space="preserve"><value>Kayıt bulunamadı.</value></data>
+  <data name="RouteNotFound" xml:space="preserve"><value>İstenen adres bulunamadı.</value></data>
+  <data name="ConflictHeader" xml:space="preserve"><value>Çakışma</value></data>
+  <data name="Duplicate" xml:space="preserve"><value>Bu değer zaten kullanılıyor: {0}</value></data>
+  <data name="ReferenceNotFound" xml:space="preserve"><value>İlişkili kayıt bulunamadı: {0}</value></data>
+  <data name="InUse" xml:space="preserve"><value>Kayıt başka kayıtlar tarafından kullanılıyor.</value></data>
+  <data name="TooManyRequestsHeader" xml:space="preserve"><value>Çok fazla istek</value></data>
+  <data name="TooManyRequests" xml:space="preserve"><value>Çok fazla deneme; biraz sonra tekrar deneyin.</value></data>
+  <data name="InternalHeader" xml:space="preserve"><value>Sunucu hatası</value></data>
+  <data name="Internal" xml:space="preserve"><value>Beklenmeyen bir hata oluştu.</value></data>
+</root>

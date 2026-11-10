@@ -17,6 +17,7 @@ public class Result
 
     public static Result Ok(string? uiMessage = null) => new(null, uiMessage ?? Messages.Success);
     public static Result Fail(Error error) => new(error, null);
+    public static implicit operator Result(Error error) => Fail(error);
     public static Result<T> Ok<T>(T value, string? uiMessage = null) => new(value, null, uiMessage ?? Messages.Success);
     public static Result<T> Fail<T>(Error error) => new(default, error, null);
 }
