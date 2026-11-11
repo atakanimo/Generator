@@ -514,6 +514,12 @@ public sealed partial class AuthService(
             {
                 user.PasswordHash = null;
             }
+
+            // Aynı sağlayıcıyla açılmış ama kimliği kaydedilmemiş (taşınmış) hesap bu kimliğe bağlanır.
+            if (user is not null && user.Provider == provider && string.IsNullOrEmpty(user.ProviderUserId))
+            {
+                user.ProviderUserId = subject;
+            }
         }
 
         if (user is null)

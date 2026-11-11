@@ -113,6 +113,8 @@ Google / Apple ile açılmış bir hesap sonradan admin yapılırsa sosyal giri�
 - OTP: CSPRNG 6 hane, 10 dk, hash'li, en fazla 5 deneme; sonra kod tükenir.
 - Rate limit: login / register / OTP / forgot / reset, IP + yol başına `RATE_LIMIT_AUTH` (varsayılan `10/60`) → 429 zarfı + `Retry-After` (ortak profiller [rate-limit.md](rate-limit.md); .NET `RateLimitSetup.AuthPolicy`, Express `authRateLimitPolicy`, Python `AUTH_RATE_LIMIT_POLICY`). Refresh sınırlanmaz. IP, tek reverse proxy arkasında `X-Forwarded-For`'un son değeridir (Express `trust proxy` = `TRUSTED_PROXY_CIDRS`, .NET `UseForwardedHeaders`, Python `client_ip`).
 - Google / Apple: id token JWKS ile doğrulanır (`aud` env'deki client id'lerden biri olmalı). Kullanıcı sağlayıcı id'siyle, yoksa e-postayla bulunur, o da yoksa `user` rolüyle oluşturulur (`isNewUser: true`).
+  - E-posta doğrulaması sağlayıcıdan gelir, doğrulama kodu gönderilmez: `email_verified` (`true` ya da `"true"`) ise hesap `emailVerified = true` olur (yeni hesapta da, e-postayla bulunan şifreli hesapta da). Google'da `email_verified` gelmese de adres `gmail.com` / `googlemail.com` ise ya da `hd` claim'i adresin alan adıysa (Workspace) doğrulanmış sayılır. Doğrulanmamış adres var olan hesabı alamaz (`emailInUse`).
+  - Aynı sağlayıcıyla açılmış ama `providerUserId`'si boş hesap (eski sistemden taşınmış) e-postayla bulunduğu ilk girişte bu kimliğe bağlanır.
   - Sağlayıcı e-postayı doğrulamadıysa ve e-posta başka hesapta kayıtlıysa 400 (`emailInUse`).
   - Doğrulanmamış bir şifre hesabına bağlanınca o hesabın şifresi silinir (e-postayı doğrulanmadan kaydeden başkası olabilir).
 - Kayıt: e-posta doğrulanmamış bir hesapta kayıtlıysa şifre ve ad son kayıttakiyle değişir, yeni kod gider (hesap kodu doğrulayanındır).

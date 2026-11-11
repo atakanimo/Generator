@@ -295,6 +295,8 @@ async function socialLogin(
     if (user && !identity.emailVerified) return badRequest(t('auth.emailInUse'));
     // The provider proved the address: a password set by whoever registered it unverified stops working.
     if (user && !user.emailVerified) user.passwordHash = undefined;
+    // Same provider but no stored provider id (migrated account): link it to this identity.
+    if (user && user.provider === provider && !user.providerUserId) user.providerUserId = identity.providerUserId;
   }
   if (!user) {
     if (!identity.email) return badRequest(t('auth.emailRequired'));

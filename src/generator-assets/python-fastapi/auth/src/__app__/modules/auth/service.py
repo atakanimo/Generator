@@ -337,6 +337,7 @@ async def _social_login(
     user = await db[USERS].find_one({"provider": provider, "providerUserId": identity.provider_user_id})
     is_new = False
     unset: dict[str, Any] = {}
+    link: dict[str, Any] = {}
     if not user and identity.email:
         user = await db[USERS].find_one({"email": identity.email})
         if user and _is_admin(user):
@@ -347,6 +348,9 @@ async def _social_login(
         # Sağlayıcı adresi doğruladı: doğrulanmamış kaydı açanın şifresi artık çalışmaz.
         if user and not user.get("emailVerified"):
             unset["passwordHash"] = ""
+        # Aynı sağlayıcıyla açılmış ama kimliği kaydedilmemiş (taşınmış) hesap bu kimliğe bağlanır.
+        if user and user.get("provider") == provider and not user.get("providerUserId"):
+            link["providerUserId"] = identity.provider_user_id
     if not user:
         if not identity.email:
             raise _bad_request("emailRequired")
@@ -368,7 +372,7 @@ async def _social_login(
     if _is_admin(user):
         raise _err(CommonErrorCodes.FORBIDDEN, "adminPasswordOnly")
     _block_suspended(user)
-    update: dict[str, Any] = {"lastLoginAt": _now()}
+    update: dict[str, Any] = {"lastLoginAt": _now(), **link}
     if identity.email_verified:
         update["emailVerified"] = True
         user["emailVerified"] = True

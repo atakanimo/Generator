@@ -82,7 +82,9 @@ export function createAuthThunks({ canSignIn, onSession, onSignedOut }: AuthThun
 
   const register = responseThunk('auth/register', async (body: RegisterBody): Promise<AuthResult<null>> => service.register(body));
 
-  const verifyEmail = responseThunk('auth/verifyEmail', async (body: VerifyEmailBody, { dispatch }) => keepSession(await service.verifyEmail(body), dispatch));
+  const verifyEmail = responseThunk('auth/verifyEmail', async ({ remember = true, ...body }: VerifyEmailBody & { remember?: boolean }, { dispatch }) =>
+    keepSession(await service.verifyEmail(body), dispatch, remember)
+  );
 {{/if}}
 {{#if otp}}
 
@@ -105,11 +107,11 @@ export function createAuthThunks({ canSignIn, onSession, onSignedOut }: AuthThun
 {{/if}}
 {{#if google}}
 
-  const loginWithGoogle = responseThunk('auth/loginWithGoogle', async (idToken: string, { dispatch }) => keepSession(await service.loginWithGoogle(idToken), dispatch));
+  const loginWithGoogle = responseThunk('auth/loginWithGoogle', async (idToken: string, { dispatch }) => keepSession(await service.loginWithGoogle(idToken), dispatch, true));
 {{/if}}
 {{#if apple}}
 
-  const loginWithApple = responseThunk('auth/loginWithApple', async (body: AppleBody, { dispatch }) => keepSession(await service.loginWithApple(body), dispatch));
+  const loginWithApple = responseThunk('auth/loginWithApple', async (body: AppleBody, { dispatch }) => keepSession(await service.loginWithApple(body), dispatch, true));
 {{/if}}
 {{#if social}}
 

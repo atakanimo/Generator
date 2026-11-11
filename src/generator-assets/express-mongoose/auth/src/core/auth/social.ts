@@ -22,6 +22,13 @@ function clientIds(name: string): string[] {
 // @if google
 const GOOGLE_JWKS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 
+/** Google-managed address (gmail.com / googlemail.com, or a Workspace account whose `hd` is the address domain): verified by Google even without `email_verified`. */
+function googleOwnsEmail(email?: string, hostedDomain?: string): boolean {
+  const domain = email?.split('@').pop();
+  if (!email?.includes('@') || !domain) return false;
+  return domain === 'gmail.com' || domain === 'googlemail.com' || (!!hostedDomain && domain === hostedDomain.toLowerCase());
+}
+
 /** Google ID token (`GOOGLE_CLIENT_IDS`: web / iOS / Android client ids, comma separated). `null` → invalid. */
 export async function verifyGoogleIdToken(idToken: string): Promise<SocialIdentity | null> {
   const audience = clientIds('GOOGLE_CLIENT_IDS');
@@ -32,10 +39,12 @@ export async function verifyGoogleIdToken(idToken: string): Promise<SocialIdenti
       audience
     });
     if (!payload.sub) return null;
+    const email = typeof payload.email === 'string' ? payload.email.toLowerCase() : undefined;
+    const claimed = payload.email_verified === true || payload.email_verified === 'true';
     return {
       providerUserId: payload.sub,
-      email: typeof payload.email === 'string' ? payload.email.toLowerCase() : undefined,
-      emailVerified: payload.email_verified === true,
+      email,
+      emailVerified: claimed || googleOwnsEmail(email, typeof payload.hd === 'string' ? payload.hd : undefined),
       name: typeof payload.name === 'string' ? payload.name : undefined
     };
   } catch {

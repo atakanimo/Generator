@@ -40,11 +40,23 @@ def _verify(token: str, jwks: PyJWKClient, issuer: list[str] | str, audience: li
         return None
 
 
-def _identity(claims: dict | None, *, with_name: bool) -> SocialIdentity | None:
+def _google_owns_email(email: object, hosted_domain: object) -> bool:
+    """Google'ın yönettiği adres (gmail.com / googlemail.com ya da `hd` = adresin alan adı olan Workspace hesabı)."""
+    if not isinstance(email, str) or "@" not in email:
+        return False
+    domain = email.rsplit("@", 1)[1].lower()
+    if domain in ("gmail.com", "googlemail.com"):
+        return True
+    return isinstance(hosted_domain, str) and bool(hosted_domain) and domain == hosted_domain.lower()
+
+
+def _identity(claims: dict | None, *, with_name: bool, google: bool = False) -> SocialIdentity | None:
     if not claims or not claims.get("sub"):
         return None
     email = claims.get("email")
-    verified = claims.get("email_verified") in (True, "true")
+    verified = claims.get("email_verified") in (True, "true") or (
+        google and _google_owns_email(email, claims.get("hd"))
+    )
     aud = claims.get("aud")
     return SocialIdentity(
         provider_user_id=str(claims["sub"]),
@@ -65,7 +77,7 @@ async def verify_google_id_token(id_token: str) -> SocialIdentity | None:
         return None
     issuers = ["https://accounts.google.com", "accounts.google.com"]
     claims = await asyncio.to_thread(_verify, id_token, _GOOGLE, issuers, audience)
-    return _identity(claims, with_name=True)
+    return _identity(claims, with_name=True, google=True)
 
 
 # @endif

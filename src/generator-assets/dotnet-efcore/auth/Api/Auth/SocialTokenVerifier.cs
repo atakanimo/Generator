@@ -21,7 +21,7 @@ public sealed class SocialTokenVerifier(IConfiguration configuration, ILogger<So
         new HttpDocumentRetriever());
 
     public Task<SocialIdentity?> VerifyGoogleAsync(string? idToken, CancellationToken cancellationToken) =>
-        VerifyAsync(GoogleKeys, idToken, ["https://accounts.google.com", "accounts.google.com"], "Auth:GoogleClientIds", cancellationToken);
+        VerifyAsync(GoogleKeys, idToken, ["https://accounts.google.com", "accounts.google.com"], "Auth:GoogleClientIds", cancellationToken, google: true);
     // @endif
     // @if apple
 
@@ -39,7 +39,8 @@ public sealed class SocialTokenVerifier(IConfiguration configuration, ILogger<So
         string? token,
         string[] issuers,
         string clientIdsKey,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool google = false)
     {
         var audiences = (configuration[clientIdsKey] ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (audiences.Length == 0)
@@ -76,9 +77,11 @@ public sealed class SocialTokenVerifier(IConfiguration configuration, ILogger<So
                 return null;
             }
 
-            var verified = string.Equals(Claim("email_verified"), "true", StringComparison.OrdinalIgnoreCase);
+            var email = Claim("email");
+            var verified = string.Equals(Claim("email_verified"), "true", StringComparison.OrdinalIgnoreCase)
+                || (google && GoogleOwnsEmail(email, Claim("hd")));
             var audience = (result.SecurityToken as JsonWebToken)?.Audiences.FirstOrDefault();
-            return new SocialIdentity(subject, Claim("email"), verified, Claim("name"), audience);
+            return new SocialIdentity(subject, email, verified, Claim("name"), audience);
         }
         catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or IOException or SecurityTokenException)
         {
@@ -86,5 +89,23 @@ public sealed class SocialTokenVerifier(IConfiguration configuration, ILogger<So
             logger.LogWarning(ex, "Social sign-in keys could not be loaded.");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Google'ın kendi yönettiği adres: gmail.com / googlemail.com ya da Workspace hesabı (<c>hd</c> = adresin alan adı).
+    /// Bu adresler Google tarafından doğrulanmıştır; <c>email_verified</c> gelmese de doğrulanmış sayılır.
+    /// </summary>
+    private static bool GoogleOwnsEmail(string? email, string? hostedDomain)
+    {
+        var at = email?.LastIndexOf('@') ?? -1;
+        if (at < 0)
+        {
+            return false;
+        }
+
+        var domain = email![(at + 1)..];
+        return domain.Equals("gmail.com", StringComparison.OrdinalIgnoreCase)
+            || domain.Equals("googlemail.com", StringComparison.OrdinalIgnoreCase)
+            || (!string.IsNullOrEmpty(hostedDomain) && domain.Equals(hostedDomain, StringComparison.OrdinalIgnoreCase));
     }
 }
